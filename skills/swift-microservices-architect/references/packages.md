@@ -262,7 +262,7 @@ bookshelf-core/
     │                               HTTP2ClientTransport.Posix.Config+ConfigReader.swift,
     │                               ServiceConfig+ConfigReader.swift, JWTAuthenticator+ConfigReader.swift,
     │                               JWTIssuer+ConfigReader.swift
-    └── BookshelfTesting/           MockDatabase.swift, MockUserAuthenticator.swift
+    └── BookshelfTesting/           MockDatabase.swift, MockAuthenticator.swift
 ```
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.

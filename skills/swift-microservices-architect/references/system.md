@@ -78,7 +78,7 @@ Besides the swift-microservices libraries ([stack](stack.md)), every service and
 | `<Org>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, XHTTP, executables |
 | `<Org>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `UserSettingsMiddleware`, `PostgresClient.Configuration(config:role:)` | Executables with Postgres |
 | `<Org>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys | Executables |
-| `<Org>Testing` | Test doubles: `MockDatabase<Scope>`, a table-backed authenticator | Test targets |
+| `<Org>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
 
 It holds none of these: a service's models, repositories, scopes or migrations; contracts; deployment defaults such as mount paths, ports and role names, which stay in each executable's `InMemoryProvider` defaults; generic abstractions, which belong to the swift-microservices libraries; a process identity or service token, since certificates prove processes.
 
@@ -125,4 +125,4 @@ Review the plan against the hard rules in `SKILL.md` before writing code.
 
 ## Out of scope
 
-Decided separately, outside this skill: CI/CD, deployment, container images and compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends, and tests. The architecture leaves room for each: an executable runs wherever its configuration points, and certificates and keys are files at configured paths.
+Decided separately, outside this skill: CI/CD, deployment, container images and compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends. The architecture leaves room for each: an executable runs wherever its configuration points, and certificates and keys are files at configured paths.

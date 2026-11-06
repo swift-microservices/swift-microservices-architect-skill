@@ -8,7 +8,7 @@ Every change to the skill ends with [the checks](#after-every-change), repeated 
 
 - It decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together: Core's models, errors, repositories, ports and use cases; the Postgres, gRPC, Temporal, Valkey, provider and HTTP adapters; the gateway; the composition roots; the shared `<org>-core` and `<org>-protos` packages; and how the code reads and is named.
 - It states shapes and rules. The code inside a shape that isn't architecture (actor design, task group technique, test code) belongs to the skills under Related skills in `SKILL.md`.
-- Out of scope until decided: CI/CD, deployment, container images and compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends, and tests.
+- Out of scope until decided: CI/CD, deployment, container images and compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
 
 ## Skill best practices
 

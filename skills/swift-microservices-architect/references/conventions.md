@@ -39,6 +39,7 @@
 | Workflow id, task queue | `<x>-<workflow>-<id>`; `x` | `loans-loan-0193…`; `loans` |
 | Named activity options | The kind of step | `ActivityOptions.database`, `.notification` |
 | Postgres scopes | `Postgres<X>Scope`, `Postgres<X>InternalScope`, `Postgres<X>WorkerScope` | `PostgresLoansScope` |
+| Mock | `Mock` + the protocol's name, without `Protocol` | `MockCatalogClient`, `MockBorrowBookUseCase`, `MockDatabase` |
 | Statement | What it does + `Statement` | `CreateLoanStatement`, `ActiveLoansByUserIDStatement` |
 | Migration | What it changes | `CreateLoansTable`, `CreateLoansRLSPolicy`, `CreateServiceRole` |
 | Database, roles, policies | `<org>_<x>`; `<x>_service`, `<x>_internal`, `<x>_worker`; `tenant_isolation`, `<role>_all` | `bookshelf_loans`, `loans_service`, `internal_all` |
@@ -62,6 +63,7 @@
 | XTemporal | A folder per process with its workflow, activities and Temporal client; `ActivityOptions+X.swift` |
 | XValkey, X<Provider>, XHTTP | Flat, one file per type |
 | X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift`, `Worker/Worker.swift`, `Worker/Run.swift` |
+| Test target | `Mocks/`, then a file per tested type: `BorrowBookUseCaseTests.swift` |
 | GatewayHTTP | `openapi.yaml`, `openapi-generator-config.yaml`, `<Org>API.swift`, `Contexts/`, `Controllers/`, `Middlewares/`, `Schemas/Requests/`, `Schemas/Responses/`, `Schemas/Shared/` |
 
 ## Files
