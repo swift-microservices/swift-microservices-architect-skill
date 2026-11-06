@@ -40,7 +40,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - One home per rule. A rule lives in one reference; `SKILL.md` carries at most one line for it (a hard rule, an ownership row, a brief, a style point, a gotcha or a workflow step); other references link to it instead of restating it. `conventions.md` holds only names. A rule stated twice drifts apart and costs tokens twice.
 - `SKILL.md`'s gotchas are mistakes any task can make; a mistake only one shape invites is stated once, in that shape's reference.
 - One term per concept, no time-sensitive statements, concrete examples, and one default rather than a menu of options.
-- A workflow is a checklist the agent copies into its response, ending in a build it repeats until it passes.
+- A workflow is a checklist the agent copies into its response, ending in a build and a test run it repeats until both pass.
 
 ## What a change must respect
 
@@ -60,7 +60,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - The stack is fixed: Hummingbird for HTTP, grpc-swift-2 and its siblings for RPC, swift-temporal-sdk, valkey-swift, PostgresNIO with the swift-microservices libraries, swift-configuration, swift-service-lifecycle, swift-argument-parser. No other HTTP framework is named, and no invented infrastructure (DI containers, buses, generic repositories) is added.
 - The code style is fixed, and every example follows it: one `do` holding the whole path, one `catch` per case, typed throws on use cases, build then call (a value a call takes is a named `let`), no helper methods in use cases, workflows or activities, Swift 6 mode with the four upcoming features, `package` access, the conditional `FoundationEssentials` import. A change never weakens it.
 - Describe the current design only, with no dates, old names, renames, migrations of the skill or history. A library's version appears only in `Package.swift` lower bounds and `stack.md`.
-- One term per concept, as `conventions.md` names it: service, capability, area, use case, repository, command, port, scope, database role, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, worker.
+- One term per concept, as `conventions.md` names it: service, capability, area, use case, repository, command, port, scope, database role, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, worker, page (by page number or by key), webhook, mock.
 - A new rule mustn't contradict an existing one. When it replaces one, change every place the old rule appears.
 - Voice: plain declarative sentences in the present tense, lists over paragraphs, no "you", no all-caps emphasis, no hedging.
 
