@@ -141,7 +141,7 @@ jobs:
 
 - The job grants what Publish and Staging need, since a called workflow holds no more than its caller gives it. The gateway's `ci.yml` has no `postgres_image` and one application per environment, since it has no worker.
 - Foundation linking checks the service's executable, and Publish waits for it. While a package it depends on still links full Foundation ([full Foundation](stack.md#full-foundation)), the service passes `excluded_products: loans` and its README lists that package; the exclusion goes as soon as nothing does.
-- `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls `deploy.yml` with `environment: production` and the production application ids. It deploys only a commit that staging ran; deploying an older commit is the rollback, and nothing is rebuilt.
+- `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls `deploy.yml` with `environment: production`, that `commit`, the `image_repository` and the production `application_ids`, granting `actions: read` and `packages: read`. It deploys only a commit that staging ran; deploying an older commit is the rollback, and nothing is rebuilt.
 - `cleanup-images.yml` runs weekly and by hand, calling `cleanup-images.yml` with the image's package name.
 - An image is published once, as `:<commit-sha>`, and deployed by its digest. Each environment runs it as one Dokploy application per process: `loans` (serve) and `loans worker run` ([commands](composition.md#commands)). The application that runs `serve --migrate-database` is listed first.
 - A rollback runs the previous image on the current schema, which its migrations keep compatible ([migrations](persistence.md#migrations)).
