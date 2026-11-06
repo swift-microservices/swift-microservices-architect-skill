@@ -6,9 +6,9 @@ Every change to the skill ends with [the checks](#after-every-change), repeated 
 
 ## What the skill is for
 
-- It decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together: Core's models, errors, repositories, ports and use cases; the Postgres, gRPC, Temporal, Valkey, provider and HTTP adapters; the gateway; the composition roots; the shared `<org>-core` and `<org>-protos` packages; and how the code reads and is named.
+- It decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together: Core's models, errors, repositories, ports and use cases; the Postgres, gRPC, Temporal, Valkey, provider and HTTP adapters; the gateway; the composition roots; the shared `<org>-core` and `<org>-protos` packages; how each package is tested, released and deployed; and how the code reads and is named.
 - It states shapes and rules. The code inside a shape that isn't architecture (actor design, task group technique, test code) belongs to the skills under Related skills in `SKILL.md`.
-- Out of scope until decided: CI/CD, deployment, container images and compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
+- Out of scope until decided: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
 
 ## Skill best practices
 
@@ -54,13 +54,14 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
   - the gateway: `BookshelfAPI`, `LoanController`, the request contexts, `ErrorMiddleware`
   - an internal service: Catalog's `BookInternalService`; paged lists: `ListAllLoans` by key, `ListLoans` by page number
   - a provider's webhook: Resend's notice events to Loans, `ResendWebhookController`, `NoticeEventVerifier`
+  - CI/CD: `bookshelf-core` for a library's CI workflows, Loans for a service's
 
   Reuse these, and add an example only when none of them can show a new idea. Never bring in names, services, endpoints or details from the systems the skill is used on; write the rule they illustrate instead.
 - Code shows a shape the skill prescribes: a use case's files and its body, a handler, a scope, a workflow's `run`, a composition root's sections, a reader. It isn't an implementation to copy: no helper functions, no test code, no internals of a library, and a method body appears only where the body is the shape. Elide the rest with `…`.
-- The stack is fixed: Hummingbird for HTTP, grpc-swift-2 and its siblings for RPC, swift-temporal-sdk, valkey-swift, PostgresNIO with the swift-microservices libraries, swift-configuration, swift-service-lifecycle, swift-argument-parser. No other HTTP framework is named, and no invented infrastructure (DI containers, buses, generic repositories) is added.
+- The stack is fixed: Hummingbird for HTTP, grpc-swift-2 and its siblings for RPC, swift-temporal-sdk, valkey-swift, PostgresNIO with the swift-microservices libraries, swift-configuration, swift-service-lifecycle, swift-argument-parser; for CI/CD, GitHub Actions over swiftlang/github-workflows first, then swift-microservices/ci and Apple's workflows, with images on GitHub Container Registry deployed through Dokploy. No other HTTP framework is named, and no invented infrastructure (DI containers, buses, generic repositories) is added.
 - The code style is fixed, and every example follows it: one `do` holding the whole path, one `catch` per case, typed throws on use cases, build then call (a value a call takes is a named `let`), no helper methods in use cases, workflows or activities, Swift 6 mode with the four upcoming features, `package` access, the conditional `FoundationEssentials` import. A change never weakens it.
 - Describe the current design only, with no dates, old names, renames, migrations of the skill or history. A library's version appears only in `Package.swift` lower bounds and `stack.md`.
-- One term per concept, as `conventions.md` names it: service, capability, area, use case, repository, command, port, scope, database role, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, worker, page (by page number or by key), webhook, mock.
+- One term per concept, as `conventions.md` names it: service, capability, area, use case, repository, command, port, scope, database role, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, image.
 - A new rule mustn't contradict an existing one. When it replaces one, change every place the old rule appears.
 - Voice: plain declarative sentences in the present tense, lists over paragraphs, no "you", no all-caps emphasis, no hedging.
 

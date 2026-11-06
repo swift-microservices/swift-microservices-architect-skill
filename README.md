@@ -17,7 +17,7 @@ This README is for people. Agents read [SKILL.md](skills/swift-microservices-arc
 ## What the skill covers
 
 - Splitting a backend into services by data ownership, naming them, and writing the plan: services, contracts, module maps, shared packages and gateway routes.
-- A service's package: `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`, `XHTTP` and the executable, their dependency direction, what Core may link, and `Package.swift` with its Swift settings, Swift Evolution proposals and package traits.
+- A service's package: `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`, `XHTTP` and the executable, their dependency direction, what Core may link, and `Package.swift` with its Swift settings, Swift Evolution proposals, and the package traits that keep full Foundation out, with each stack package's Foundation status.
 - The organization's shared packages: `<org>-core` for identity, tenant binding and transport configuration, and `<org>-protos` for contracts.
 - The swift-microservices libraries (`OperationContext`, `Authentication` with its JWT, gRPC and Hummingbird adapters, `Persistence` and `PersistencePostgres`) and the server stack around them.
 - The application layer: domain models, errors, repositories, ports, use cases with typed throws, scope protocols, transactions, authorization and logging.
@@ -28,9 +28,10 @@ This README is for people. Agents read [SKILL.md](skills/swift-microservices-arc
 - Composition: commands, configuration readers and defaults, logging, the `ServiceGroup` and why it matters.
 - Security: the trust model, mTLS with certificate reloading, user tokens, authorization layers, secrets and webhooks.
 - Testing: a test target per module over mocks of its protocols, and the shared mocks in `<org>-core`'s testing product.
+- CI/CD: the GitHub Actions CI workflows of a public library, a system library and a service over swiftlang's, Apple's and swift-microservices' reusable workflows, semver releases, an image per commit on GitHub Container Registry deployed through Dokploy to staging and then to production, and Dependabot.
 - Code style and naming conventions.
 
-Out of scope for now: CI/CD, deployment, container images and compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
+Out of scope for now: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
 
 Covered by other skills the agent loads alongside this one:
 - Swift Concurrency: [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill)
@@ -46,7 +47,7 @@ swift-microservices-architect-skill/
 │   └── references/
 │       ├── system.md                services, contracts, how services talk, data ownership, shared packages, the plan
 │       ├── packages.md              targets, dependency direction, Package.swift, Swift settings, traits, layouts, boundary checks
-│       ├── stack.md                 the swift-microservices libraries and the server stack
+│       ├── stack.md                 the swift-microservices libraries, the server stack, each one's Foundation status
 │       ├── use-cases.md             models, errors, repositories, ports, use cases, transactions, authorization, logging
 │       ├── persistence.md           Postgres scopes and roles, row-level security, migrations, other stores, Valkey
 │       ├── grpc.md                  contracts, services, handlers, conversions, interceptors, clients, transports
@@ -55,6 +56,7 @@ swift-microservices-architect-skill/
 │       ├── composition.md           commands, composition roots, configuration, logging, lifecycle
 │       ├── security.md              trust model, mTLS, tokens, authorization, secrets, webhooks
 │       ├── testing.md               test targets per module, mocks, the shared testing product
+│       ├── delivery.md              CI/CD per package kind: workflows, tests, releases, images, deployment
 │       ├── style.md                 how the code reads
 │       └── conventions.md           naming, folders, files
 ├── .github/                         CI: validation, the semver label check, releases, Dependabot

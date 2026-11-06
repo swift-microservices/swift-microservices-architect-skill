@@ -1,6 +1,6 @@
 # Packages
 
-The targets inside a service's package, how they depend on each other, its `Package.swift`, and the organization's shared packages. SPM enforces each boundary: a target imports only the modules its declaration lists.
+The targets inside a service's package, how they depend on each other, its `Package.swift`, and the organization's shared packages. SPM and CI enforce each boundary: a target imports only the modules its declaration lists.
 
 ## Contents
 - The targets of a service
@@ -172,10 +172,10 @@ let package = Package(
 ```
 
 - The tools version is the toolchain the services build and deploy with; 6.2 is the floor for these settings.
-- `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's notes.
-- Every target lists each module it imports, product by product; `MemberImportVisibility` makes a missing one a build error.
+- `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's README.
+- Every target lists each module it imports, product by product; CI's `--explicit-target-dependency-import-check error` fails a target that imports one it doesn't list ([delivery](delivery.md#tests)).
 - Each `from:` is a lower bound, set to the release whose API the code uses ([choosing versions](stack.md#choosing-versions)).
-- A provider target (`LoansResend`) and test targets follow the same form. A target without generated code may add `.treatAllWarnings(as: .error)` ([SE-0480](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0480-swiftpm-warning-control.md)); a target with a generator plugin keeps warnings as warnings, since generated code can warn.
+- A provider target (`LoansResend`) and test targets follow the same form. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one. A warning in generated code fails the contracts package's CI, and its consumers never see it, since SwiftPM silences a dependency's warnings.
 
 ## Swift settings
 
@@ -193,18 +193,22 @@ The code also relies on `package` access ([SE-0386](https://github.com/swiftlang
 
 ## Traits and Foundation
 
-Owned code imports `FoundationEssentials` behind a conditional import ([Foundation](style.md#foundation)), so a target links full Foundation only through a dependency. A dependency's default traits can pull it in, or code the target never uses:
+On Linux, full Foundation links `libFoundation`, `libFoundationInternationalization` and ICU's data, which alone outweighs a service's own code several times over. `FoundationEssentials` has the types a service uses (`Data`, `Date`, `URL`, `UUID`, `JSONEncoder` and `JSONDecoder`, `Date.ISO8601FormatStyle`, `Calendar`, `TimeZone`, `FileManager`) without them. A target links full Foundation through owned code, a dependency's own imports, or a dependency's default traits. Owned code takes the conditional import ([Foundation](style.md#foundation)); dependencies are declared here.
 
-| Package | Default traits | Declare |
-|---|---|---|
-| hummingbird | `ConfigurationSupport`, `FullFoundation` | `traits: ["ConfigurationSupport"]` in the gateway, `traits: []` in a library |
-| swift-openapi-runtime | `FullFoundation` | `traits: []` |
-| swift-configuration | `JSON` | `traits: []` unless a JSON file provider is used |
-| swift-protobuf | `BinaryDelimitedStreams`, `FieldMaskUtilities` | `traits: []` unless a contract uses them |
+| Package | Traits that link full Foundation (`*` default) | Declare | Turning them off loses |
+|---|---|---|---|
+| hummingbird | `FullFoundation`* | `traits: ["ConfigurationSupport"]` where its configuration reader is used (the gateway), `traits: []` elsewhere | `DateEncodingStrategy.formatted(_:)` and `DateDecodingStrategy.formatted(_:)` over a `DateFormatter` in URL-encoded forms; `.iso8601` stays |
+| swift-openapi-runtime | `FullFoundation`* | `traits: []` | `ISO8601DateTranscoder(options:)`, and `NSNull` and `NSNumber` in `OpenAPIValueContainer`; `.iso8601` stays |
+| swift-configuration | `JSON`*, `YAML`, `PropertyList` | `traits: []`, plus `Reloading` or `CommandLineArguments` when used | The JSON, YAML and property list file providers |
+| swift-protobuf | `BinaryDelimitedStreams`* | `traits: []`, plus `FieldMaskUtilities` when a contract uses field masks | Length-delimited message streams |
 
-- Traits combine across the graph: a trait is off only when every package that declares the dependency leaves it off, so `<org>-core`, `<org>-protos` and each service declare the same `traits:`.
-- Check a new dependency's `traits` in its `Package.swift` before adding it.
-- A dependency that still imports full Foundation, as some database and HTTP clients do, is recorded in the service's notes. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does.
+- Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<org>-core`, `<org>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the versions from which the stack's libraries do are in [the stack](stack.md#full-foundation).
+- Other traits in the stack are Foundation-free and keep their defaults: valkey-swift's `ServiceLifecycleSupport` and `DistributedTracingSupport`, swift-temporal-sdk's `GRPCNIOTransport`, swift-http-types' `FoundationURL`.
+- A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
+- A dependency that still links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's README. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does, and CI checks it from then on ([delivery](delivery.md#a-services-ci-workflows)).
+- Before adding a dependency, list its traits with `swift package show-traits` and read its sources' Foundation imports. A library proves it in CI with the Foundation-linking check ([delivery](delivery.md#a-librarys-ci-workflows)).
+- A library's own feature that needs full Foundation goes behind a `FullFoundation` trait, the name hummingbird and swift-openapi-runtime use. It's off by default in a new library, so consumers opt in rather than out.
+- A library that moves to the conditional import releases it as a minor version, noting that a consumer relying on the `Foundation` it imported may need its own import.
 
 ## Folder layout
 
@@ -318,7 +322,7 @@ with `grpc-swift-proto-generator-config.json`:
 ```
 
 - One library product per target; swift-protobuf declared with `traits: []`.
-- The plugin generates at build time with `protoc` from the build machine's `PATH` (or `PROTOC_PATH`), so generated files are never committed or edited.
+- The plugin generates at build time with the `protoc` swift-protobuf builds from source (`PROTOC_PATH` overrides it), so a build machine installs nothing, and generated files are never committed or edited.
 - The package holds the `.proto` files and nothing else in Swift: conversions and validation belong to each service's `Protobuf/` folders.
 
 ## The gateway package
@@ -331,9 +335,9 @@ SPM enforces what each target declares, but not what a declaration should be. Ru
 
 - Core imports no adapter technology: `grep -rlE '^(package |public )?import (GRPC[A-Za-z]*|Hummingbird[A-Za-z]*|PostgresNIO|PersistencePostgres|Temporal|Valkey|Configuration|ServiceLifecycle|SwiftProtobuf|AsyncHTTPClient)$' Sources/*Core`
 - Adapters import no sibling adapter. This lists the service's own modules each target imports; an adapter lists only `LoansCore`, and XGRPC its contracts too: `for t in Sources/*/; do echo "$t: $(grep -rhoE '^(package |public )?import Loans[A-Za-z]+' "$t" | sort -u | tr '\n' ' ')"; done`
-- Generated contract types stay in XGRPC and the executable: `grep -rlE 'Bookshelf_[A-Za-z]+_V[0-9]+_' Sources | grep -vE '/Sources/(LoansGRPC|Loans)/'`
-- Only the executable reads configuration: `grep -rlE '^(package )?import Configuration$' Sources | grep -v '/Sources/Loans/'`
-- Every Foundation import is the conditional one; this lists files importing Foundation without it: `grep -rlE '^(package |public )?import Foundation$' Sources | xargs grep -L 'canImport(FoundationEssentials)'`
+- Generated contract types stay in XGRPC and the executable: `grep -rlE 'Bookshelf_[A-Za-z]+_V[0-9]+_' Sources | grep -vE '^Sources/(LoansGRPC|Loans)/'`
+- Only the executable reads configuration: `grep -rlE '^(package )?import Configuration$' Sources | grep -v '^Sources/Loans/'`
+- Every Foundation import is the conditional one; this lists files importing Foundation without it: `grep -rlE '^(package |public )?import Foundation$' Sources | xargs -r grep -L 'canImport(FoundationEssentials)'`
 - No unchecked concurrency or unstructured tasks: `grep -rnE '@unchecked Sendable|nonisolated\(unsafe\)|@preconcurrency|Task(\.detached)? *\{' Sources`
 - Every use case protocol has typed throws: `grep -rL 'throws(' Sources/*Core/*/UseCases/*/*UseCaseProtocol.swift`
 - No package defaults to the main actor: `grep -n 'defaultIsolation' Package.swift`

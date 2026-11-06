@@ -83,7 +83,8 @@ package import Foundation
 ```
 
 - A file imports it only when it uses a Foundation type, after its other imports.
-- With this import and `MemberImportVisibility`, code that reaches for full Foundation fails to compile on every platform, so it's caught where it's written.
+- A scoped import takes the same condition: `import struct Foundation.Data` alone links full Foundation, so it's `import struct FoundationEssentials.Data` under `#if canImport(FoundationEssentials)`.
+- `FoundationEssentials` ships with every Swift toolchain on Linux and isn't importable on Darwin, where the condition takes `Foundation`. With `MemberImportVisibility`, code that reaches for full Foundation compiles on a Mac and fails on Linux, so CI's Linux build catches it.
 - Modern Foundation and standard library APIs only:
 
 | Instead of | Use |
@@ -93,6 +94,7 @@ package import Foundation
 | `NSRegularExpression` | Swift `Regex` |
 | `JSONSerialization` | `Codable` with `JSONEncoder` and `JSONDecoder` |
 | `URLSession` | AsyncHTTPClient |
+| `String(format:)`, `CharacterSet`, `NSString` methods | String interpolation; `Character` and `Unicode.Scalar.Properties` |
 | `TimeInterval` timeouts, `DispatchTime` | `Duration`: `.seconds(30)`, `.milliseconds(500)` |
 | `Date()` | `Date.now` |
 | `URL(fileURLWithPath:)` | `URL(filePath:)` |
