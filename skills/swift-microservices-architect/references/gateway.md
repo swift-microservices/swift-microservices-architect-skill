@@ -31,7 +31,7 @@ bookshelf-gateway/Sources/
 │   ├── Contexts/                   IdentityRequestContext.swift, AdminRequestContext.swift
 │   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift, ResendWebhookController.swift
 │   ├── Middlewares/                ErrorMiddleware/: ErrorMiddleware.swift, Problem.swift, HTTPResponse.Status+RPCError.swift
-│   └── Schemas/                    Requests/, Responses/, Shared/: X+RPC.swift conversions
+│   └── Schemas/                    Requests/, Responses/, Shared/: Type+RPC.swift conversions
 └── Gateway/
     ├── Gateway.swift               the @main command
     ├── Configuration/              InMemoryProvider+ApplicationDefaults.swift
@@ -47,10 +47,18 @@ generate:
   - types
 accessModifier: package
 namingStrategy: idiomatic
+typeOverrides:
+  schemas:
+    UUID: Foundation.UUID
+nameOverrides:
+  UUID: UUID
 ```
 
 - The routes are Hummingbird's, so request contexts and middleware stay native; the generated `Components.Schemas` types are the request and response bodies.
 - `openapi.yaml` is the contract clients code against: it changes before the routes do, and a route answers exactly the statuses it documents.
+- It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references. The generator maps `format: uuid` to `String`; the overrides make the schema `UUID`, so conversions take and give ids as `UUID`s.
+- `servers` ends in `/v1`, and paths are written without it.
+- Every operation has an `operationId` and a `security` entry for its tier: `[]` for no caller, `[{}, {bearerAuth: []}]` for a caller if there is one, `[{bearerAuth: []}]` for a caller required or an administrator ([request contexts](#request-contexts-and-tiers)).
 - Not every generated file uses each of its imports; the gateway's toolchain and generator versions keep them from warning ([choosing versions](stack.md#choosing-versions)).
 
 ## Request contexts and tiers

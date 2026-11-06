@@ -98,14 +98,14 @@ service LoanService {
 }
 ```
 
-- The file is `<org>/<service>/v1/<service>.proto` in package `<org>.<service>.v1`. Generated types take the package as a prefix: `Bookshelf_Loans_V1_Loan`, `Bookshelf_Loans_V1_LoanService`.
+- The file is `<org>/<x>/v1/<x>.proto` in package `<org>.<x>.v1`. Generated types take the package as a prefix: `Bookshelf_Loans_V1_Loan`, `Bookshelf_Loans_V1_LoanService`.
 - Comments in the contract say who calls each group of RPCs and what a request may name.
 - Fields are snake_case. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
 - Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`.
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
 - A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).
 - A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`.
-- Contracts are released before the services that implement or call them, which raise their `from:` to that release.
+- Contracts release before the services that implement or call them ([the organization's core package](packages.md#the-organizations-core-package)). A producer that serves a new RPC or field deploys before any consumer or gateway route that uses it, and never removes an RPC a deployed caller still uses.
 
 ## A service's gRPC services
 
@@ -326,21 +326,10 @@ A missing caller is `unauthenticated`, from `requireUser()`. A message is one se
 
 ## Interceptors
 
-The server's interceptors apply to the person-facing descriptors only:
-
-```swift
-let bearerAuthentication = BearerAuthenticationInterceptor(authenticator: authenticator)
-let userSettings = UserSettingsInterceptor()
-
-…
-interceptorPipeline: [
-    .apply(bearerAuthentication, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
-    .apply(userSettings, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
-]
-```
+The server's interceptors apply to the person-facing descriptors only, as [the composition root](composition.md#the-composition-root) wires them:
 
 - `BearerAuthenticationInterceptor` proves a bearer token if there is one and binds the principal; an invalid token ends the call as `unauthenticated` before the handler runs, and a missing one continues unbound.
-- `UserSettingsInterceptor` comes after it, on the same descriptors, in a service with tenant tables.
+- `UserSettingsInterceptor` follows it in a service with tenant tables ([binding the tenant](persistence.md#binding-the-tenant)).
 - `XInternalService` descriptors carry neither: the listener's mTLS trust admits their callers.
 - Clients a service uses to reach other services' internal RPCs carry no interceptor. Forwarding the caller's token with `BearerPropagationInterceptor` is the gateway's ([upstream clients](gateway.md#upstream-clients)).
 
@@ -389,4 +378,5 @@ The executable builds the server's and each client's transport from `<Org>Transp
 - One `clientSecurity` serves every client of the process, and each upstream gets its own scoped configuration (`grpc.catalog`) with its host, port, transport config and service config.
 - The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.
 - A client's host is the name in the peer certificate's DNS names. Its config sends keepalive pings on idle connections; its `ServiceConfig` waits for a ready connection, bounded by a deadline, so a transient reconnect doesn't fail a call and a down upstream still does.
+- A client neither retries nor hedges: its `ServiceConfig` sets only the deadline and wait-for-ready. Each call chain has one owner of retries: Temporal for activities, and the client app, with an idempotency key, for public creates. A port call inside an activity never retries on its own.
 - One long-lived `GRPCClient` per upstream process, shared by every port and handler that calls it, run in the `ServiceGroup`. `GRPCServiceLifecycle` makes `GRPCServer` and `GRPCClient` services.

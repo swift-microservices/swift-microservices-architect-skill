@@ -80,7 +80,7 @@ extension TimedCertificateReloader.Configuration {
         self.init(refreshInterval: refreshInterval, certificateSource: certificateSource, privateKeySource: privateKeySource)
         self.logger = logger
         self.onCertificateLoadFailed = { failure in
-            logger.warning("TLS certificate reload failed", metadata: ["error": "\(failure.error)"])
+            logger.warning("TLS certificate reload failed", metadata: ["error": "\(String(reflecting: failure.error))"])
         }
     }
 }
@@ -128,8 +128,10 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 }
 ```
 
+- The token carries identity only: `sub`, `role`, `iss`, `iat`, `exp`, and `aud` where an audience is used. It carries no permissions, entitlements, business state or personal data; a use case reads those from the service that owns them.
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
-- `<Org>Transport` reads the keys by path: `JWTAuthenticator<UserIdentity>(config:)` from `jwt.publicKeyPath`, and in Identity `JWTIssuer<UserIdentity>(config:)` from `jwt.privateKeyPath`.
+- `<Org>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`. Each key's id is its thumbprint (RFC 7638), which the issuer writes in every token's `kid` header, so a verifier picks the key a token names.
+- Rotating the signing key keeps the old public key verifying until the tokens it signed expire: every verifier gets the new public key first, Identity then signs with the new private key, and the old public key goes once the last token it signed has expired.
 - Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes the `JWTIssuer`.
 - Access tokens are short-lived. A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh RPC, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)).
 - The gateway verifies the token to pick a tier and forwards the original with `BearerPropagationInterceptor`; each service's `BearerAuthenticationInterceptor` verifies it again. A token never travels on an internal RPC, into a workflow's input, or into a log.
@@ -177,6 +179,7 @@ Each layer refuses what it can see; the use case decides.
 - Configuration reads passwords, API keys and webhook secrets with `isSecret: true`, so access reporting redacts them; keys and certificates are files at configured paths, never in an image or a repository.
 - Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres stores their SHA-256 digest (`Crypto`), never the secret; Valkey stores a short-lived one with its expiry.
 - Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), on `NIOThreadPool.singleton.runIfActive { … }`, so the hash never blocks the cooperative pool.
+
 ## Webhooks
 
 A provider's webhook arrives with no token: its signature over the body is its proof. Loans receives Resend's delivery events for its overdue notices this way.
@@ -184,5 +187,5 @@ A provider's webhook arrives with no token: its signature over the body is its p
 - Its RPC is in `XService`'s anyone group ([contracts](grpc.md#contracts-in-the-protos-package)). The gateway forwards the body unparsed with the headers the provider signs with ([controllers](gateway.md#controllers)), since the signature covers the exact bytes.
 - The use case verifies before anything else, through a port its provider target implements (`NoticeEventVerifier`, `ResendNoticeEventVerifier`), with the signing secret read as a secret. A signature or timestamp the verifier refuses is the use case's `signatureRejected`, answered `unauthenticated`; checking the timestamp keeps a captured event from being replayed.
 - It runs on the internal database: no caller is bound, so a tenant policy would hide every row ([database roles](persistence.md#database-roles)).
-- Providers retry, so an event acts once: the transaction that acts also records the provider's event id under a unique key, and a repeat that finds it answers success without acting again.
-- It answers once the event is recorded. Work that takes longer, or calls out, is a workflow the use case starts.
+- Providers retry, so an event acts once: the transaction that acts also records the provider's event id under a unique key. A repeat that finds it changes nothing in the database, then starts the event's workflow, if it has one, as the first delivery did: the deterministic id joins a run that exists and starts one whose start was lost after the first commit.
+- It answers once the event is recorded. Work that takes longer, or calls out, is a workflow the use case starts ([workflows a webhook starts](workflows.md#starting-a-workflow-from-a-use-case)).
