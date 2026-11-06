@@ -76,7 +76,8 @@ package protocol LoanRepository: Sendable {
     func create(_ command: CreateLoanCommand) async throws -> Loan
     func loan(id: UUID) async throws -> Loan?
     func activeLoans(userID: UUID) async throws -> [Loan]
-    func loans() async throws -> [Loan]
+    func loans(userID: UUID, page: Int, pageSize: Int) async throws -> Page<Loan>
+    func loans(startingAfter: UUID?, pageSize: Int) async throws -> KeyedPage<Loan>
     func markReturned(id: UUID) async throws -> Loan?
     func markOverdue(id: UUID) async throws -> Loan?
 }
@@ -103,6 +104,32 @@ package struct CreateLoanCommand: Sendable {
 - Methods use untyped `async throws`: a driver throws errors the domain doesn't name, and `XRepositoryError` carries the few it does.
 - A scope builds the repository on its transaction's connection ([database roles](persistence.md#database-roles)); nothing keeps one past the transaction.
 
+A read of a list that can grow large returns one page, with its metadata, as one of Core's page types in `Paging/` ([lists and pages](grpc.md#lists-and-pages)):
+
+```swift
+/// One numbered page of a list, and where it sits in the whole list.
+package struct Page<Item: Sendable>: Sendable {
+    package let items: [Item]
+    package let page: Int
+    package let pageSize: Int
+    package let totalCount: Int
+
+    package var totalPages: Int {
+        (totalCount + pageSize - 1) / pageSize
+    }
+
+    …
+}
+
+/// One page of a list read by key, and the id the next page starts after, if another follows.
+package struct KeyedPage<Item: Sendable>: Sendable {
+    package let items: [Item]
+    package let nextCursor: UUID?
+
+    …
+}
+```
+
 ## Ports
 
 A port is what Core needs from outside the service's database: another service, a provider's capability, the workflow engine, or a store outside the transaction.
@@ -122,7 +149,7 @@ package enum CatalogClientError: Error, Equatable, Sendable {
 | Port | Named | Implemented by |
 |---|---|---|
 | Another service | `<Service>Client`, its error `<Service>ClientError` | `GRPC<Service>Client` in XGRPC |
-| A capability | A role noun: `NoticeSender`, `PasswordHasher` | `<Provider><Role>` in `X<Provider>`: `ResendNoticeSender`, `BcryptPasswordHasher` |
+| A capability | A role noun: `NoticeSender`, `PasswordHasher`, `NoticeEventVerifier` | `<Provider><Role>` in `X<Provider>`: `ResendNoticeSender`, `BcryptPasswordHasher`, `ResendNoticeEventVerifier` |
 | The workflow engine | `XWorkflowClient` | `TemporalXWorkflowClient` in XTemporal |
 | A store outside the database | `XRepository`, like any repository | `Valkey<Name>Repository` in XValkey |
 
@@ -161,7 +188,7 @@ with the error above and the implementation below.
 
 - A use case is named like its RPC ([naming](conventions.md#naming)).
 - `callAsFunction` takes `subject: UserIdentity` first when it acts for a caller, then `input:` when the request carries values. A use case that needs neither takes neither.
-- It returns a domain model, an array of them, or nothing. A result that combines values is a domain type named for what it is (`Session`), never `XUseCaseOutput`.
+- It returns a domain model, an array of them, a page of them, or nothing. A result that combines values is a domain type named for what it is (`Session`), never `XUseCaseOutput`.
 - The input is a plain value of what the request carries. Wire validity, such as an id that isn't a UUID, is the conversion's to refuse ([conversions](grpc.md#conversions)); business validity is the use case's, as an error case.
 - The implementation is generic over its database, `XUseCase<DatabaseType>` where `DatabaseType: Database` and `DatabaseType.Scope: XUseCaseScope`, so dispatch stays static. It holds its ports as `any Port`, a `Logger`, and a policy when its rules are tunable.
 - Its scope protocol lists only what it uses. The scopes of the database roles it may run on adopt the protocol, so composing it on any other database doesn't compile ([database roles](persistence.md#database-roles)).
@@ -276,7 +303,10 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 - **Internal callers.** The use case takes the user it acts for in its input; mTLS admitted the calling process.
 
 ```swift
-package func callAsFunction(subject: UserIdentity) async throws(ListAllLoansUseCaseError) -> [Loan] {
+package func callAsFunction(
+    subject: UserIdentity,
+    input: ListAllLoansUseCaseInput
+) async throws(ListAllLoansUseCaseError) -> KeyedPage<Loan> {
     guard subject.role == .admin else {
         logger.warning("Loan list refused: not an administrator")
         throw .forbidden
@@ -284,7 +314,7 @@ package func callAsFunction(subject: UserIdentity) async throws(ListAllLoansUseC
 
     do {
         return try await database.withTransaction { scope in
-            try await scope.loanRepository.loans()
+            try await scope.loanRepository.loans(startingAfter: input.startingAfter, pageSize: input.pageSize)
         }
     } catch {
         logger.error("Loan list failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])

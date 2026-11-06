@@ -29,7 +29,7 @@ bookshelf-gateway/Sources/
 │   ├── openapi.yaml, openapi-generator-config.yaml
 │   ├── BookshelfAPI.swift          the router builder and its dependencies
 │   ├── Contexts/                   IdentityRequestContext.swift, AdminRequestContext.swift
-│   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift
+│   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift, ResendWebhookController.swift
 │   ├── Middlewares/                ErrorMiddleware/: ErrorMiddleware.swift, Problem.swift, HTTPResponse.Status+RPCError.swift
 │   └── Schemas/                    Requests/, Responses/, Shared/: X+RPC.swift conversions
 └── Gateway/
@@ -116,12 +116,14 @@ package struct BookshelfAPI: Sendable {
         let accountController = AccountController(client: dependencies.identity)
         let bookController = BookController(client: dependencies.books)
         let loanController = LoanController(client: dependencies.loans)
+        let resendWebhookController = ResendWebhookController(client: dependencies.loans)
 
         // MARK: - No caller
 
         group.get("health") { _, _ -> HTTPResponse.Status in .ok }
         accountController.addPublicRoutes(to: group.group("account"))
         bookController.addPublicRoutes(to: group.group("books"))
+        resendWebhookController.addPublicRoutes(to: group.group("webhooks/resend"))
 
         // MARK: - A caller, if there is one
 
@@ -222,7 +224,32 @@ package struct LoanController: Sendable {
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
 - Status codes follow the method: `201` with `EditedResponse` for a create, `202` for work accepted to run later, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, `200` otherwise.
 - Hummingbird keys a path capture by one name per segment, so every route on one path shares its capture name (`:id`).
-- A provider's webhook route, in the first tier, collects the raw body up to a bound and forwards it unparsed, with the signature header, to the owning service's RPC, which verifies the signature over those exact bytes ([secrets](security.md#secrets)).
+
+A provider's webhooks get a controller of their own, in the first tier at `webhooks/<provider>`, that forwards each event unparsed:
+
+```swift
+/// Resend's delivery events, forwarded to Loans as Resend signed them.
+package struct ResendWebhookController: Sendable {
+    /// Resend's events are small, so a larger body is refused before it's read.
+    private static let maximumEventSize = 1_048_576
+    private let client: any Bookshelf_Loans_V1_LoanService.ClientProtocol
+
+    …
+
+    private func receiveNoticeEvent(
+        request: Request,
+        context: BasicRequestContext
+    ) async throws -> HTTPResponse.Status {
+        let body = try await request.body.collect(upTo: Self.maximumEventSize)
+        let eventRequest = try Bookshelf_Loans_V1_ReceiveNoticeEventRequest(body: body, headers: request.headers)
+        _ = try await client.receiveNoticeEvent(eventRequest)
+        return .noContent
+    }
+}
+```
+
+- The conversion copies the bytes and the provider's signature headers unchanged, refusing a request missing one as `400`; the service verifies them ([webhooks](security.md#webhooks)).
+- A body over the limit answers `413` through `ErrorMiddleware`.
 
 ## Conversions
 
@@ -251,6 +278,7 @@ extension Bookshelf_Loans_V1_BorrowBookRequest {
 
 - A response conversion throws on a malformed upstream value, such as a non-UUID id or an unspecified enum, answering `500` rather than dropping or inventing a field.
 - A body field the client omits reaches the service as the proto default; the service's conversion decides what an empty value means.
+- A paged route reads `pageSize` and `pageToken` or `page` from the query, answers the items with `pageInfo` or `nextPageToken`, and passes each through unchanged; the service applies [the paging rules](grpc.md#lists-and-pages).
 
 ## Errors
 

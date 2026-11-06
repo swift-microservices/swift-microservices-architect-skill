@@ -8,6 +8,7 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens,
 - User tokens
 - Authorization
 - Secrets
+- Webhooks
 
 ## The trust model
 
@@ -177,4 +178,12 @@ Each layer refuses what it can see; the use case decides.
 - Configuration reads passwords, API keys and webhook secrets with `isSecret: true`, so access reporting redacts them; keys and certificates are files at configured paths, never in an image or a repository.
 - Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres stores their SHA-256 digest (`Crypto`), never the secret; Valkey stores a short-lived one with its expiry.
 - Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), on `NIOThreadPool.singleton.runIfActive { … }`, so the hash never blocks the cooperative pool.
-- A provider's webhook carries no caller: its RPC is in the anyone group, and the use case verifies the provider's signature over the raw body before acting.
+## Webhooks
+
+A provider's webhook arrives with no token: its signature over the body is its proof. Loans receives Resend's delivery events for its overdue notices this way.
+
+- Its RPC is in `XService`'s anyone group ([contracts](grpc.md#contracts-in-the-protos-package)). The gateway forwards the body unparsed with the headers the provider signs with ([controllers](gateway.md#controllers)), since the signature covers the exact bytes.
+- The use case verifies before anything else, through a port its provider target implements (`NoticeEventVerifier`, `ResendNoticeEventVerifier`), with the signing secret read as a secret. A signature or timestamp the verifier refuses is the use case's `signatureRejected`, answered `unauthenticated`; checking the timestamp keeps a captured event from being replayed.
+- It runs on the internal database: no caller is bound, so a tenant policy would hide every row ([database roles](persistence.md#database-roles)).
+- Providers retry, so an event acts once: it's keyed by the provider's event id, and a repeat answers success without acting again.
+- It answers once the event is recorded. Work that takes longer, or calls out, is a workflow the use case starts.

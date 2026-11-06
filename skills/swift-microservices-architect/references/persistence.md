@@ -8,6 +8,7 @@ The Postgres adapter, database roles and row-level security, migrations, other s
 - Row-level security
 - Binding the tenant
 - Repositories and statements
+- Paged statements
 - Migrations
 - Other stores
 - Valkey
@@ -32,7 +33,7 @@ Each service's database has an owner and a role per purpose. A process connects 
 |---|---|---|---|
 | Owner | `serve --migrate-database`, for migrations only | Everything; bypasses row-level security | none |
 | `<service>_service` | `serve`, for anyone's and the caller's own RPCs | Tenant tables narrowed to the bound caller; untenanted tables whole | `Postgres<Service>Scope` |
-| `<service>_internal` | `serve`, for administrators' and internal RPCs | Every row, through its own policy | `Postgres<Service>InternalScope` |
+| `<service>_internal` | `serve`, for administrators' and internal RPCs, and anyone's that reach tenant rows with no caller bound, such as a webhook | Every row, through its own policy | `Postgres<Service>InternalScope` |
 | `<service>_worker` | `worker run`, for activities | Every row, through its own policy | `Postgres<Service>WorkerScope` |
 
 A service declares only the roles it uses: Catalog has no tenant table and runs everything as `catalog_service`.
@@ -53,7 +54,7 @@ package struct PostgresLoansScope: PostgresScope, BorrowBookUseCaseScope, Return
 }
 ```
 
-- A scope adopts exactly the scope protocols of the use cases that may run as its role. `PostgresLoansInternalScope` adopts `ListAllLoansUseCaseScope`; `PostgresLoansWorkerScope` adopts `MarkLoanOverdueUseCaseScope`. Composing `ListAllLoansUseCase` on the tenant database then fails to compile, so which role a use case runs as is checked by the compiler.
+- A scope adopts exactly the scope protocols of the use cases that may run as its role. `PostgresLoansInternalScope` adopts `ListAllLoansUseCaseScope` and `ReceiveNoticeEventUseCaseScope`; `PostgresLoansWorkerScope` adopts `MarkLoanOverdueUseCaseScope`. Composing `ListAllLoansUseCase` on the tenant database then fails to compile, so which role a use case runs as is checked by the compiler.
 - Several scopes hold the same repository types; each is built on its own role's connection.
 
 ## Row-level security
@@ -172,6 +173,42 @@ struct CreateLoanStatement: PostgresPreparedStatement {
 - A unique violation the use case acts on is mapped by constraint name: `catch let error as PSQLError where error.serverInfo?[.sqlState] == "23505"`, then a `switch` on `error.serverInfo?[.constraintName]` that throws the repository's case or rethrows.
 - A Core enum stored as text conforms to `PostgresNonThrowingEncodable` and `PostgresDecodable` through its raw value, in `Extensions/`.
 - Ids default in the database (`uuidv7()` on Postgres 18 and later), as do creation and update dates; commands carry neither.
+
+## Paged statements
+
+A numbered page is two statements on the transaction's connection, the page and the count ([lists and pages](grpc.md#lists-and-pages)):
+
+```swift
+struct LoansByUserIDStatement: PostgresPreparedStatement {
+    static let sql = """
+        SELECT id, user_id, book_id, status, due_date, creation_date
+        FROM loans
+        WHERE user_id = $1
+        ORDER BY id DESC
+        LIMIT $2 OFFSET ($3 - 1) * $2
+        """
+
+    let userID: UUID
+    let page: Int
+    let pageSize: Int
+
+    func makeBindings() throws -> PostgresBindings {
+        var bindings = PostgresBindings()
+        bindings.append(userID)
+        bindings.append(pageSize)
+        bindings.append(page)
+        return bindings
+    }
+
+    func decodeRow(_ row: PostgresRow) throws -> Loan {
+        try Loan(row: row)
+    }
+}
+```
+
+- `CountLoansByUserIDStatement` is `SELECT count(*) FROM loans WHERE user_id = $1`, decoding an `Int`. The repository runs both and returns `Page(items:page:pageSize:totalCount:)`.
+- A page by key reads one row more than the page size, so the repository knows whether another page follows: `WHERE $1::uuid IS NULL OR id < $1 ORDER BY id DESC LIMIT $2 + 1`. It returns `KeyedPage(items:nextCursor:)` without the extra row and, when that row came back, the last kept item's id as the cursor.
+- Both order by `id DESC`, so the primary key's index serves every page, and the statement, not Swift, turns a page number into an offset.
 
 ## Migrations
 

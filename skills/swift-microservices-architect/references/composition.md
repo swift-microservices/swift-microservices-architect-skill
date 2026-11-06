@@ -121,7 +121,8 @@ struct Serve: AsyncParsableCommand {
 
         // MARK: - Composition
         // The caller's own loans run on the tenant database, where the policy confines each
-        // transaction to the caller; administrators' reads run on the internal one.
+        // transaction to the caller; administrators' reads, and Resend's events, which bind no
+        // caller, run on the internal one.
         let database = PostgresDatabase<PostgresLoansScope>(client: postgresClient, logger: logger)
         let internalDatabase = PostgresDatabase<PostgresLoansInternalScope>(client: internalPostgresClient, logger: logger)
         let catalogClient = GRPCCatalogClient(client: catalogGRPCClient)
@@ -129,7 +130,14 @@ struct Serve: AsyncParsableCommand {
         let loanWorkflowClient = TemporalLoanWorkflowClient(client: temporalClient, taskQueue: taskQueue)
         let loansConfig = config.scoped(to: "loans")
         let policy = LoanPolicy(config: loansConfig)
+        let resendConfig = config.scoped(to: "resend")
+        let noticeEventVerifier = try ResendNoticeEventVerifier(config: resendConfig)
 
+        let receiveNoticeEventUseCase = ReceiveNoticeEventUseCase(
+            database: internalDatabase,
+            noticeEventVerifier: noticeEventVerifier,
+            logger: logger
+        )
         let borrowBookUseCase = BorrowBookUseCase(
             database: database,
             catalogClient: catalogClient,
@@ -141,6 +149,7 @@ struct Serve: AsyncParsableCommand {
         let listLoansUseCase = ListLoansUseCase(database: database, logger: logger)
         let listAllLoansUseCase = ListAllLoansUseCase(database: internalDatabase, logger: logger)
         let loanService = LoanService(
+            receiveNoticeEventUseCase: receiveNoticeEventUseCase,
             borrowBookUseCase: borrowBookUseCase,
             returnBookUseCase: returnBookUseCase,
             listLoansUseCase: listLoansUseCase,
