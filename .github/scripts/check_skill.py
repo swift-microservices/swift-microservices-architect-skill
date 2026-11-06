@@ -27,6 +27,7 @@ MAX_NAME = 64
 MAX_DESCRIPTION = 1024
 MAX_SKILL_LINES = 500
 MAX_SKILL_TOKENS = 5000  # recommended for the SKILL.md body; also what compaction keeps
+SKILL_TOKEN_BUDGET = 4500  # headroom under the limit, so a new line makes room by removing one
 CHARS_PER_TOKEN = 3.5  # a conservative estimate for English prose with code
 CONTENTS_AFTER_LINES = 100
 
@@ -137,8 +138,8 @@ def check_skill_size(skill_text: str) -> None:
     tokens = len(skill_text) / CHARS_PER_TOKEN
     if lines > MAX_SKILL_LINES:
         fail(f"SKILL.md: {lines} lines, under {MAX_SKILL_LINES}")
-    if tokens > MAX_SKILL_TOKENS:
-        fail(f"SKILL.md: about {tokens:.0f} tokens, under {MAX_SKILL_TOKENS}")
+    if tokens > SKILL_TOKEN_BUDGET:
+        fail(f"SKILL.md: about {tokens:.0f} tokens, over the budget of {SKILL_TOKEN_BUDGET}; move detail to a reference")
 
     start = skill_text.find("\n## References")
     end = skill_text.find("\n## ", start + 1)

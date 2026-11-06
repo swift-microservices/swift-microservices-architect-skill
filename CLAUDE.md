@@ -17,7 +17,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 **How Claude loads a skill**, in three stages, each with its own limit:
 
 1. **The listing.** Every session lists each installed skill's `name` and `description` on every turn, and Claude decides from them alone whether to invoke the skill. Claude Code cuts an entry at 1,536 characters, and when the listing outgrows its budget, about 1% of the context window, it drops the descriptions of the least-used skills first.
-2. **Invocation.** The `SKILL.md` body enters the conversation as one message and stays: under 500 lines and about 5,000 tokens. After compaction Claude Code re-attaches the first 5,000 tokens of each invoked skill, within 25,000 tokens shared by every skill invoked, the most recent first.
+2. **Invocation.** The `SKILL.md` body enters the conversation as one message and stays on every later turn, so each line is a recurring cost; Claude Code doesn't re-read it, so its guidance reads as standing instructions. The specification recommends under 500 lines and 5,000 tokens. After compaction Claude Code re-attaches the first 5,000 tokens of each invoked skill, within 25,000 tokens shared by every skill invoked, the most recent first.
 3. **References.** A file in `references/` loads only when `SKILL.md` sends Claude to it. A file reached only through another reference may be read in part, such as its first 100 lines.
 
 **Frontmatter**
@@ -29,7 +29,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 **Structure**
 
 - The skill folder holds only what agents read: `SKILL.md` and `references/`. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
-- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, the shapes in brief, code style, gotchas, checklists, references and related skills.
+- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, code style, gotchas, checklists, references and related skills.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
 - Links are relative, with forward slashes and GitHub heading anchors; renaming a heading means updating every link to it.
@@ -37,7 +37,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 **Content**
 
 - Only what Claude doesn't already know: a placement, an ownership rule, a shape, a style rule, a gotcha, or a reason that guides judgment. Cut explanations of Swift, SPM, Postgres or a library's basics.
-- One home per rule. A rule lives in one reference; `SKILL.md` carries at most one line for it (a hard rule, an ownership row, a brief, a style point, a gotcha or a checklist item); other references link to it instead of restating it. `conventions.md` holds only names. A rule stated twice drifts apart and costs tokens twice.
+- One home per rule. A rule lives in one reference; `SKILL.md` carries at most one line for it (a hard rule, an ownership row, a style point, a gotcha or a checklist item); other references link to it instead of restating it. `conventions.md` holds only names. A rule stated twice drifts apart and costs tokens twice.
 - One home per example, too. Code shown in one reference is linked from the others: the composition root holds the transports, the gateway's root its upstream clients.
 - `SKILL.md`'s gotchas are mistakes any task can make; a mistake only one shape invites is stated once, in that shape's reference.
 - One term per concept, no time-sensitive statements, concrete examples, and one default rather than a menu of options.
@@ -80,7 +80,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
 
 1. `python3 .github/scripts/check_skill.py` passes. It checks:
    - the frontmatter's keys, `name` and `description`, against the limits above
-   - `SKILL.md`'s lines and estimated tokens, at 3.5 characters a token, and that its References table ends inside the first 5,000
+   - `SKILL.md`'s lines and estimated tokens, at 3.5 characters a token, against a budget of 4,500 that leaves headroom under the 5,000, and that its References table ends inside the first 5,000
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
    - every link and anchor
    - that the three descriptions and the three versions in `SKILL.md` and the manifests agree
