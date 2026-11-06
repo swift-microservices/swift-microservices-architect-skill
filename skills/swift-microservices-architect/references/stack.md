@@ -39,7 +39,7 @@ How they fit together on a call:
 | [grpc-swift-2](https://github.com/grpc/grpc-swift-2) | `GRPCCore` | Servers, clients, interceptors, `RPCError`, `ServiceConfig` | XGRPC, executables |
 | [grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | `GRPCNIOTransportHTTP2` | HTTP/2 transports with TLS and mTLS | Executables, `<Org>Transport` |
 | [grpc-swift-protobuf](https://github.com/grpc/grpc-swift-protobuf) | `GRPCProtobuf`, `GRPCProtobufGenerator` plugin | Protobuf serialization and code generation | `<org>-protos` |
-| [grpc-swift-extras](https://github.com/grpc/grpc-swift-extras) | `GRPCServiceLifecycle`, `GRPCHealthService`, `GRPCOTelTracingInterceptors` | `GRPCServer` and `GRPCClient` as lifecycle services; health; tracing | Executables |
+| [grpc-swift-extras](https://github.com/grpc/grpc-swift-extras) | `GRPCServiceLifecycle`, `GRPCOTelTracingInterceptors` | `GRPCServer` and `GRPCClient` as lifecycle services; tracing | Executables |
 | [swift-protobuf](https://github.com/apple/swift-protobuf) | `SwiftProtobuf` | Messages, well-known types (`Google_Protobuf_Timestamp`, `Google_Protobuf_Empty`) | `<org>-protos`, XGRPC, the gateway |
 | [swift-temporal-sdk](https://github.com/apple/swift-temporal-sdk) | `Temporal` | Workflows, activities, `TemporalClient`, `TemporalWorker` | XTemporal, executables |
 | [valkey-swift](https://github.com/valkey-io/valkey-swift) | `Valkey` | `ValkeyClient`, commands, pipelines, transactions | XValkey, executables |

@@ -120,7 +120,6 @@ package struct BookshelfAPI: Sendable {
 
         // MARK: - No caller
 
-        group.get("health") { _, _ -> HTTPResponse.Status in .ok }
         accountController.addPublicRoutes(to: group.group("account"))
         bookController.addPublicRoutes(to: group.group("books"))
         resendWebhookController.addPublicRoutes(to: group.group("webhooks/resend"))
@@ -162,7 +161,6 @@ extension BookshelfAPI {
 
 - `add(middleware:)` changes the group it's called on, for every route added after it. Each tier is its own group (`identified.group()`), so a tier's middleware never reaches a sibling tier's routes.
 - The router builder takes its clients and the authenticator as dependencies; the executable builds them, which keeps the whole surface buildable over stub clients.
-- Liveness (`/health`) answers without consulting any upstream: it reports this process serving HTTP.
 
 ## Controllers
 
