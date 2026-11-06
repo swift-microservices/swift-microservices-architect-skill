@@ -193,18 +193,22 @@ The code also relies on `package` access ([SE-0386](https://github.com/swiftlang
 
 ## Traits and Foundation
 
-Owned code imports `FoundationEssentials` behind a conditional import ([Foundation](style.md#foundation)), so a target links full Foundation only through a dependency. A dependency's default traits can pull it in, or code the target never uses:
+On Linux, full Foundation links `libFoundation`, `libFoundationInternationalization` and ICU's data; a small static binary grows from about 9 MB with `FoundationEssentials` to about 46 MB once it links ICU. `FoundationEssentials` has the types a service uses (`Data`, `Date`, `URL`, `UUID`, `JSONEncoder` and `JSONDecoder`, `Date.ISO8601FormatStyle`, `Calendar`, `TimeZone`, `FileManager`) without them. A target links full Foundation through owned code, a dependency's own imports, or a dependency's default traits. Owned code takes the conditional import ([Foundation](style.md#foundation)); dependencies are declared here.
 
-| Package | Default traits | Declare |
-|---|---|---|
-| hummingbird | `ConfigurationSupport`, `FullFoundation` | `traits: ["ConfigurationSupport"]` in the gateway, `traits: []` in a library |
-| swift-openapi-runtime | `FullFoundation` | `traits: []` |
-| swift-configuration | `JSON` | `traits: []` unless a JSON file provider is used |
-| swift-protobuf | `BinaryDelimitedStreams`, `FieldMaskUtilities` | `traits: []` unless a contract uses them |
+| Package | Traits that link full Foundation (`*` default) | Declare | Turning them off loses |
+|---|---|---|---|
+| hummingbird | `FullFoundation`* | `traits: ["ConfigurationSupport"]` where its configuration reader is used (the gateway), `traits: []` elsewhere | `DateEncodingStrategy.formatted(_:)` and `DateDecodingStrategy.formatted(_:)` over a `DateFormatter` in URL-encoded forms; `.iso8601` stays |
+| swift-openapi-runtime | `FullFoundation`* | `traits: []` | `ISO8601DateTranscoder(options:)`, and `NSNull` and `NSNumber` in `OpenAPIValueContainer`; `.iso8601` stays |
+| swift-configuration | `JSON`*, `YAML`, `PropertyList` | `traits: []`, plus `Reloading` or `CommandLineArguments` when used | The JSON, YAML and property list file providers |
+| swift-protobuf | `BinaryDelimitedStreams`* | `traits: []`, plus `FieldMaskUtilities` when a contract uses field masks | Length-delimited message streams |
 
-- Traits combine across the graph: a trait is off only when every package that declares the dependency leaves it off, so `<org>-core`, `<org>-protos` and each service declare the same `traits:`.
-- Check a new dependency's `traits` in its `Package.swift` before adding it.
-- A dependency that still imports full Foundation, as some database and HTTP clients do, is recorded in the service's notes. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does.
+- Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<org>-core`, `<org>-protos`, each service and the gateway declare the same `traits:`, and so must the libraries they depend on; the versions from which the stack's libraries do are in [the stack](stack.md#full-foundation).
+- Other traits in the stack are Foundation-free and keep their defaults: valkey-swift's `ServiceLifecycleSupport` and `DistributedTracingSupport`, swift-temporal-sdk's `GRPCNIOTransport`, swift-http-types' `FoundationURL`.
+- A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
+- A dependency that still links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's notes. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does.
+- Before adding a dependency, list its traits with `swift package show-traits` and read its sources' Foundation imports. A library proves it in CI with the Foundation-linking check ([delivery](delivery.md#a-librarys-workflows)), which builds without `--static-swift-stdlib`, since `ldd` sees nothing in a static binary.
+- A library's own feature that needs full Foundation goes behind a `FullFoundation` trait, the name hummingbird and swift-openapi-runtime use. It's off by default in a new library, so consumers opt in rather than out.
+- A library that moves to the conditional import releases it as a minor version, noting that a consumer relying on the `Foundation` it imported may need its own import.
 
 ## Folder layout
 

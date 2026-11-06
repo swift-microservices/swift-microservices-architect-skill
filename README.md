@@ -17,7 +17,7 @@ This README is for people. Agents read [SKILL.md](skills/swift-microservices-arc
 ## What the skill covers
 
 - Splitting a backend into services by data ownership, naming them, and writing the plan: services, contracts, module maps, shared packages and gateway routes.
-- A service's package: `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`, `XHTTP` and the executable, their dependency direction, what Core may link, and `Package.swift` with its Swift settings, Swift Evolution proposals and package traits.
+- A service's package: `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`, `XHTTP` and the executable, their dependency direction, what Core may link, and `Package.swift` with its Swift settings, Swift Evolution proposals, and the package traits that keep full Foundation out, with each stack package's Foundation status.
 - The organization's shared packages: `<org>-core` for identity, tenant binding and transport configuration, and `<org>-protos` for contracts.
 - The swift-microservices libraries (`OperationContext`, `Authentication` with its JWT, gRPC and Hummingbird adapters, `Persistence` and `PersistencePostgres`) and the server stack around them.
 - The application layer: domain models, errors, repositories, ports, use cases with typed throws, scope protocols, transactions, authorization and logging.

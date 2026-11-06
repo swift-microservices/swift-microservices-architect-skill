@@ -5,6 +5,7 @@ The libraries the architecture is built on, what each provides, and which target
 ## Contents
 - The swift-microservices libraries
 - The server stack
+- Full Foundation
 - Choosing versions
 
 ## The swift-microservices libraries
@@ -54,6 +55,17 @@ How they fit together on a call:
 | jwt-kit | `JWTKit` | `JWTPayload`, claims, EdDSA keys | `<Org>Authentication`, `<Org>Transport` |
 
 Hummingbird is the only HTTP framework, and AsyncHTTPClient the only HTTP client when an adapter calls an HTTP API that has no SDK.
+
+## Full Foundation
+
+Whether each package makes a Linux binary link full Foundation, with the traits [traits and Foundation](packages.md#traits-and-foundation) declares:
+
+| Status | Packages |
+|---|---|
+| Foundation-free | swift-nio (except `NIOFoundationCompat`), swift-nio-ssl, swift-nio-extras (except `NIOCertificateHelpers`), swift-log, swift-metrics, swift-distributed-tracing, swift-service-lifecycle, swift-argument-parser, swift-async-algorithms, swift-crypto, swift-certificates, swift-asn1, grpc-swift-nio-transport, valkey-swift, hummingbird-auth, jwt-kit, async-http-client from 1.32.1, and the swift-microservices libraries except swift-persistence-postgres |
+| Foundation-free from the version that stopped turning swift-protobuf's default traits back on | grpc-swift-2 2.4.2, grpc-swift-protobuf 2.4.1, grpc-swift-extras 2.2.2 |
+| Foundation-free with traits off | hummingbird, swift-openapi-runtime, swift-configuration, swift-protobuf |
+| Links full Foundation | postgres-nio, and so postgres-migrations and swift-persistence-postgres: a service with XPostgres links it until postgres-nio stops. swift-temporal-sdk up to 1.5.0: it moved to `FoundationEssentials` in 1.5.0, but its scoped `import struct Foundation.Data` imports still link full Foundation; the release after 1.5.0 makes them conditional |
 
 ## Choosing versions
 

@@ -123,7 +123,7 @@ do {
 - A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls wait until their deadline.
 - A process connected as the database owner bypasses row-level security, and an unset tenant setting reads as `''` on a reused connection, so policies wrap it in `NULLIF`.
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep`, a captured `Logger` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
-- A plain `import Foundation` in owned code links full Foundation; use the conditional `FoundationEssentials` import.
+- A plain `import Foundation`, or a scoped `import struct Foundation.Data`, in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
 
 ## Workflows
 
