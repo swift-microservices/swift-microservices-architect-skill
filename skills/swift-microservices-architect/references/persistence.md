@@ -19,7 +19,7 @@ XPostgres implements Core's repositories over swift-persistence-postgres and Pos
 
 | Folder | Holds | Access |
 |---|---|---|
-| `Scopes/` | `Postgres<Service>Scope` per database role | `package` |
+| `Scopes/` | `Postgres<X>Scope` per database role | `package` |
 | `Repositories/<Area>/` | `Postgres<Name>Repository` | internal: only scopes build them |
 | `Statements/<Area>/` | A `PostgresPreparedStatement` per query, and `Model+PostgresRow.swift` | internal |
 | `Extensions/` | `Enum+PostgresCodable.swift` for Core enums stored as text | `package` |
@@ -32,11 +32,13 @@ Each service's database has an owner and a role per purpose. A process connects 
 | Role | Connects | Sees | Scope |
 |---|---|---|---|
 | Owner | `serve --migrate-database`, for migrations only | Everything; bypasses row-level security | none |
-| `<service>_service` | `serve`, for anyone's and the caller's own RPCs | Tenant tables narrowed to the bound caller; untenanted tables whole | `Postgres<Service>Scope` |
-| `<service>_internal` | `serve`, for administrators' and internal RPCs, and anyone's that reach tenant rows with no caller bound, such as a webhook | Every row, through its own policy | `Postgres<Service>InternalScope` |
-| `<service>_worker` | `worker run`, for activities | Every row, through its own policy | `Postgres<Service>WorkerScope` |
+| `<x>_service` | `serve`, for anyone's and the caller's own RPCs | Tenant tables narrowed to the bound caller; untenanted tables whole | `Postgres<X>Scope` |
+| `<x>_internal` | `serve`, for administrators' and internal RPCs, and anyone's that reach tenant rows with no caller bound, such as a webhook | Every row, through its own policy | `Postgres<X>InternalScope` |
+| `<x>_worker` | `worker run`, for activities | Every row, through its own policy | `Postgres<X>WorkerScope` |
 
 A service declares only the roles it uses: Catalog has no tenant table and runs everything as `catalog_service`.
+
+The internal and worker roles see every row, so a query on them that acts for one user names that user in its own `WHERE`. A read by id that relies on the tenant policy confines nothing there.
 
 ```swift
 package import Logging
@@ -68,10 +70,11 @@ CREATE POLICY tenant_isolation ON loans
     USING (user_id = NULLIF(current_setting('app.caller_user_id', true), '')::uuid)
     WITH CHECK (user_id = NULLIF(current_setting('app.caller_user_id', true), '')::uuid);
 
-CREATE POLICY internal_all ON loans TO loans_internal USING (true) WITH CHECK (true);
-CREATE POLICY worker_all ON loans TO loans_worker USING (true) WITH CHECK (true);
+CREATE POLICY internal_all ON loans TO "loans_internal" USING (true) WITH CHECK (true);
+CREATE POLICY worker_all ON loans TO "loans_worker" USING (true) WITH CHECK (true);
 ```
 
+- `CreateLoansRLSPolicy(internalRole:workerRole:)` takes the role names from configuration, as `CreateServiceRole(role:password:database:)` does ([migrations](#migrations)), and quotes each as an identifier.
 - The tenant policy is a predicate on the tenant and nothing else. Whether a caller is an administrator is decided in the use case, which runs on the internal role; a policy that reads a role is authorization in SQL, where the domain's rules can't see it.
 - `NULLIF(…, '')` is required: once a pooled connection has carried the setting, reading it in a later transaction yields `''` rather than `NULL`, and `''::uuid` is an error rather than a non-match.
 - Policies combine with `OR`, so a role's `USING (true)` widens only that role.
@@ -144,9 +147,9 @@ struct CreateLoanStatement: PostgresPreparedStatement {
     static let sql = """
         INSERT INTO loans (idempotency_key, user_id, book_id, due_date)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT ON CONSTRAINT loans_idempotency_key_key DO UPDATE
+        ON CONFLICT (user_id, idempotency_key) DO UPDATE
         SET idempotency_key = EXCLUDED.idempotency_key
-        WHERE loans.user_id = EXCLUDED.user_id AND loans.book_id = EXCLUDED.book_id
+        WHERE loans.book_id = EXCLUDED.book_id
         RETURNING id, user_id, book_id, status, due_date, creation_date
         """
 
@@ -171,6 +174,8 @@ struct CreateLoanStatement: PostgresPreparedStatement {
 - A statement lists its columns, in the order `Model+PostgresRow.swift` decodes them as one tuple (`row.decode((UUID, UUID, …).self)`).
 - An idempotent create inserts, and on a repeated key returns the existing row only when the request matches it. No row back means the key was used for something else: the repository throws `idempotencyConflict`.
 - A unique violation the use case acts on is mapped by constraint name: `catch let error as PSQLError where error.serverInfo?[.sqlState] == "23505"`, then a `switch` on `error.serverInfo?[.constraintName]` that throws the repository's case or rethrows.
+- A value unique only while its row is active, such as a member's one active loan of a book, is a partial unique index over the active states: `CREATE UNIQUE INDEX loans_active_user_id_book_id_key ON loans (user_id, book_id) WHERE status <> 'returned'`. Its violation is mapped by name like any other; a check, then an insert, never stands in for it.
+- A state transition is one statement whose `WHERE` names the states the row may leave: `UPDATE loans SET status = 'returned' WHERE id = $1 AND status <> 'returned' RETURNING …`. No row back means the row isn't in a state it may leave, such as a loan another transaction returned first, and the repository returns `nil` (`markReturned(id:) -> Loan?`). The method or command names only the destination; a read, a decision in Swift and an unconditional write never stand in for it.
 - A Core enum stored as text conforms to `PostgresNonThrowingEncodable` and `PostgresDecodable` through its raw value, in `Extensions/`.
 - Ids default in the database (`uuidv7()` on Postgres 18 and later), as do creation and update dates; commands carry neither.
 
@@ -221,12 +226,13 @@ package struct CreateLoansTable: DatabaseMigration {
             """
             CREATE TABLE loans (
                 id UUID PRIMARY KEY DEFAULT uuidv7(),
-                idempotency_key TEXT NOT NULL UNIQUE,
+                idempotency_key TEXT NOT NULL,
                 user_id UUID NOT NULL,
                 book_id UUID NOT NULL,
                 status TEXT NOT NULL DEFAULT 'active',
                 due_date TIMESTAMPTZ NOT NULL,
-                creation_date TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                creation_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (user_id, idempotency_key)
             )
             """,
             logger: logger
@@ -240,10 +246,12 @@ package struct CreateLoansTable: DatabaseMigration {
 ```
 
 - One migration per change, named for what it does: `CreateServiceRole`, `CreateLoansTable`, `CreateLoansRLSPolicy`, `CreateInternalRole`, `AddLoansReturnDate`.
+- One SQL statement per `connection.query`: PostgresNIO sends every query as a prepared statement, and Postgres refuses several commands in one. `CreateLoansRLSPolicy` runs four.
 - A migration keeps the schema usable by the image before it, since a rollback runs that image on the current schema ([deployment](delivery.md#a-services-ci-workflows)): it expands now and contracts in a later deploy, and a change that renames or moves data ships with code that reads both shapes.
-- Migrations create the roles, since the database and its owner exist before the service first deploys. `CreateServiceRole(role:password:database:)` creates the login role and grants it `CONNECT`, schema usage, table and sequence privileges, and the same for future tables through default privileges. Role names and passwords come from configuration, as identifiers are quoted into `PostgresQuery(unsafeSQL:)`.
+- Migrations create the roles, since the database and its owner exist before the service first deploys; the owner has `CREATEROLE` for them. Role names are cluster-wide, so they carry the service's name (`loans_service`). `CreateServiceRole(role:password:database:)` creates the login role and grants it `CONNECT`, schema usage, table and sequence privileges, and the same for future tables through default privileges. Role names and passwords come from configuration and are quoted into `PostgresQuery(unsafeSQL:)`, since a statement that names a role takes no bindings.
 - The executable's `Database/Migrations.swift` lists them in applied order. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited.
 - `serve --migrate-database` applies them as the owner over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before the role clients and the `ServiceGroup` are built ([commands](composition.md#commands)).
+- One process migrates, before the serving replicas start: postgres-migrations takes no lock, so replicas that apply at once race and all but one fail. `serve --migrate-database` runs in one process, deployed first ([a service's CI workflows](delivery.md#a-services-ci-workflows)); every other serve replica runs without the flag.
 
 ## Other stores
 
@@ -282,8 +290,10 @@ package struct ValkeyResetCodeRepository<Client: ValkeyClientProtocol>: ResetCod
 ```
 
 - The repository is generic over `ValkeyClientProtocol`, takes the client in its initializer, and lives in XValkey; the use case holds it as a port.
-- Keys are `<service>:<purpose>:<id>` (`identity:reset-code:…`), so services sharing an instance never collide.
+- Keys are `<x>:<purpose>:<id>` (`identity:reset-code:…`), so services sharing an instance never collide.
 - Every write sets its expiry, passed by the use case from its policy, never configured in the store.
 - A read that must happen once is atomic: `GETDEL`, not a read followed by a delete. Several commands that must apply together go in a transaction (`client.transaction(…)`); several independent ones in a pipeline (`client.execute(…)`).
 - A rate limit is `INCR` with an expiry set on the first increment.
+- A cache is never the source of truth and never holds a decision. Its expiry is the use case's staleness budget, and its read answers `nil` on a miss and on a Valkey error, which the repository logs as a warning, so the use case reads the database and carries on.
+- A value for one user is keyed by that user too, since Valkey has no row-level security.
 - The executable reads `ValkeyClientConfiguration(configReader:)` into a `let`, builds one `ValkeyClient(.hostname(host, port: port), configuration: valkeyConfiguration, logger: logger)` from it, and runs it in the `ServiceGroup` ([composition](composition.md#the-composition-root)).

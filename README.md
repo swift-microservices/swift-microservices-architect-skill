@@ -16,18 +16,18 @@ This README is for people. Agents read [SKILL.md](skills/swift-microservices-arc
 
 ## What the skill covers
 
-- Splitting a backend into services by data ownership, naming them, and writing the plan: services, contracts, module maps, shared packages and gateway routes.
+- Splitting a backend into services by data ownership, moving an area into its own service, naming them, and writing the plan: services, contracts, module maps, shared packages, gateway routes and the build order.
 - A service's package: `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`, `XHTTP` and the executable, their dependency direction, what Core may link, and `Package.swift` with its Swift settings, Swift Evolution proposals, and the package traits that keep full Foundation out, with each stack package's Foundation status.
 - The organization's shared packages: `<org>-core` for identity, tenant binding and transport configuration, and `<org>-protos` for contracts.
 - The swift-microservices libraries (`OperationContext`, `Authentication` with its JWT, gRPC and Hummingbird adapters, `Persistence` and `PersistencePostgres`) and the server stack around them.
 - The application layer: domain models, errors, repositories, ports, use cases with typed throws, scope protocols, transactions, authorization and logging.
-- Persistence: Postgres scopes per database role, row-level security bound from the caller's token, statements, migrations, other stores, and Valkey for short-lived values.
+- Persistence: Postgres scopes per database role, row-level security bound from the caller's token, statements and state transitions, migrations, other stores, and Valkey for short-lived values and caches.
 - gRPC: contracts with paged lists, `XService` and `XInternalService`, handlers, conversions, status codes, interceptors, clients for ports and transports.
 - The gateway: Hummingbird request contexts in tiers, the router, controllers, provider webhooks, problem details, and upstream clients that forward the caller's token.
-- Temporal: starting workflows from use cases, deterministic workflows, activities over use cases and ports, options, versioning and the worker.
+- Temporal: starting workflows from use cases and webhooks, deterministic workflows, payloads, activities over use cases and ports, options, versioning and the worker.
 - Composition: commands, configuration readers and defaults, logging, and the `ServiceGroup` that runs and shuts down every component.
-- Security: the trust model, mTLS with certificate reloading, user tokens, authorization layers, secrets and webhooks.
-- Testing: a test target per module over mocks of its protocols, and the shared mocks in `<org>-core`'s testing product.
+- Security: the trust model, mTLS with certificate reloading, user tokens and signing-key rotation, authorization layers, secrets and webhooks.
+- Testing: a test target per module over mocks of its protocols, the shared mocks in `<org>-core`'s testing product, and what the org core's own tests prove.
 - CI/CD: the GitHub Actions CI workflows a public library, a system library and a service declare, calling only swift-microservices/ci; semver releases; an image per commit on GitHub Container Registry, built by the service's Containerfile and deployed through Dokploy to staging and then to production; and Dependabot.
 - Code style and naming conventions.
 

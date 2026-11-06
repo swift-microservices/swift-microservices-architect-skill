@@ -31,8 +31,9 @@ struct Loans: AsyncParsableCommand {
 ```
 
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
-- `serve --migrate-database` applies pending migrations as the owner, then serves. Without the flag it never reads the owner's credentials.
+- `serve --migrate-database` applies pending migrations as the owner, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
 - A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
+- An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived subcommand of the executable, never an administrators' RPC.
 - Each command's `run()` is a composition root: the only code that reads configuration, constructs concrete types and runs them. Nothing below it reads configuration, builds a client or starts a task.
 
 ## The composition root
@@ -106,7 +107,7 @@ struct Serve: AsyncParsableCommand {
         let temporalConfig = config.scoped(to: "temporal")
         let temporalTLSConfig = temporalConfig.scoped(to: "tls")
         let temporalHost = try temporalConfig.requiredString(forKey: "host")
-        let temporalPort = temporalConfig.int(forKey: "port", default: 7233)
+        let temporalPort = try temporalConfig.requiredInt(forKey: "port")
         let temporalCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: temporalTLSConfig, logger: logger)
         let temporalCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(configuration: temporalCertificateReloaderConfiguration)
         let temporalSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(config: temporalTLSConfig, certificateReloader: temporalCertificateReloader)
@@ -128,7 +129,7 @@ struct Serve: AsyncParsableCommand {
         let taskQueue = try temporalConfig.requiredString(forKey: "taskQueue")
         let loanWorkflowClient = TemporalLoanWorkflowClient(client: temporalClient, taskQueue: taskQueue)
         let loansConfig = config.scoped(to: "loans")
-        let policy = LoanPolicy(config: loansConfig)
+        let policy = try LoanPolicy(config: loansConfig)
         let resendConfig = config.scoped(to: "resend")
         let noticeEventVerifier = try ResendNoticeEventVerifier(config: resendConfig)
 
@@ -219,7 +220,7 @@ extension InMemoryProvider {
             "tls.certificatePath": "/run/tls/cert.pem",
             "tls.privateKeyPath": "/run/tls/key.pem",
             "tls.trustRootsPath": "/run/tls/ca.pem",
-            "jwt.publicKeyPath": "/run/secrets/jwt-public.pem",
+            "jwt.publicKeysPath": "/run/secrets/jwt-public",
             "postgres.db": "bookshelf_loans",
             "postgres.service.user": "loans_service",
             "postgres.internal.user": "loans_internal",
@@ -227,17 +228,21 @@ extension InMemoryProvider {
             "temporal.tls.certificatePath": "/run/temporal-tls/cert.pem",
             "temporal.tls.privateKeyPath": "/run/temporal-tls/key.pem",
             "temporal.tls.trustRootsPath": "/run/temporal-tls/ca.pem",
+            "temporal.port": 7233,
             "temporal.taskQueue": "loans",
             "temporal.worker.taskqueue": "loans",
+            "loans.maximumActiveLoans": 5,
+            "loans.loanPeriodDays": 21,
         ])
     }
 }
 ```
 
-- Defaults hold mount paths, ports, the database's name, role names and task queues. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
+- Defaults hold mount paths, ports, the database's name, role names, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
 - A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes first: `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)`. Required keys and validation live in the reader, not in the root.
+- A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
 - Readers every executable shares are `<Org>Transport`'s and `<Org>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)`, with the key names that library chose.
-- Keys are dotted scopes with lowerCamelCase leaves. Environment names derive from them: `postgres.service.password` is `POSTGRES_SERVICE_PASSWORD`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
+- Keys are named as [naming](conventions.md#naming) gives them, and environment names derive from them: `postgres.service.password` is `POSTGRES_SERVICE_PASSWORD`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
 - A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
 - Secrets and key material follow [secrets](security.md#secrets).
 - A reader's doc comment lists its keys, their types, defaults and whether they're secret.
@@ -245,7 +250,7 @@ extension InMemoryProvider {
 ## Logging
 
 - `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Org>Authentication` ([user tokens](security.md#user-tokens)).
-- The level comes from `logLevel`, defaulting to `info`. The label is the repository's name, with `-worker` for the worker: `bookshelf-loans`, `bookshelf-loans-worker`.
+- The level comes from `logLevel`, defaulting to `info`; the label is as [naming](conventions.md#naming) gives it.
 - The root's `logger` is passed to every client, database, use case and server it builds. Nothing creates a logger of its own.
 - A log shipper's handler joins the stream handler in a `MultiplexLogHandler`, and its processor runs first in the `ServiceGroup`.
 

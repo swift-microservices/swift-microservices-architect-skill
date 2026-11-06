@@ -36,8 +36,9 @@ Each repository's `.github/workflows/` holds these, each file's `name:` in paren
 - Each `uses:` is pinned to the full commit of `swift-microservices/ci`'s latest release, with the release in a comment: `@<commit>  # <release>`, looked up with `git ls-remote --tags <url>`. Dependabot moves the pin.
 - `main` changes only through pull requests: a ruleset requires the CI workflow's jobs, and a library's label check.
 - `ci.yml` cancels a superseded run on pull requests only, since a run on `main` ships its commit.
-- Soundness checks every file's license header against `.license_header_template`; a file without one, such as `LICENSE`, is listed in `.licenseignore`.
-- A library's pull request carries exactly one label: `⚠️ semver/major`, `🆕 semver/minor`, `🔨 semver/patch` or `semver/none`. Release tags the next version without a `v` and writes its notes grouped by `.github/release.yml`; the first release and every major one are tagged by hand.
+- Soundness checks every file's license header against `.license_header_template`, which holds the compact SPDX header with `@@` for the comment marker and `YEARS` for the year. `.licenseignore` lists `LICENSE` and `Package.swift`, whose tools-version line must come first.
+- A library's pull request carries exactly one label: `⚠️ semver/major`, `🆕 semver/minor`, `🔨 semver/patch` or `semver/none`. Below 1.0, a breaking change is minor and an addition patch; a doc-comment fix is patch; a change to the README, tests or CI is none.
+- Release tags the next version without a `v` and writes its notes grouped by `.github/release.yml`; the first release and every major one are tagged by hand. A tag never moves, since SwiftPM records each tag's commit and a moved tag fails every consumer's resolve: a bad release is fixed forward with a new version.
 - Secrets: `PACKAGES_TOKEN`, passed only by a package with private dependencies, which is all that marks them: a fine-grained token owned by the organization, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy its applications.
 
 ## Tests
@@ -144,7 +145,8 @@ A service's `Containerfile`, at its root, builds the image `service.yml` publish
 
 - A build stage on `swift:<tools version>-noble` resolves with `RUN --mount=type=secret,id=netrc,target=/root/.netrc swift package --disable-automatic-resolution resolve`, so the token never enters a layer, then runs `swift build --configuration release --disable-automatic-resolution --static-swift-stdlib --product loans`. It passes none of CI's flags: CI held the commit to them, and a warning a newer toolchain adds mustn't stop a deploy or a hotfix.
 - A runtime stage on `ubuntu:noble` installs only `ca-certificates` and `tzdata`, creates an unprivileged user, and copies the product, `swift-backtrace-static` and any resource bundles to `/app`.
-- It runs as that user, with `ENTRYPOINT ["./loans"]` and `SWIFT_BACKTRACE` pointing at the static backtracer.
+- It runs as that user from `WORKDIR /app`, with `ENTRYPOINT ["./loans"]` and `SWIFT_BACKTRACE` pointing at the static backtracer.
+- A `.dockerignore` beside it keeps `.build`, `.swiftpm`, `.env*`, `.netrc`, secrets and key files out of the build context.
 
 ## Dependabot
 
@@ -155,5 +157,5 @@ A service's `Containerfile`, at its root, builds the image `service.yml` publish
 | Public or system library | `github-actions` | `semver/none` |
 | Service | `swift` and `github-actions` | None |
 
-- A library ignores `Package.resolved` ([choosing versions](stack.md#choosing-versions)), so CI resolves its dependencies' newest releases within their `from:` ranges, and the weekly run catches one that breaks it. Its lower bounds are raised by hand.
+- A library ignores `Package.resolved` ([choosing versions](stack.md#choosing-versions)), so CI resolves its dependencies' newest releases within their ranges, and the weekly run catches one that breaks it. Its requirements are raised by hand.
 - A service's `swift` updates move its `Package.resolved`. A private dependency needs a `registries` entry of type `git` for `https://github.com`, with `PACKAGES_TOKEN` as its password.

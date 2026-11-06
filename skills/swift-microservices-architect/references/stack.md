@@ -15,7 +15,7 @@ Small libraries that give every service the same shape for identity, request-sco
 | Package | Product | Provides | Linked by |
 |---|---|---|---|
 | [swift-operation-context](https://github.com/swift-microservices/swift-operation-context) | `OperationContext` | `OperationContext`, a task-local container of typed values for one operation (`OperationContext.current`, `withContext(_:operation:)`), keyed by `OperationContextKey` | XGRPC, `<Org>Authentication`, `<Org>Persistence` |
-| [swift-authentication](https://github.com/swift-microservices/swift-authentication) | `Authentication` | `Authenticator<Credential, Identity>`, `CredentialIssuer<Identity, Credential>`, `Principal<Identity, Credential>` (the proved identity and the credential that proved it), `PrincipalKey` | XGRPC, XHTTP, `<Org>Authentication`, the gateway |
+| [swift-authentication](https://github.com/swift-microservices/swift-authentication) | `Authentication` | `Authenticator<Credential, Identity>`, `CredentialIssuer<Identity, Credential>`, `Principal<Identity, Credential>` (the proved identity and the credential that proved it), `PrincipalKey` | XGRPC, XHTTP, `<Org>Authentication`, the gateway, a Core that issues credentials |
 | [swift-authentication-jwt](https://github.com/swift-microservices/swift-authentication-jwt) | `AuthenticationJWT` | `JWTAuthenticator<Payload>` and `JWTIssuer<Payload>` over a `JWTKeyCollection` | `<Org>Authentication`, `<Org>Transport`, executables |
 | [swift-authentication-grpc](https://github.com/swift-microservices/swift-authentication-grpc) | `AuthenticationGRPC` | `BearerAuthenticationInterceptor` (binds the principal a bearer token proves), `BearerPropagationInterceptor` (presents it on outgoing calls), `Metadata.bearer` | Executables |
 | [swift-authentication-hummingbird](https://github.com/swift-microservices/swift-authentication-hummingbird) | `AuthenticationHummingbird` | `BearerAuthenticationMiddleware<Context>`, which sets the context's identity and binds the principal in `OperationContext` | The gateway, XHTTP |
@@ -32,7 +32,7 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 | [hummingbird](https://github.com/hummingbird-project/hummingbird) | `Hummingbird` | The HTTP server: router, request contexts, middleware, `Application` | The gateway, XHTTP, `<Org>Persistence` |
 | [hummingbird-auth](https://github.com/hummingbird-project/hummingbird-auth) | `HummingbirdAuth`, `HummingbirdBcrypt` | `AuthRequestContext`, `IsAuthenticatedMiddleware`; bcrypt | The gateway; a password-hashing adapter |
 | [swift-openapi-generator](https://github.com/apple/swift-openapi-generator), [swift-openapi-runtime](https://github.com/apple/swift-openapi-runtime) | `OpenAPIGenerator` plugin, `OpenAPIRuntime` | The gateway's types from `openapi.yaml` | The gateway |
-| [grpc-swift-2](https://github.com/grpc/grpc-swift-2) | `GRPCCore` | Servers, clients, interceptors, `RPCError`, `ServiceConfig` | XGRPC, executables |
+| [grpc-swift-2](https://github.com/grpc/grpc-swift-2) | `GRPCCore` | Servers, clients, interceptors, `RPCError`, `ServiceConfig` | XGRPC, executables, `<Org>Persistence`, the gateway |
 | [grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | `GRPCNIOTransportHTTP2` | HTTP/2 transports with TLS and mTLS | Executables, `<Org>Transport` |
 | [grpc-swift-protobuf](https://github.com/grpc/grpc-swift-protobuf) | `GRPCProtobuf`, `GRPCProtobufGenerator` plugin | Protobuf serialization and code generation | `<org>-protos` |
 | [grpc-swift-extras](https://github.com/grpc/grpc-swift-extras) | `GRPCServiceLifecycle`, `GRPCOTelTracingInterceptors` | `GRPCServer` and `GRPCClient` as lifecycle services; tracing | Executables |
@@ -65,8 +65,8 @@ Whether each package makes a Linux binary link full Foundation, with the traits 
 
 ## Choosing versions
 
-- A new package depends on each library `from:` its latest release; look it up with `git ls-remote --tags <url>` rather than copying a version from an example.
-- `from:` is a lower bound up to the next major, so resolution picks up fixes and additions; raise it when the code needs a newer API, or to the version from which a package stops linking full Foundation ([full Foundation](#full-foundation)).
-- `from:` also accepts a pre-1.0 library's next minor, which may change its API. `.upToNextMinor(from:)` holds a pre-1.0 library, such as the swift-microservices libraries, at its minor when an unreviewed change must not arrive.
+- A new package depends on each library from its latest release; look it up with `git ls-remote --tags <url>` rather than copying a version from an example.
+- A library from 1.0 is `from:`, a lower bound up to the next major, so resolution picks up fixes and additions; raise it when the code needs a newer API, or to the version from which a package stops linking full Foundation ([full Foundation](#full-foundation)).
+- A library below 1.0, such as the swift-microservices libraries, is `.upToNextMinor(from:)`, since its next minor may change its API. Moving to that minor is a change of its own, made by hand.
 - A service's package commits `Package.resolved`; a library's ignores it.
 - The gateway builds on Swift 6.4 or later with swift-openapi-generator `from: "1.14.3"`. From those, the generator marks each import in its generated files with `@diagnose(UnusedImportAccess, as: ignored)`, so an import a file doesn't use doesn't warn; on an older toolchain the attribute is compiled out and the warnings fail CI's test build ([delivery](delivery.md#tests)).

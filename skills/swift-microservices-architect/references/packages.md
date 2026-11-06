@@ -18,13 +18,13 @@ The targets inside a service's package, how they depend on each other, its `Pack
 
 | Target | Holds | Imports |
 |---|---|---|
-| `XCore` | Domain models, errors, repository protocols and commands, ports, use cases | `Persistence`, `<Org>Authentication`, `Logging`, and what [Core may link](#what-core-may-link) |
-| `XPostgres` | A scope per database role, repositories, prepared statements, row decoding, migrations | `XCore`, `PersistencePostgres`, `PostgresNIO`, `PostgresMigrations`, `AsyncAlgorithms` |
+| `XCore` | Domain models, errors, repository protocols and commands, ports, use cases | `Persistence`, `<Org>Authentication`, `Logging`, and what else [Core may link](#what-core-may-link) |
+| `XPostgres` | A scope per database role, repositories, prepared statements, row decoding, migrations | `XCore`, `PersistencePostgres`, `PostgresNIO`, `PostgresMigrations`, `AsyncAlgorithms`, `Logging` |
 | `XGRPC` | The service's proto services, `Protobuf/` conversions, gRPC clients for Core's ports | `XCore`, its own and its callees' `XProtos`, `GRPCCore`, `SwiftProtobuf`, `Authentication`, `OperationContext`, `<Org>Authentication` |
-| `XTemporal` | Workflows, activity containers, the Temporal client for Core's workflow port | `XCore`, `Temporal` |
+| `XTemporal` | Workflows, activity containers, the Temporal client for Core's workflow port | `XCore`, `Temporal`, and `Logging` where a workflow logs |
 | `XValkey` | Repositories over Valkey | `XCore`, `Valkey` |
 | `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK |
-| `XHTTP` | HTTP the service serves itself, only for a caller that can't go through the gateway, named in the plan with the reason; a provider's webhook goes through the gateway | `XCore`, `Hummingbird`, `<Org>Authentication` |
+| `XHTTP` | HTTP the service serves itself, only for a caller that can't go through the gateway, named in the plan with the reason; a provider's webhook goes through the gateway | `XCore`, `Hummingbird`, `Authentication`, `AuthenticationHummingbird`, `<Org>Authentication` |
 | `X` | The executable: commands, configuration defaults and readers, the migration list, composition roots | Every target above, `<Org>Transport`, `<Org>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser` |
 
 A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC` and `Catalog`.
@@ -41,7 +41,7 @@ Core links a library that saves every service re-declaring a concept, when the l
 - doesn't pull full Foundation into the target;
 - is stable enough for its types to appear in use case signatures.
 
-`Persistence`, `<Org>Authentication`, `Logging`, `Crypto` for hashing a token, and a focused standards library whose types the rules are written in (a WebAuthn ceremony's) qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Temporal`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
+`Persistence`, `<Org>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), `Crypto` for hashing a token, and a focused standards library whose types the rules are written in (a WebAuthn ceremony's) qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Temporal`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
 
 ## Package.swift template
 
@@ -70,12 +70,12 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/bookshelf/bookshelf-core.git", from: "1.0.0"),
         .package(url: "https://github.com/bookshelf/bookshelf-protos.git", from: "1.0.0"),
-        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "0.4.0"),
-        .package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "0.5.0"),
-        .package(url: "https://github.com/swift-microservices/swift-authentication-jwt.git", from: "0.3.2"),
-        .package(url: "https://github.com/swift-microservices/swift-operation-context.git", from: "0.1.0"),
-        .package(url: "https://github.com/swift-microservices/swift-persistence.git", from: "0.2.1"),
-        .package(url: "https://github.com/swift-microservices/swift-persistence-postgres.git", from: "0.3.0"),
+        .package(url: "https://github.com/swift-microservices/swift-authentication.git", .upToNextMinor(from: "0.4.0")),
+        .package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", .upToNextMinor(from: "0.5.0")),
+        .package(url: "https://github.com/swift-microservices/swift-authentication-jwt.git", .upToNextMinor(from: "0.3.2")),
+        .package(url: "https://github.com/swift-microservices/swift-operation-context.git", .upToNextMinor(from: "0.1.0")),
+        .package(url: "https://github.com/swift-microservices/swift-persistence.git", .upToNextMinor(from: "0.2.1")),
+        .package(url: "https://github.com/swift-microservices/swift-persistence-postgres.git", .upToNextMinor(from: "0.3.0")),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
         .package(url: "https://github.com/apple/swift-async-algorithms.git", from: "1.1.5"),
         .package(url: "https://github.com/apple/swift-configuration.git", from: "1.5.0", traits: []),
@@ -131,6 +131,7 @@ let package = Package(
             name: "LoansTemporal",
             dependencies: [
                 "LoansCore",
+                .product(name: "Logging", package: "swift-log"),
                 .product(name: "Temporal", package: "swift-temporal-sdk"),
             ],
             swiftSettings: swiftSettings
@@ -174,7 +175,7 @@ let package = Package(
 - The tools version is the newest Swift release: the toolchain the services build and deploy with, which the system libraries share. A public library's is instead the oldest Swift its users build with. 6.2 is the floor for these settings, and the gateway has a higher one ([choosing versions](stack.md#choosing-versions)).
 - `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's README.
 - Every target lists each module it imports, product by product; CI's `--explicit-target-dependency-import-check error` fails a target that imports one it doesn't list ([delivery](delivery.md#tests)).
-- Each `from:` is a lower bound, set to the release whose API the code uses ([choosing versions](stack.md#choosing-versions)).
+- Each requirement follows [choosing versions](stack.md#choosing-versions).
 - A provider target (`LoansResend`) and test targets follow the same form. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one. A warning in generated code fails the contracts package's CI, and its consumers never see it, since SwiftPM silences a dependency's warnings.
 
 ## Swift settings
@@ -228,11 +229,11 @@ bookshelf-loans/
     │                               NoticeEvent.swift, NoticeEventVerifier.swift
     ├── LoansPostgres/
     │   ├── Scopes/                 PostgresLoansScope.swift, PostgresLoansInternalScope.swift, PostgresLoansWorkerScope.swift
-    │   ├── Repositories/Loan/      PostgresLoanRepository.swift
-    │   ├── Statements/Loan/        CreateLoanStatement.swift, ActiveLoansByUserIDStatement.swift, LoansByUserIDStatement.swift,
+    │   ├── Repositories/Loans/     PostgresLoanRepository.swift
+    │   ├── Statements/Loans/       CreateLoanStatement.swift, ActiveLoansByUserIDStatement.swift, LoansByUserIDStatement.swift,
     │   │                       CountLoansByUserIDStatement.swift, Loan+PostgresRow.swift
     │   ├── Extensions/             LoanStatus+PostgresCodable.swift
-    │   └── Migrations/             Role/CreateServiceRole.swift, …, Loan/CreateLoansTable.swift, Loan/CreateLoansRLSPolicy.swift
+    │   └── Migrations/             Role/CreateServiceRole.swift, …, Loans/CreateLoansTable.swift, Loans/CreateLoansRLSPolicy.swift
     ├── LoansGRPC/
     │   ├── Loans/                  LoanService.swift, Protobuf/BorrowBookUseCaseInput+Protobuf.swift, Protobuf/Loan+Protobuf.swift
     │   └── Clients/                GRPCCatalogClient.swift, GRPCIdentityClient.swift, Protobuf/Book+Protobuf.swift
@@ -272,7 +273,7 @@ bookshelf-core/
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
 - `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, grpc-swift-2 for the interceptor, Hummingbird for the middleware (`traits: []`) and swift-configuration; only executables link it, and each already links its transport. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
 - Its API is `public`, with `public import` for every module whose types it exposes.
-- It releases with semantic versions; services depend on it `from:` a release, never a branch.
+- It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<org>-protos`, is released and tagged first; each service and the gateway then raise their requirement.
 
 ## The contracts package
 
@@ -327,7 +328,7 @@ with `grpc-swift-proto-generator-config.json`:
 
 ## The gateway package
 
-`bookshelf-gateway` has two targets, laid out in [the gateway's package](gateway.md#the-package): `GatewayHTTP`, the HTTP surface, and `Gateway`, the executable. `GatewayHTTP` links Hummingbird (`traits: ["ConfigurationSupport"]`), HummingbirdAuth, swift-openapi-runtime with the generator plugin, `Authentication`, `AuthenticationHummingbird`, `BookshelfAuthentication`, `GRPCCore` and the `XProtos` of every upstream. It has no Core, Postgres or persistence target.
+`bookshelf-gateway` has two targets, laid out in [the gateway's package](gateway.md#the-package): `GatewayHTTP`, the HTTP surface, and `Gateway`, the executable. `GatewayHTTP` links Hummingbird (`traits: ["ConfigurationSupport"]`), HummingbirdAuth, swift-openapi-runtime with the generator plugin, `Authentication`, `AuthenticationHummingbird`, `BookshelfAuthentication`, `GRPCCore`, `SwiftProtobuf` for the well-known types' members (`Google_Protobuf_Timestamp.date`), `Logging` for `ErrorMiddleware`'s log lines, and the `XProtos` of every upstream. It has no Core, Postgres or persistence target.
 
 ## Checking the boundaries
 
@@ -338,6 +339,7 @@ SPM enforces what each target declares, but not what a declaration should be. Ru
 - Generated contract types stay in XGRPC and the executable: `grep -rlE 'Bookshelf_[A-Za-z]+_V[0-9]+_' Sources | grep -vE '^Sources/(LoansGRPC|Loans)/'`
 - Only the executable reads configuration: `grep -rlE '^(package )?import Configuration$' Sources | grep -v '^Sources/Loans/'`
 - Every Foundation import is the conditional one; this lists files importing Foundation without it: `grep -rlE '^(package |public )?import Foundation$' Sources | xargs -r grep -L 'canImport(FoundationEssentials)'`
-- No unchecked concurrency or unstructured tasks: `grep -rnE '@unchecked Sendable|nonisolated\(unsafe\)|@preconcurrency|Task(\.detached)? *\{' Sources`
+- No unstructured tasks: `grep -rnE 'Task(\.detached)? *\{' Sources`
+- Unchecked concurrency only where [concurrency](style.md#concurrency) allows it; this lists each, and every one is in an adapter target with its reason on the line above: `grep -rnE -B1 '@unchecked Sendable|nonisolated\(unsafe\)|@preconcurrency' Sources`
 - Every use case protocol has typed throws: `grep -rL 'throws(' Sources/*Core/*/UseCases/*/*UseCaseProtocol.swift`
 - No package defaults to the main actor: `grep -n 'defaultIsolation' Package.swift`

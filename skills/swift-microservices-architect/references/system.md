@@ -28,6 +28,13 @@ Avoid:
 - A shared service that owns other services' tables, or a "common" service of leftovers.
 - Splitting before the second capability exists. A capability starts as an area inside its service's Core (`LoansCore/Loans/`) and moves out when its data, rules and pace of change stand apart.
 
+Moving an area into its own service takes these steps, in order:
+1. Release its contract.
+2. Give it its own package, database, roles and executable.
+3. Give the remaining use cases a `Ports/` model and a gRPC client in place of its repository.
+
+A step that was atomic across the two becomes a workflow. Moving or dropping data, or deleting a migration, is never inferred: finish the non-destructive work and ask the user.
+
 ## Naming a service
 
 - A noun for the capability: `Identity`, `Catalog`, `Loans`. [Naming](conventions.md#naming) gives its package, repository and targets.
@@ -35,7 +42,7 @@ Avoid:
 
 ## Contracts
 
-Each service publishes one proto package, `<org>.<service>.v1`, with up to two proto services:
+Each service publishes one proto package, `<org>.<x>.v1`, with up to two proto services:
 
 | Proto service | Called by | Admitted by |
 |---|---|---|
@@ -59,6 +66,7 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 | Work that must happen eventually, waits for time or a signal, retries, or touches several services | A Temporal workflow, started through a Core port ([workflows](workflows.md)) |
 
 - Durable work is a workflow, not a message on a queue: Temporal holds the retries, the timers and the history.
+- Calls between services form no cycle. Break one by moving ownership, extracting a third capability, or making one direction a workflow.
 - What each hop proves, and where a user's token may travel: [the trust model](security.md#the-trust-model).
 
 ## Data ownership and storage
@@ -102,7 +110,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 |---|---|---|
 
 ## Module maps
-### <org>-<service>
+### <org>-<x>
 | Target | Holds |
 |---|---|
 - Commands: `serve [--migrate-database]`, `worker run`

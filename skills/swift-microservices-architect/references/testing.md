@@ -27,6 +27,14 @@ Each module has a test target. It depends on the module, the modules whose types
 
 - A test runs only its module's code, over mocks of the rest: a handler's test doesn't build a use case, and a use case's test never reaches Postgres.
 - Other adapter targets (`XValkeyTests`, `X<Provider>Tests`) test their own mapping the same way, and the executable's readers and defaults, when tested, are in `XTests`.
+- `XPostgresTests` fail, rather than skip, when `POSTGRES_HOST` is unset. No check is turned off to make CI pass.
+
+The org core's products are what every service trusts, so their tests prove:
+
+| Test target | Proves |
+|---|---|
+| `<Org>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip; refusal of an expired token and of a `sub` that isn't a UUID; the `.user` metadata provider |
+| `<Org>PersistenceTests` | Both branches of `UserSettingsInterceptor` and `UserSettingsMiddleware`: a bound user's setting, and nothing when none is bound |
 
 ```
 Tests/
