@@ -111,15 +111,13 @@ do {
 - One `do` holds the work through its `return`, then one `catch` per case the caller acts on, then `unknown`. Each `catch` ends its own path: nothing is declared before the `do` for a `catch` to fill, and nothing follows it. A handler maps every case to a status, with no catch-all.
 - Build, then call: a value a call takes is a `let` named for what it is (`let statement = …`, then `connection.execute(statement, logger: logger)`), never a conversion, `try` or `await` in the arguments ([style](references/style.md#build-then-call)).
 - No private helper methods in use cases, workflows or activities, and no workarounds: no `Result` juggling, steering flags, `try?`, nested `do` in a `catch`, or force unwraps.
-- Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault` in every package ([Swift settings](references/packages.md#swift-settings)); `package` across a service's targets with `package import`; the conditional `FoundationEssentials` import; `Duration` and `FormatStyle` over legacy Foundation types.
+- Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault` in every package ([Swift settings](references/packages.md#swift-settings)); `package` across a service's targets with `package import`; `Duration` and `FormatStyle` over legacy Foundation types.
 - Everything crossing a boundary is `Sendable`; no `@unchecked Sendable`, `nonisolated(unsafe)`, `Task {}` or `Task.detached`.
 
 ## Gotchas
 
 - Module names are unique across the package graph: a service named `Authentication` or `Logging` collides with a dependency. Rename the service, not one of its targets.
 - `NonisolatedNonsendingByDefault` changes what an unannotated `async` function type means. Implement a requirement from a library built without it exactly as declared, `@concurrent` included: Hummingbird middleware's `next`, gRPC interceptors' `next`.
-- Hummingbird's `add(middleware:)` changes its group for every route added after it; give each route tier its own `group()`.
-- A route whose bearer token isn't an access token, such as a refresh request's refresh token, stays outside `BearerAuthenticationMiddleware`, which refuses any bearer token it can't verify.
 - A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls wait until their deadline.
 - A process connected as the database owner bypasses row-level security, and an unset tenant setting reads as `''` on a reused connection, so policies wrap it in `NULLIF`.
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep`, a captured `Logger` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
@@ -152,7 +150,7 @@ Copy the checklist for the task into the response and check items off as they're
 - [ ] X: commands, InMemoryProvider defaults, Migrations, Serve, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module, over mocks (testing.md)
-- [ ] Its workflows, Containerfile and Dependabot as a service (delivery.md)
+- [ ] Its CI workflows, Containerfile and Dependabot as a service (delivery.md)
 - [ ] swift build and swift test; fix and repeat until both pass without warnings
 ```
 
@@ -184,10 +182,9 @@ Copy the checklist for the task into the response and check items off as they're
 
 ```
 - [ ] The package's kind: public library, system library or service (delivery.md#package-kinds)
-- [ ] The kind's workflows, each `uses:` pinned to its latest release's commit
+- [ ] Its CI workflows, each `uses:` pinned to a release's commit; dependabot.yml; the secrets they read
 - [ ] A library: the semver labels and .github/release.yml; a service: its Containerfile
-- [ ] dependabot.yml for the kind; the secrets its workflows read
-- [ ] actionlint passes; open a pull request and fix until every check passes
+- [ ] swift build and swift test with CI's flags; fix and repeat until both pass
 ```
 
 **Review a backend**
@@ -209,7 +206,7 @@ Read the reference for the part at hand:
 |---|---|
 | [references/system.md](references/system.md) | Splitting a backend into services, contracts, how services talk, data ownership, the shared packages, the plan |
 | [references/packages.md](references/packages.md) | Targets and dependency direction, what Core may link, `Package.swift`, Swift settings, traits and Foundation, layouts, boundary checks |
-| [references/stack.md](references/stack.md) | The swift-microservices libraries and the server stack, and which target links each |
+| [references/stack.md](references/stack.md) | The swift-microservices libraries and the server stack, which target links each, and which link full Foundation |
 | [references/use-cases.md](references/use-cases.md) | Models, errors, repositories, ports, use cases and their bodies, transactions, authorization, logging |
 | [references/persistence.md](references/persistence.md) | Postgres scopes and roles, row-level security, statements, migrations, other stores, Valkey |
 | [references/grpc.md](references/grpc.md) | Contracts, gRPC services and handlers, conversions, status codes, interceptors, clients for ports, transports |
@@ -219,7 +216,7 @@ Read the reference for the part at hand:
 | [references/security.md](references/security.md) | The trust model, mTLS and certificate reloading, user tokens, authorization layers, secrets |
 | [references/style.md](references/style.md) | Readability, errors, concurrency, imports and access control, Foundation, types, documentation |
 | [references/testing.md](references/testing.md) | Test targets per module, what each tests, mocks, the shared testing product |
-| [references/delivery.md](references/delivery.md) | CI/CD: each package kind's GitHub Actions workflows, reusable workflows, test flags, releases, images, deployment, Dependabot |
+| [references/delivery.md](references/delivery.md) | CI/CD: each package kind's CI workflows, reusable workflows, test flags, releases, images, deployment, Dependabot |
 | [references/conventions.md](references/conventions.md) | Naming a package, target, type, file, key or folder |
 
 ## Related skills

@@ -1,6 +1,6 @@
 # Packages
 
-The targets inside a service's package, how they depend on each other, its `Package.swift`, and the organization's shared packages. SPM enforces each boundary: a target imports only the modules its declaration lists.
+The targets inside a service's package, how they depend on each other, its `Package.swift`, and the organization's shared packages. SPM and CI enforce each boundary: a target imports only the modules its declaration lists.
 
 ## Contents
 - The targets of a service
@@ -173,9 +173,9 @@ let package = Package(
 
 - The tools version is the toolchain the services build and deploy with; 6.2 is the floor for these settings.
 - `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's notes.
-- Every target lists each module it imports, product by product; `MemberImportVisibility` makes a missing one a build error.
+- Every target lists each module it imports, product by product; CI's `--explicit-target-dependency-import-check error` fails a target that imports one it doesn't list ([delivery](delivery.md#tests)).
 - Each `from:` is a lower bound, set to the release whose API the code uses ([choosing versions](stack.md#choosing-versions)).
-- A provider target (`LoansResend`) and test targets follow the same form. A target without generated code may add `.treatAllWarnings(as: .error)` ([SE-0480](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0480-swiftpm-warning-control.md)); a target with a generator plugin keeps warnings as warnings, since a generator update can warn. CI's `-warnings-as-errors` still reports such a warning in the contracts package ([delivery](delivery.md#tests)), and a consumer never sees it, since SwiftPM silences a dependency's warnings.
+- A provider target (`LoansResend`) and test targets follow the same form. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one. A warning in generated code fails the contracts package's CI, and its consumers never see it, since SwiftPM silences a dependency's warnings.
 
 ## Swift settings
 
@@ -193,7 +193,7 @@ The code also relies on `package` access ([SE-0386](https://github.com/swiftlang
 
 ## Traits and Foundation
 
-On Linux, full Foundation links `libFoundation`, `libFoundationInternationalization` and ICU's data; a small static binary grows from about 9 MB with `FoundationEssentials` to about 46 MB once it links ICU. `FoundationEssentials` has the types a service uses (`Data`, `Date`, `URL`, `UUID`, `JSONEncoder` and `JSONDecoder`, `Date.ISO8601FormatStyle`, `Calendar`, `TimeZone`, `FileManager`) without them. A target links full Foundation through owned code, a dependency's own imports, or a dependency's default traits. Owned code takes the conditional import ([Foundation](style.md#foundation)); dependencies are declared here.
+On Linux, full Foundation links `libFoundation`, `libFoundationInternationalization` and ICU's data, which alone outweighs a service's own code several times over. `FoundationEssentials` has the types a service uses (`Data`, `Date`, `URL`, `UUID`, `JSONEncoder` and `JSONDecoder`, `Date.ISO8601FormatStyle`, `Calendar`, `TimeZone`, `FileManager`) without them. A target links full Foundation through owned code, a dependency's own imports, or a dependency's default traits. Owned code takes the conditional import ([Foundation](style.md#foundation)); dependencies are declared here.
 
 | Package | Traits that link full Foundation (`*` default) | Declare | Turning them off loses |
 |---|---|---|---|
@@ -202,11 +202,11 @@ On Linux, full Foundation links `libFoundation`, `libFoundationInternationalizat
 | swift-configuration | `JSON`*, `YAML`, `PropertyList` | `traits: []`, plus `Reloading` or `CommandLineArguments` when used | The JSON, YAML and property list file providers |
 | swift-protobuf | `BinaryDelimitedStreams`* | `traits: []`, plus `FieldMaskUtilities` when a contract uses field masks | Length-delimited message streams |
 
-- Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<org>-core`, `<org>-protos`, each service and the gateway declare the same `traits:`, and so must the libraries they depend on; the versions from which the stack's libraries do are in [the stack](stack.md#full-foundation).
+- Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<org>-core`, `<org>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the versions from which the stack's libraries do are in [the stack](stack.md#full-foundation).
 - Other traits in the stack are Foundation-free and keep their defaults: valkey-swift's `ServiceLifecycleSupport` and `DistributedTracingSupport`, swift-temporal-sdk's `GRPCNIOTransport`, swift-http-types' `FoundationURL`.
 - A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
 - A dependency that still links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's notes. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does.
-- Before adding a dependency, list its traits with `swift package show-traits` and read its sources' Foundation imports. A library proves it in CI with the Foundation-linking check ([delivery](delivery.md#a-librarys-workflows)), which builds without `--static-swift-stdlib`, since `ldd` sees nothing in a static binary.
+- Before adding a dependency, list its traits with `swift package show-traits` and read its sources' Foundation imports. A library proves it in CI with the Foundation-linking check ([delivery](delivery.md#a-librarys-ci-workflows)).
 - A library's own feature that needs full Foundation goes behind a `FullFoundation` trait, the name hummingbird and swift-openapi-runtime use. It's off by default in a new library, so consumers opt in rather than out.
 - A library that moves to the conditional import releases it as a minor version, noting that a consumer relying on the `Foundation` it imported may need its own import.
 

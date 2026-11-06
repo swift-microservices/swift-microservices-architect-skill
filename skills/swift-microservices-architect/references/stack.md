@@ -1,6 +1,6 @@
 # Stack
 
-The libraries the architecture is built on, what each provides, and which targets link it.
+The libraries the architecture is built on, what each provides, which targets link it, and whether it links full Foundation.
 
 ## Contents
 - The swift-microservices libraries
@@ -63,13 +63,13 @@ Whether each package makes a Linux binary link full Foundation, with the traits 
 | Status | Packages |
 |---|---|
 | Foundation-free | swift-nio (except `NIOFoundationCompat`), swift-nio-ssl, swift-nio-extras (except `NIOCertificateHelpers`), swift-log, swift-metrics, swift-distributed-tracing, swift-service-lifecycle, swift-argument-parser, swift-async-algorithms, swift-crypto, swift-certificates, swift-asn1, grpc-swift-nio-transport, valkey-swift, hummingbird-auth, jwt-kit, async-http-client from 1.32.1, and the swift-microservices libraries except swift-persistence-postgres |
-| Foundation-free from the version that stopped turning swift-protobuf's default traits back on | grpc-swift-2 2.4.2, grpc-swift-protobuf 2.4.1, grpc-swift-extras 2.2.2 |
+| Foundation-free from a version; earlier ones turn swift-protobuf's default traits back on | grpc-swift-2 2.4.2, grpc-swift-protobuf 2.4.1, grpc-swift-extras 2.2.2 |
 | Foundation-free with traits off | hummingbird, swift-openapi-runtime, swift-configuration, swift-protobuf |
-| Links full Foundation | postgres-nio, and so postgres-migrations and swift-persistence-postgres: a service with XPostgres links it until postgres-nio stops. swift-temporal-sdk up to 1.5.0: it moved to `FoundationEssentials` in 1.5.0, but its scoped `import struct Foundation.Data` imports still link full Foundation; the release after 1.5.0 makes them conditional |
+| Links full Foundation | postgres-nio, and so postgres-migrations and swift-persistence-postgres: a service with XPostgres links it. swift-openapi-generator's generated files, which `public import Foundation`, so the gateway links it. swift-temporal-sdk through 1.5.0, which imports `FoundationEssentials` where it can but keeps scoped `import struct Foundation.Data` imports that link full Foundation |
 
 ## Choosing versions
 
 - A new package depends on each library `from:` its latest release; look it up with `git ls-remote --tags <url>` rather than copying a version from an example.
-- `from:` is a lower bound up to the next major, so resolution picks up fixes and additions; raise it when the code needs a newer API.
+- `from:` is a lower bound up to the next major, so resolution picks up fixes and additions; raise it when the code needs a newer API, or to the version from which a package stops linking full Foundation ([full Foundation](#full-foundation)).
 - `from:` also accepts a pre-1.0 library's next minor, which may change its API. `.upToNextMinor(from:)` holds a pre-1.0 library, such as the swift-microservices libraries, at its minor when an unreviewed change must not arrive.
 - A service's package commits `Package.resolved`; a library's ignores it.

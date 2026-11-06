@@ -94,7 +94,7 @@ package import Foundation
 | `NSRegularExpression` | Swift `Regex` |
 | `JSONSerialization` | `Codable` with `JSONEncoder` and `JSONDecoder` |
 | `URLSession` | AsyncHTTPClient |
-| `String(format:)`, `CharacterSet`, `NSString` methods | String interpolation and `FormatStyle`s; `Character` and `Unicode.Scalar.Properties` |
+| `String(format:)`, `CharacterSet`, `NSString` methods | String interpolation; `Character` and `Unicode.Scalar.Properties` |
 | `TimeInterval` timeouts, `DispatchTime` | `Duration`: `.seconds(30)`, `.milliseconds(500)` |
 | `Date()` | `Date.now` |
 | `URL(fileURLWithPath:)` | `URL(filePath:)` |

@@ -240,6 +240,7 @@ package struct CreateLoansTable: DatabaseMigration {
 ```
 
 - One migration per change, named for what it does: `CreateServiceRole`, `CreateLoansTable`, `CreateLoansRLSPolicy`, `CreateInternalRole`, `AddLoansReturnDate`.
+- A migration keeps the schema usable by the image before it: it expands now and contracts in a later deploy, since a rollback runs the previous image on the current schema ([deployment](delivery.md#a-services-ci-workflows)).
 - Migrations create the roles, since the database and its owner exist before the service first deploys. `CreateServiceRole(role:password:database:)` creates the login role and grants it `CONNECT`, schema usage, table and sequence privileges, and the same for future tables through default privileges. Role names and passwords come from configuration, as identifiers are quoted into `PostgresQuery(unsafeSQL:)`.
 - The executable's `Database/Migrations.swift` lists them in applied order. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited.
 - `serve --migrate-database` applies them as the owner over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before building the role clients ([commands](composition.md#commands)).
