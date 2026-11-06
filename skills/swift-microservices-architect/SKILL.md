@@ -88,6 +88,7 @@ Hard rules:
 - **Gateway.** Hummingbird routes in tiers of request contexts, one controller per resource, forwarding the caller's token; plain HTTP behind the edge's TLS ([gateway](references/gateway.md)).
 - **Workflows.** A Core port starts a workflow by a deterministic id; XTemporal holds the workflow, activities over use cases and ports, and the client; `x worker run` runs them as the worker role ([workflows](references/workflows.md)).
 - **Composition.** ArgumentParser commands; one `ConfigReader` over environment variables and `InMemoryProvider.applicationDefaults`; shared readers from `<Org>Transport`; one `ServiceGroup` with graceful shutdown on `SIGTERM` ([composition](references/composition.md)).
+- **Tests.** A test target per module over mocks of the protocols it depends on; mocks every service would write alike come from `<Org>Testing` ([testing](references/testing.md)).
 
 ## Code style
 
@@ -150,7 +151,8 @@ Copy the checklist for the task into the response and check items off as they're
 - [ ] XTemporal, XValkey, X<Provider> as the plan needs
 - [ ] X: commands, InMemoryProvider defaults, Migrations, Serve, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
-- [ ] swift build; fix and repeat until it builds without warnings
+- [ ] A test target per module, over mocks (testing.md)
+- [ ] swift build and swift test; fix and repeat until both pass without warnings
 ```
 
 **Add an operation**
@@ -162,7 +164,8 @@ Copy the checklist for the task into the response and check items off as they're
 - [ ] XGRPC: the handler and the input's conversion, every error case mapped
 - [ ] Executable: the use case on its role's database, passed to the service
 - [ ] Gateway: the route in its tier, if public
-- [ ] swift build; fix and repeat until it builds without warnings
+- [ ] Tests: the use case's outcomes and the handler's statuses, over mocks
+- [ ] swift build and swift test; fix and repeat until both pass without warnings
 ```
 
 **Add a durable process**
@@ -172,7 +175,8 @@ Copy the checklist for the task into the response and check items off as they're
 - [ ] XTemporal: the workflow, its activities, TemporalXWorkflowClient, named ActivityOptions (workflows.md)
 - [ ] The use case that starts it, after its transaction commits, by a deterministic id
 - [ ] Executable: the Temporal client in Serve; the worker group and its Run root
-- [ ] swift build; fix and repeat until it builds without warnings
+- [ ] Tests: the workflow on the time-skipping server, its activities over mocks
+- [ ] swift build and swift test; fix and repeat until both pass without warnings
 ```
 
 **Review a backend**
@@ -203,6 +207,7 @@ Read the reference for the part at hand:
 | [references/composition.md](references/composition.md) | Commands, the composition root, configuration, logging, the ServiceGroup and why |
 | [references/security.md](references/security.md) | The trust model, mTLS and certificate reloading, user tokens, authorization layers, secrets |
 | [references/style.md](references/style.md) | Readability, errors, concurrency, imports and access control, Foundation, types, documentation |
+| [references/testing.md](references/testing.md) | Test targets per module, what each tests, mocks, the shared testing product |
 | [references/conventions.md](references/conventions.md) | Naming a package, target, type, file, key or folder |
 
 ## Related skills
@@ -214,6 +219,5 @@ Load these, when installed, for the code inside the shapes:
 | Actors, task groups, cancellation, `Sendable` diagnostics, Swift 6 migration | A Swift Concurrency skill: `swift-concurrency` |
 | Argument labels, method names, documentation comments | `swift-api-design-guidelines` |
 | Tests of use cases, handlers and workflows | A Swift Testing skill: `swift-testing-expert` |
-| An app that calls the gateway's API | `swiftui-architect` |
 
 Where this skill states a shape, follow it; those skills cover the code inside it.

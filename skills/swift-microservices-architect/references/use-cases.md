@@ -130,6 +130,8 @@ package struct KeyedPage<Item: Sendable>: Sendable {
 }
 ```
 
+When several services page, the two types may live in `<org>-core` instead, shared by every service.
+
 ## Ports
 
 A port is what Core needs from outside the service's database: another service, a provider's capability, the workflow engine, or a store outside the transaction.

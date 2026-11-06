@@ -103,7 +103,7 @@ service LoanService {
 - Fields are snake_case. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
 - Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`.
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
-- A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers` ([webhooks](security.md#webhooks)).
+- A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).
 - A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`.
 - Contracts are released before the services that implement or call them, and services pin the release.
 

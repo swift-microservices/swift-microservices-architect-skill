@@ -26,15 +26,15 @@ This README is for people. Agents read [SKILL.md](skills/swift-microservices-arc
 - The gateway: Hummingbird request contexts in tiers, the router, controllers, provider webhooks, problem details, and upstream clients that forward the caller's token.
 - Temporal: starting workflows from use cases, deterministic workflows, activities over use cases and ports, options, versioning and the worker.
 - Composition: commands, configuration readers and defaults, logging, the `ServiceGroup` and why it matters.
-- Security: the trust model, mTLS with certificate reloading, user tokens, authorization layers and secrets.
+- Security: the trust model, mTLS with certificate reloading, user tokens, authorization layers, secrets and webhooks.
+- Testing: a test target per module over mocks of its protocols, and the shared mocks in `<org>-core`'s testing product.
 - Code style and naming conventions.
 
-Out of scope for now: CI/CD, deployment, container images and compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends, and tests.
+Out of scope for now: CI/CD, deployment, container images and compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
 
 Covered by other skills the agent loads alongside this one:
 - Swift Concurrency: [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill)
 - Swift Testing: [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill)
-- Apps that call the API: [SwiftUI Architect](https://github.com/the-braveknight/swiftui-architect-skill)
 
 ## Layout
 
@@ -53,7 +53,8 @@ swift-microservices-architect-skill/
 │       ├── gateway.md               request contexts, router, controllers, errors, upstream clients, the edge
 │       ├── workflows.md             Temporal workflows, activities, options, versions, the worker
 │       ├── composition.md           commands, composition roots, configuration, logging, lifecycle
-│       ├── security.md              trust model, mTLS, tokens, authorization, secrets
+│       ├── security.md              trust model, mTLS, tokens, authorization, secrets, webhooks
+│       ├── testing.md               test targets per module, mocks, the shared testing product
 │       ├── style.md                 how the code reads
 │       └── conventions.md           naming, folders, files
 ├── .github/                         CI: validation, the semver label check, releases, Dependabot
