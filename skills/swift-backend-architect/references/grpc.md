@@ -221,15 +221,13 @@ A missing caller is `unauthenticated`, from `requireUser()`. A message is one se
 The server's pipeline applies to the person-facing descriptors only:
 
 ```swift
+let bearerAuthentication = BearerAuthenticationInterceptor(authenticator: authenticator)
+let userSettings = UserSettingsInterceptor()
+
+…
 interceptorPipeline: [
-    .apply(
-        BearerAuthenticationInterceptor(authenticator: authenticator),
-        to: .services([Bookshelf_Loans_V1_LoanService.descriptor])
-    ),
-    .apply(
-        UserSettingsInterceptor(),
-        to: .services([Bookshelf_Loans_V1_LoanService.descriptor])
-    ),
+    .apply(bearerAuthentication, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
+    .apply(userSettings, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
 ]
 ```
 
@@ -256,12 +254,12 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
     }
 
     package func book(id: UUID) async throws -> Book? {
-        let request = Bookshelf_Catalog_V1_GetBookRequest.with {
-            $0.id = id.uuidString.lowercased()
-        }
-
         do {
-            return try Book(try await client.getBook(request))
+            let request = Bookshelf_Catalog_V1_GetBookRequest.with {
+                $0.id = id.uuidString.lowercased()
+            }
+            let response = try await client.getBook(request)
+            return try Book(response)
         } catch let error as RPCError where error.code == .notFound {
             return nil
         } catch let error as RPCError where error.code == .unavailable || error.code == .deadlineExceeded {
@@ -281,25 +279,32 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 Built in the executable from `<Org>Transport`'s readers ([mutual TLS](security.md#mutual-tls)):
 
 ```swift
-let server = GRPCServer(
-    transport: .http2NIOPosix(
-        address: .ipv4(host: try serverConfig.requiredString(forKey: "host"), port: try serverConfig.requiredInt(forKey: "port")),
-        transportSecurity: try .mTLS(config: tlsConfig, certificateReloader: certificateReloader),
-        config: HTTP2ServerTransport.Posix.Config(config: serverConfig)
-    ),
-    services: [loanService],
-    interceptorPipeline: […]
+let serverHost = try serverConfig.requiredString(forKey: "host")
+let serverPort = try serverConfig.requiredInt(forKey: "port")
+let serverSecurity: HTTP2ServerTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
+let serverTransportConfig = HTTP2ServerTransport.Posix.Config(config: serverConfig)
+let serverTransport = HTTP2ServerTransport.Posix(
+    address: .ipv4(host: serverHost, port: serverPort),
+    transportSecurity: serverSecurity,
+    config: serverTransportConfig
 )
+let server = GRPCServer(transport: serverTransport, services: [loanService], interceptorPipeline: […])
 
-let catalog = GRPCClient(
-    transport: try .http2NIOPosix(
-        target: .dns(host: try catalogConfig.requiredString(forKey: "host"), port: try catalogConfig.requiredInt(forKey: "port")),
-        transportSecurity: try .mTLS(config: tlsConfig, certificateReloader: certificateReloader),
-        config: HTTP2ClientTransport.Posix.Config(config: catalogConfig),
-        serviceConfig: ServiceConfig(config: catalogConfig)
-    )
+let catalogHost = try catalogConfig.requiredString(forKey: "host")
+let catalogPort = try catalogConfig.requiredInt(forKey: "port")
+let clientSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
+let catalogTransportConfig = HTTP2ClientTransport.Posix.Config(config: catalogConfig)
+let catalogServiceConfig = ServiceConfig(config: catalogConfig)
+let catalogTransport = try HTTP2ClientTransport.Posix(
+    target: .dns(host: catalogHost, port: catalogPort),
+    transportSecurity: clientSecurity,
+    config: catalogTransportConfig,
+    serviceConfig: catalogServiceConfig
 )
+let catalog = GRPCClient(transport: catalogTransport)
 ```
+
+- One `clientSecurity` serves every client of the process, and each upstream gets its own host, port, transport config and service config.
 
 - The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.
 - A client's host is the name in the peer certificate's DNS names. Its config sends keepalive pings on idle connections; its `ServiceConfig` waits for a ready connection, bounded by a deadline, so a transient reconnect doesn't fail a call and a down upstream still does.

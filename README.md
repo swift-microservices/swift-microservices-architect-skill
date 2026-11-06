@@ -8,7 +8,7 @@ This README is for people. Agents read [SKILL.md](skills/swift-backend-architect
 
 - **Boundaries the compiler enforces.** Each layer of a service is an SPM target. Core can't import a driver, a transport or a generated contract, and adapters can't import each other, so "the use case must not know about Postgres" is a build error rather than a review comment.
 - **The service is its use cases.** Rules, authorization decisions and the meaning of every error live in typed-throws use cases. gRPC services, HTTP routes, Temporal activities and repositories only translate, so a transport or a store changes without touching the rules.
-- **Code that reads like the requirement.** One `do`, one `catch` per outcome, no helper methods: a use case, a workflow or a handler reads top to bottom, the way Apple's WWDC sample code does.
+- **Code that reads like the requirement.** One `do` holding the whole path, one `catch` per outcome, every value a call takes built first in a named `let`, no helper methods: a use case, a workflow or a handler reads top to bottom, the way Apple's WWDC sample code does.
 - **Every hop proves itself.** Mutual TLS between processes with certificates that reload without a restart, the caller's token verified by every service, and Postgres row-level security under every tenant query.
 - **One composition root per process.** swift-configuration reads everything once, defaults live in one `InMemoryProvider`, and swift-service-lifecycle runs every client, server and worker in one structured task with graceful shutdown.
 - **Durable work on Temporal.** Anything that waits, retries or spans services is a workflow started by a deterministic id, not a fire-and-forget task.

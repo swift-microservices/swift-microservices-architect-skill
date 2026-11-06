@@ -125,9 +125,10 @@ package struct BookshelfAPI: Sendable {
 
         // MARK: - A caller, if there is one
 
+        let bearerAuthentication = BearerAuthenticationMiddleware<IdentityRequestContext>(authenticator: dependencies.authenticator)
         let identified = group
             .group(context: IdentityRequestContext.self)
-            .add(middleware: BearerAuthenticationMiddleware<IdentityRequestContext>(authenticator: dependencies.authenticator))
+            .add(middleware: bearerAuthentication)
 
         // MARK: - A caller, required
 
@@ -194,8 +195,10 @@ package struct LoanController: Sendable {
         context: IdentityRequestContext
     ) async throws -> EditedResponse<Components.Schemas.LoanResponse> {
         let body = try await request.decode(as: Components.Schemas.BorrowBookRequest.self, context: context)
-        let loan = try await client.borrowBook(Bookshelf_Loans_V1_BorrowBookRequest(body))
-        return EditedResponse(status: .created, response: try Components.Schemas.LoanResponse(loan))
+        let borrowBookRequest = Bookshelf_Loans_V1_BorrowBookRequest(body)
+        let loan = try await client.borrowBook(borrowBookRequest)
+        let response = try Components.Schemas.LoanResponse(loan)
+        return EditedResponse(status: .created, response: response)
     }
 
     private func returnBook(
@@ -203,9 +206,10 @@ package struct LoanController: Sendable {
         context: IdentityRequestContext
     ) async throws -> Components.Schemas.LoanResponse {
         let loanID = try context.parameters.require("id", as: UUID.self)
-        let loan = try await client.returnBook(
-            Bookshelf_Loans_V1_ReturnBookRequest.with { $0.loanID = loanID.uuidString.lowercased() }
-        )
+        let returnBookRequest = Bookshelf_Loans_V1_ReturnBookRequest.with {
+            $0.loanID = loanID.uuidString.lowercased()
+        }
+        let loan = try await client.returnBook(returnBookRequest)
         return try Components.Schemas.LoanResponse(loan)
     }
 
@@ -231,7 +235,8 @@ extension Components.Schemas.LoanResponse: ResponseCodable {
             throw HTTPError(.internalServerError, message: "The loan record is malformed.")
         }
 
-        self.init(id: id, bookID: bookID, status: try Components.Schemas.LoanStatus(loan.status), dueDate: loan.dueDate.date)
+        let status = try Components.Schemas.LoanStatus(loan.status)
+        self.init(id: id, bookID: bookID, status: status, dueDate: loan.dueDate.date)
     }
 }
 
@@ -249,10 +254,10 @@ extension Bookshelf_Loans_V1_BorrowBookRequest {
 
 ## Errors
 
-`ErrorMiddleware`, on the router after CORS, answers every failure as RFC 9457 problem details (`application/problem+json`), one `catch` per kind of error:
+`ErrorMiddleware`, on the router after CORS, turns every failure into RFC 9457 problem details (`application/problem+json`), one `catch` per kind of error:
 
 ```swift
-/// Answers every failure on the router as problem details.
+/// Turns every failure on the router into a `Problem`, which the router renders.
 package struct ErrorMiddleware<Context: RequestContext>: RouterMiddleware {
     package init() {}
 
@@ -261,30 +266,28 @@ package struct ErrorMiddleware<Context: RequestContext>: RouterMiddleware {
         context: Context,
         next: @concurrent (Request, Context) async throws -> Response
     ) async throws -> Response {
-        let problem: Problem
-
         do {
             return try await next(request, context)
         } catch let error as HTTPError {
-            problem = Problem(status: error.status, detail: error.body)
+            throw Problem(status: error.status, detail: error.body)
         } catch let error as any HTTPResponseError {
-            problem = Problem(status: error.status)
+            throw Problem(status: error.status)
         } catch let error as RPCError where HTTPResponse.Status(error.code).kind == .clientError {
-            problem = Problem(status: HTTPResponse.Status(error.code), detail: error.message)
+            let status = HTTPResponse.Status(error.code)
+            throw Problem(status: status, detail: error.message)
         } catch let error as RPCError {
             context.logger.error("Upstream call failed", metadata: ["error": "\(String(reflecting: error))"])
-            problem = Problem(status: HTTPResponse.Status(error.code))
+            let status = HTTPResponse.Status(error.code)
+            throw Problem(status: status)
         } catch {
             context.logger.error("Request failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
-            problem = Problem(status: .internalServerError)
+            throw Problem(status: .internalServerError)
         }
-
-        return try problem.response(from: request, context: context)
     }
 }
 
 /// RFC 9457 problem details. Without a `type`, a problem means what its status means.
-package struct Problem: ResponseGenerator, Sendable {
+package struct Problem: HTTPResponseError {
     package let status: HTTPResponse.Status
     package let detail: String?
 
@@ -306,6 +309,7 @@ package struct Problem: ResponseGenerator, Sendable {
 }
 ```
 
+- Each `catch` throws its `Problem`, and nothing follows the `do`: the router renders a thrown `HTTPResponseError` with its `response(from:context:)`, and CORS adds its headers on the way out.
 - A refusal answers in its own words: an `HTTPError`'s message, which the gateway or Hummingbird wrote, and a `4xx` upstream's message, which the service wrote for clients ([status codes](grpc.md#status-codes)).
 - An upstream's server error answers its status alone, since a transport's message can name internal hosts. It's logged with its cause, as is anything that isn't an HTTP or RPC error, which answers `500`.
 - Hummingbird's other `HTTPResponseError`s keep their status, such as `413` for a body over the upload limit. Router middleware also wraps the not-found responder, so an unmatched path's `404` is a problem too.
@@ -330,18 +334,12 @@ package struct Problem: ResponseGenerator, Sendable {
 
 ## Upstream clients
 
-The executable builds one `GRPCClient` per upstream service over mTLS, with `BearerPropagationInterceptor` scoped to the descriptors the gateway calls:
+The executable builds one `GRPCClient` per upstream service over mTLS, its transport built like any client's ([transports](grpc.md#transports)), with `BearerPropagationInterceptor` scoped to the descriptors the gateway calls:
 
 ```swift
 let propagation = BearerPropagationInterceptor<UserIdentity>()
-
 let loans = GRPCClient(
-    transport: try .http2NIOPosix(
-        target: .dns(host: try loansConfig.requiredString(forKey: "host"), port: try loansConfig.requiredInt(forKey: "port")),
-        transportSecurity: try .mTLS(config: tlsConfig, certificateReloader: certificateReloader),
-        config: HTTP2ClientTransport.Posix.Config(config: loansConfig),
-        serviceConfig: ServiceConfig(config: loansConfig)
-    ),
+    transport: loansTransport,
     interceptorPipeline: [
         .apply(propagation, to: .services([Bookshelf_Loans_V1_LoanService.descriptor]))
     ]

@@ -4,6 +4,7 @@ How the code reads: the bar for readability, error handling, strict concurrency,
 
 ## Contents
 - Reading like the requirement
+- Build, then call
 - Errors
 - Concurrency
 - Access control and imports
@@ -25,10 +26,25 @@ The bar is the sample code in Apple's WWDC sessions, such as *Meet async/await i
 - `// MARK: -` names the sections of a composition root and the groups of a service's RPCs.
 - Code that a reader would otherwise check twice gets a one-line comment with the reason: a business rule, an ordering constraint, a safety property. A comment never narrates the next line.
 
+## Build, then call
+
+A value a call takes is built first, in a `let` named for what it is, and the call takes the name:
+
+```swift
+let statement = ActiveLoansByUserIDStatement(userID: userID)
+let rows = try await connection.execute(statement, logger: logger)
+```
+
+- Arguments are names, literals, properties, closures, static members built from those (`.seconds(30)`, `.dns(host: host, port: port)`) and initializers over constants (`ErrorMiddleware()`, `RetryPolicy(initialInterval: .seconds(1), …)`).
+- Anything else is a `let` first: an initializer that takes a variable, a conversion, a method's result, a `try` or an `await`. That holds for statements, requests, inputs, commands, configurations, transports, clients and use cases alike.
+- Two forms stay inline: interpolation in a log line (`"\(String(reflecting: error))"`), and Hummingbird's route builder (`loanController.addAuthenticatedRoutes(to: authenticated.group("loans"))`).
+
 ## Errors
 
 - A use case declares its error with typed throws ([SE-0413](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0413-typed-throws.md)): `async throws(BorrowBookUseCaseError) -> Loan`. Repositories, ports, clients and handlers use untyped `throws`.
 - Errors are mapped with `do` and one `catch` per case: `catch LoanRepositoryError.idempotencyConflict { throw .idempotencyConflict }`. The order and the final `catch` are in [the body of a use case](use-cases.md#the-body-of-a-use-case); a handler maps every case and has no final `catch` ([a handler](grpc.md#a-handler)).
+- The `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
+- Each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
 - Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` has no contextual type and is spelled in full: `throw BorrowBookUseCaseError.bookNotFound`.
 - An error enum has no associated values unless the caller acts on them, and no messages. A transport writes the message for its caller: one sentence, ending in a period, naming nothing internal.
 - `String(reflecting: error)` goes into the log line of an unknown error, never into a response.

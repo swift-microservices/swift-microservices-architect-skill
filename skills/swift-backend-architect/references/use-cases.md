@@ -233,10 +233,11 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                     throw BorrowBookUseCaseError.loanLimitReached
                 }
 
+                let dueDate = policy.dueDate(borrowedAt: .now)
                 let command = CreateLoanCommand(
                     userID: subject.userID,
                     bookID: book.id,
-                    dueDate: policy.dueDate(borrowedAt: .now),
+                    dueDate: dueDate,
                     idempotencyKey: input.idempotencyKey
                 )
                 return try await scope.loanRepository.create(command)
@@ -268,7 +269,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 ```
 
 1. Input checks that need no data come first, before the `do`, throwing the case directly (`throw .invalidIdempotencyKey`).
-2. One `do` holds the work, in the order the requirement states it: look up, decide, write, start what follows.
+2. One `do` holds the work through its `return`, in the order the requirement states it: look up, decide, write, start what follows. Each value a step takes is a `let` first ([build, then call](style.md#build-then-call)).
 3. A refusal the use case decides is logged as a warning and thrown where it's decided. Inside the `do` it's spelled with its type (`throw BorrowBookUseCaseError.bookNotFound`), since a `do` body gives `throw` no contextual type.
 4. The catches, in this order: `catch let error as XUseCaseError { throw error }`, when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch LoanRepositoryError.idempotencyConflict`), each logged and mapped to the use case's case; a final `catch` that logs an error with `String(reflecting: error)` and throws `.unknown`.
 5. A completed change is logged at info with the ids it created or changed.

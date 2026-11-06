@@ -72,37 +72,50 @@ struct Serve: AsyncParsableCommand {
         // MARK: - Infrastructure
         let postgresConfig = config.scoped(to: "postgres")
         if migrateDatabase {
-            try await PostgresClient.withClient(configuration: .init(config: postgresConfig, role: "owner"), logger: logger) { client in
-                try await Migrations(client: client, …, logger: logger).apply()
+            let ownerPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "owner")
+            try await PostgresClient.withClient(configuration: ownerPostgresConfiguration, logger: logger) { client in
+                let migrations = Migrations(client: client, …, logger: logger)
+                try await migrations.apply()
             }
         }
-        let postgresClient = PostgresClient(configuration: try .init(config: postgresConfig, role: "service"), backgroundLogger: logger)
-        let internalPostgresClient = PostgresClient(configuration: try .init(config: postgresConfig, role: "internal"), backgroundLogger: logger)
+        let servicePostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "service")
+        let internalPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "internal")
+        let postgresClient = PostgresClient(configuration: servicePostgresConfiguration, backgroundLogger: logger)
+        let internalPostgresClient = PostgresClient(configuration: internalPostgresConfiguration, backgroundLogger: logger)
 
         let tlsConfig = config.scoped(to: "tls")
-        let certificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
-            configuration: .init(config: tlsConfig, logger: logger)
-        )
-        let authenticator = try await JWTAuthenticator<UserIdentity>(config: config.scoped(to: "jwt"))
+        let certificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)
+        let certificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(configuration: certificateReloaderConfiguration)
+        let clientSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
+
+        let jwtConfig = config.scoped(to: "jwt")
+        let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
 
         let catalogConfig = config.scoped(to: "grpc.catalog")
-        let catalogGRPCClient = GRPCClient(
-            transport: try .http2NIOPosix(
-                target: .dns(host: try catalogConfig.requiredString(forKey: "host"), port: try catalogConfig.requiredInt(forKey: "port")),
-                transportSecurity: try .mTLS(config: tlsConfig, certificateReloader: certificateReloader),
-                config: HTTP2ClientTransport.Posix.Config(config: catalogConfig),
-                serviceConfig: ServiceConfig(config: catalogConfig)
-            )
+        let catalogHost = try catalogConfig.requiredString(forKey: "host")
+        let catalogPort = try catalogConfig.requiredInt(forKey: "port")
+        let catalogTransportConfig = HTTP2ClientTransport.Posix.Config(config: catalogConfig)
+        let catalogServiceConfig = ServiceConfig(config: catalogConfig)
+        let catalogTransport = try HTTP2ClientTransport.Posix(
+            target: .dns(host: catalogHost, port: catalogPort),
+            transportSecurity: clientSecurity,
+            config: catalogTransportConfig,
+            serviceConfig: catalogServiceConfig
         )
+        let catalogGRPCClient = GRPCClient(transport: catalogTransport)
 
         let temporalConfig = config.scoped(to: "temporal")
-        let temporalCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
-            configuration: .init(config: temporalConfig.scoped(to: "tls"), logger: logger)
-        )
+        let temporalTLSConfig = temporalConfig.scoped(to: "tls")
+        let temporalHost = try temporalConfig.requiredString(forKey: "host")
+        let temporalPort = temporalConfig.int(forKey: "port", default: 7233)
+        let temporalCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: temporalTLSConfig, logger: logger)
+        let temporalCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(configuration: temporalCertificateReloaderConfiguration)
+        let temporalSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(config: temporalTLSConfig, certificateReloader: temporalCertificateReloader)
+        let temporalClientConfiguration = try TemporalClient.Configuration(configReader: temporalConfig)
         let temporalClient = try TemporalClient(
-            target: .dns(host: try temporalConfig.requiredString(forKey: "host"), port: temporalConfig.int(forKey: "port", default: 7233)),
-            transportSecurity: try .mTLS(config: temporalConfig.scoped(to: "tls"), certificateReloader: temporalCertificateReloader),
-            configuration: .init(configReader: temporalConfig),
+            target: .dns(host: temporalHost, port: temporalPort),
+            transportSecurity: temporalSecurity,
+            configuration: temporalClientConfiguration,
             logger: logger
         )
 
@@ -112,34 +125,47 @@ struct Serve: AsyncParsableCommand {
         let database = PostgresDatabase<PostgresLoansScope>(client: postgresClient, logger: logger)
         let internalDatabase = PostgresDatabase<PostgresLoansInternalScope>(client: internalPostgresClient, logger: logger)
         let catalogClient = GRPCCatalogClient(client: catalogGRPCClient)
-        let loanWorkflowClient = TemporalLoanWorkflowClient(client: temporalClient, taskQueue: try temporalConfig.requiredString(forKey: "taskQueue"))
-        let policy = LoanPolicy(config: config.scoped(to: "loans"))
+        let taskQueue = try temporalConfig.requiredString(forKey: "taskQueue")
+        let loanWorkflowClient = TemporalLoanWorkflowClient(client: temporalClient, taskQueue: taskQueue)
+        let loansConfig = config.scoped(to: "loans")
+        let policy = LoanPolicy(config: loansConfig)
 
+        let borrowBookUseCase = BorrowBookUseCase(
+            database: database,
+            catalogClient: catalogClient,
+            loanWorkflowClient: loanWorkflowClient,
+            policy: policy,
+            logger: logger
+        )
+        let returnBookUseCase = ReturnBookUseCase(database: database, loanWorkflowClient: loanWorkflowClient, logger: logger)
+        let listLoansUseCase = ListLoansUseCase(database: database, logger: logger)
+        let listAllLoansUseCase = ListAllLoansUseCase(database: internalDatabase, logger: logger)
         let loanService = LoanService(
-            borrowBookUseCase: BorrowBookUseCase(
-                database: database,
-                catalogClient: catalogClient,
-                loanWorkflowClient: loanWorkflowClient,
-                policy: policy,
-                logger: logger
-            ),
-            returnBookUseCase: ReturnBookUseCase(database: database, loanWorkflowClient: loanWorkflowClient, logger: logger),
-            listLoansUseCase: ListLoansUseCase(database: database, logger: logger),
-            listAllLoansUseCase: ListAllLoansUseCase(database: internalDatabase, logger: logger)
+            borrowBookUseCase: borrowBookUseCase,
+            returnBookUseCase: returnBookUseCase,
+            listLoansUseCase: listLoansUseCase,
+            listAllLoansUseCase: listAllLoansUseCase
         )
 
         // MARK: - gRPC
         let serverConfig = config.scoped(to: "grpc.server")
+        let serverHost = try serverConfig.requiredString(forKey: "host")
+        let serverPort = try serverConfig.requiredInt(forKey: "port")
+        let serverSecurity: HTTP2ServerTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
+        let serverTransportConfig = HTTP2ServerTransport.Posix.Config(config: serverConfig)
+        let serverTransport = HTTP2ServerTransport.Posix(
+            address: .ipv4(host: serverHost, port: serverPort),
+            transportSecurity: serverSecurity,
+            config: serverTransportConfig
+        )
+        let bearerAuthentication = BearerAuthenticationInterceptor(authenticator: authenticator)
+        let userSettings = UserSettingsInterceptor()
         let server = GRPCServer(
-            transport: .http2NIOPosix(
-                address: .ipv4(host: try serverConfig.requiredString(forKey: "host"), port: try serverConfig.requiredInt(forKey: "port")),
-                transportSecurity: try .mTLS(config: tlsConfig, certificateReloader: certificateReloader),
-                config: HTTP2ServerTransport.Posix.Config(config: serverConfig)
-            ),
+            transport: serverTransport,
             services: [loanService],
             interceptorPipeline: [
-                .apply(BearerAuthenticationInterceptor(authenticator: authenticator), to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
-                .apply(UserSettingsInterceptor(), to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
+                .apply(bearerAuthentication, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
+                .apply(userSettings, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
             ]
         )
 
@@ -165,7 +191,7 @@ struct Serve: AsyncParsableCommand {
 - **Configuration, Logging, Infrastructure, Composition, the server, Lifecycle**: every root has these sections, in this order.
 - Infrastructure builds what talks to the outside: database clients per role, certificate reloaders, the authenticator, upstream clients, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
-- Use cases are built inline at the service's initializer, each on the database its audience requires.
+- Each use case is a `let` named like the property that holds it, on the database its audience requires; the service then takes the names. Every value in a root is built this way ([build, then call](style.md#build-then-call)).
 - `Database/Migrations.swift` lists the migrations in applied order and applies them ([migrations](persistence.md#migrations)).
 
 ## Configuration
@@ -202,7 +228,7 @@ extension InMemoryProvider {
 ```
 
 - Defaults hold mount paths, ports, the database's name, role names and task queues. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
-- A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes: `TimedCertificateReloader.Configuration(config: config.scoped(to: "tls"), logger:)`. Required keys and validation live in the reader, not in the root.
+- A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes first: `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)`. Required keys and validation live in the reader, not in the root.
 - Readers every executable shares are `<Org>Transport`'s and `<Org>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)`, with the key names that library chose.
 - Keys are dotted scopes with lowerCamelCase leaves. Environment names derive from them: `postgres.service.password` is `POSTGRES_SERVICE_PASSWORD`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
 - A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
@@ -240,24 +266,31 @@ A server process holds several components that each need a task running for thei
 
 ```swift
 // MARK: - Infrastructure
-let workerPostgresClient = PostgresClient(configuration: try .init(config: postgresConfig, role: "worker"), backgroundLogger: logger)
-let identityGRPCClient = GRPCClient(transport: …)   // grpc.identity, as catalog above
-let catalogGRPCClient = GRPCClient(transport: …)    // grpc.catalog
+let workerPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "worker")
+let workerPostgresClient = PostgresClient(configuration: workerPostgresConfiguration, backgroundLogger: logger)
+…  // tls, temporal and each client's transport, as in Serve
+let identityGRPCClient = GRPCClient(transport: identityTransport)
+let catalogGRPCClient = GRPCClient(transport: catalogTransport)
 
 // MARK: - Composition
 let workerDatabase = PostgresDatabase<PostgresLoansWorkerScope>(client: workerPostgresClient, logger: logger)
+let markLoanOverdueUseCase = MarkLoanOverdueUseCase(database: workerDatabase, logger: logger)
+let identityClient = GRPCIdentityClient(client: identityGRPCClient)
+let catalogClient = GRPCCatalogClient(client: catalogGRPCClient)
+let noticeSender = ResendNoticeSender(…)
 let loanActivities = LoanActivities(
-    markLoanOverdueUseCase: MarkLoanOverdueUseCase(database: workerDatabase, logger: logger),
-    identityClient: GRPCIdentityClient(client: identityGRPCClient),
-    catalogClient: GRPCCatalogClient(client: catalogGRPCClient),
-    noticeSender: ResendNoticeSender(…)
+    markLoanOverdueUseCase: markLoanOverdueUseCase,
+    identityClient: identityClient,
+    catalogClient: catalogClient,
+    noticeSender: noticeSender
 )
 
 // MARK: - Worker
+let workerConfiguration = try TemporalWorker.Configuration(configReader: temporalConfig)
 let worker = try TemporalWorker(
-    configuration: .init(configReader: temporalConfig),
-    target: .dns(host: try temporalConfig.requiredString(forKey: "host"), port: temporalConfig.int(forKey: "port", default: 7233)),
-    transportSecurity: try .mTLS(config: temporalConfig.scoped(to: "tls"), certificateReloader: temporalCertificateReloader),
+    configuration: workerConfiguration,
+    target: .dns(host: temporalHost, port: temporalPort),
+    transportSecurity: temporalSecurity,
     activityContainers: loanActivities,
     workflows: [LoanWorkflow.self],
     logger: logger
@@ -275,34 +308,41 @@ The worker builds no server and no authenticator: it serves no RPCs, and the use
 
 ```swift
 // MARK: - Infrastructure
-let authenticator = try await JWTAuthenticator<UserIdentity>(config: config.scoped(to: "jwt"))
+let jwtConfig = config.scoped(to: "jwt")
+let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
 let propagation = BearerPropagationInterceptor<UserIdentity>()
-let loans = GRPCClient(transport: …, interceptorPipeline: [.apply(propagation, to: .services([Bookshelf_Loans_V1_LoanService.descriptor]))])
+…  // each upstream's transport, as in a service's Serve
+let loans = GRPCClient(
+    transport: loansTransport,
+    interceptorPipeline: [.apply(propagation, to: .services([Bookshelf_Loans_V1_LoanService.descriptor]))]
+)
 …  // one client per upstream service
 
 // MARK: - Composition
-let api = BookshelfAPI(
-    dependencies: .init(
-        authenticator: authenticator,
-        identity: Bookshelf_Identity_V1_IdentityService.Client(wrapping: identity),
-        books: Bookshelf_Catalog_V1_BookService.Client(wrapping: catalog),
-        loans: Bookshelf_Loans_V1_LoanService.Client(wrapping: loans)
-    )
+let identityClient = Bookshelf_Identity_V1_IdentityService.Client(wrapping: identity)
+let bookClient = Bookshelf_Catalog_V1_BookService.Client(wrapping: catalog)
+let loanClient = Bookshelf_Loans_V1_LoanService.Client(wrapping: loans)
+let dependencies = BookshelfAPI.Dependencies(
+    authenticator: authenticator,
+    identity: identityClient,
+    books: bookClient,
+    loans: loanClient
 )
+let api = BookshelfAPI(dependencies: dependencies)
 
 // MARK: - Router
+let cors = CORSMiddleware(allowOrigin: .originBased, allowHeaders: [.contentType, .authorization], allowMethods: [.get, .post, .put, .delete])
+let requestLogging = LogRequestsMiddleware(logLevel)
 let router = Router(context: BasicRequestContext.self)
-router.add(middleware: CORSMiddleware(allowOrigin: .originBased, allowHeaders: [.contentType, .authorization], allowMethods: [.get, .post, .put, .delete]))
+router.add(middleware: cors)
 router.add(middleware: ErrorMiddleware())
-router.add(middleware: LogRequestsMiddleware(logLevel))
+router.add(middleware: requestLogging)
 api.addRoutes(to: router.group("v1"))
 
 // MARK: - Hummingbird
-let application = Application(
-    router: router,
-    configuration: ApplicationConfiguration(reader: config.scoped(to: "http.server")),
-    logger: logger
-)
+let httpServerConfig = config.scoped(to: "http.server")
+let applicationConfiguration = ApplicationConfiguration(reader: httpServerConfig)
+let application = Application(router: router, configuration: applicationConfiguration, logger: logger)
 
 // MARK: - Lifecycle
 // certificateReloader, every upstream client, application

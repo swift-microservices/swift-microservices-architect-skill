@@ -63,25 +63,24 @@ package struct TemporalLoanWorkflowClient: LoanWorkflowClient {
     /// refused, and its work is done.
     package func startLoan(_ loan: Loan) async throws {
         do {
-            _ = try await client.startWorkflow(
-                type: LoanWorkflow.self,
-                options: WorkflowOptions(
-                    id: LoanWorkflow.id(loanID: loan.id),
-                    taskQueue: taskQueue,
-                    idReusePolicy: .rejectDuplicate,
-                    idConflictPolicy: .useExisting
-                ),
-                input: LoanWorkflow.Input(loanID: loan.id, userID: loan.userID, bookID: loan.bookID, dueDate: loan.dueDate)
+            let workflowID = LoanWorkflow.id(loanID: loan.id)
+            let options = WorkflowOptions(
+                id: workflowID,
+                taskQueue: taskQueue,
+                idReusePolicy: .rejectDuplicate,
+                idConflictPolicy: .useExisting
             )
+            let input = LoanWorkflow.Input(loanID: loan.id, userID: loan.userID, bookID: loan.bookID, dueDate: loan.dueDate)
+            _ = try await client.startWorkflow(type: LoanWorkflow.self, options: options, input: input)
         } catch is WorkflowAlreadyStartedError {
             return
         }
     }
 
     package func markReturned(loanID: UUID) async throws {
-        try await client
-            .workflowHandle(type: LoanWorkflow.self, id: LoanWorkflow.id(loanID: loanID))
-            .signal(signalType: LoanWorkflow.MarkReturned.self)
+        let workflowID = LoanWorkflow.id(loanID: loanID)
+        let handle = client.workflowHandle(type: LoanWorkflow.self, id: workflowID)
+        try await handle.signal(signalType: LoanWorkflow.MarkReturned.self)
     }
 }
 ```
@@ -113,24 +112,27 @@ package struct LoanWorkflow {
     private var isReturned = false
 
     package mutating func run(context: WorkflowContext<Self>, input: Input) async throws {
-        try await context.sleep(for: .seconds(input.dueDate.timeIntervalSince(context.now)))
+        let timeUntilDue = input.dueDate.timeIntervalSince(context.now)
+        try await context.sleep(for: .seconds(timeUntilDue))
         guard !isReturned else {
             return
         }
 
+        let markOverdueInput = LoanActivities.MarkOverdueInput(loanID: input.loanID)
         let isMarkedOverdue = try await context.executeActivity(
             LoanActivities.Activities.MarkOverdue.self,
             options: .database,
-            input: LoanActivities.MarkOverdueInput(loanID: input.loanID)
+            input: markOverdueInput
         )
         guard isMarkedOverdue else {
             return
         }
 
+        let noticeInput = LoanActivities.SendOverdueNoticeInput(loanID: input.loanID, userID: input.userID, bookID: input.bookID)
         try await context.executeActivity(
             LoanActivities.Activities.SendOverdueNotice.self,
             options: .notification,
-            input: LoanActivities.SendOverdueNoticeInput(loanID: input.loanID, userID: input.userID, bookID: input.bookID)
+            input: noticeInput
         )
     }
 
@@ -200,7 +202,8 @@ package struct LoanActivities {
     @Activity
     package func markOverdue(input: MarkOverdueInput) async throws -> Bool {
         do {
-            let loan = try await markLoanOverdueUseCase(input: MarkLoanOverdueUseCaseInput(loanID: input.loanID))
+            let markLoanOverdueInput = MarkLoanOverdueUseCaseInput(loanID: input.loanID)
+            let loan = try await markLoanOverdueUseCase(input: markLoanOverdueInput)
             return loan.status == .overdue
         } catch MarkLoanOverdueUseCaseError.loanNotFound {
             throw ApplicationError(message: "The loan does not exist.", type: "LoanNotFound", isNonRetryable: true)
@@ -227,10 +230,9 @@ package struct LoanActivities {
             throw ApplicationError(message: "Catalog has no such book.", type: "BookNotFound", isNonRetryable: true)
         }
 
-        try await noticeSender.send(
-            OverdueNotice(memberName: member.name, email: member.email, bookTitle: book.title),
-            idempotencyKey: "loans-overdue-notice-\(input.loanID.uuidString.lowercased())"
-        )
+        let notice = OverdueNotice(memberName: member.name, email: member.email, bookTitle: book.title)
+        let idempotencyKey = "loans-overdue-notice-\(input.loanID.uuidString.lowercased())"
+        try await noticeSender.send(notice, idempotencyKey: idempotencyKey)
     }
 }
 ```

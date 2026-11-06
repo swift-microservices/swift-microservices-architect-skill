@@ -5,7 +5,7 @@ description: Architects Swift server backends as gRPC microservices behind a Hum
 
 # Swift Backend Architect
 
-Decides how a Swift backend splits into services and modules, where code lives, the shapes of use cases, adapters and composition roots, and how the code reads. For the concurrency and test code inside those shapes, use the skills in [Related skills](#related-skills).
+Decides how a Swift backend splits into services and modules, where code lives, the shapes of use cases, adapters and composition roots, and how the code reads.
 
 `X` stands for a service (`Loans` → `LoansCore`, `LoansGRPC`, `BorrowBookUseCase`), `<Org>` and `<org>` for the organization (`Bookshelf`, `bookshelf-core`).
 
@@ -84,7 +84,7 @@ Hard rules:
 4. **One composition root per process.** A command's `run()` reads configuration, builds every concrete type and runs them in one `ServiceGroup`.
 5. **Every hop proves itself.** mTLS between processes, the caller's token verified by each service, row-level security under tenant queries ([security](references/security.md)).
 6. **Code reads like the requirement.** Use cases, workflows and handlers read top to bottom, with typed throws and one `catch` per case; Apple's WWDC sample code is the bar ([style](references/style.md)).
-7. **Modern Swift throughout.** Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault` in every package ([Swift settings](references/packages.md#swift-settings)); `package` access; `FoundationEssentials`; structured concurrency.
+7. **Modern Swift throughout.** Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault` in every package ([Swift settings](references/packages.md#swift-settings)); structured concurrency.
 8. **Share only what every service needs identically.** Identity, tenant binding and transport configuration go in `<org>-core`; a service models another's data in its own words.
 
 ## The shapes in brief
@@ -115,18 +115,19 @@ do {
 }
 ```
 
-- One `do` around the work, one `catch` per case the caller acts on, then `unknown`. A handler maps every case to a status, with no catch-all.
+- One `do` holds the work through its `return`, then one `catch` per case the caller acts on, then `unknown`. Each `catch` ends its own path: nothing is declared before the `do` for a `catch` to fill, and nothing follows it. A handler maps every case to a status, with no catch-all.
+- Build, then call: a value a call takes is a `let` named for what it is (`let statement = …`, then `connection.execute(statement, logger: logger)`), never a conversion, `try` or `await` in the arguments ([style](references/style.md#build-then-call)).
 - No private helper methods in use cases, workflows or activities, and no workarounds: no `Result` juggling, steering flags, `try?`, nested `do` in a `catch`, or force unwraps.
 - `package` across a service's targets with `package import`, the conditional `FoundationEssentials` import, `Duration` and `FormatStyle` over legacy Foundation types.
 - Everything crossing a boundary is `Sendable`; no `@unchecked Sendable`, `nonisolated(unsafe)`, `Task {}` or `Task.detached`.
 
 ## Gotchas
 
-- Module names are unique across the package graph: a service named `Authentication`, `Logging`, `Configuration`, `Metrics` or `Crypto` collides with a dependency. Rename the service rather than one of its targets.
+- Module names are unique across the package graph: a service named `Authentication` or `Logging` collides with a dependency. Rename the service, not one of its targets.
 - `NonisolatedNonsendingByDefault` changes what an unannotated `async` function type means. Implement a requirement from a library built without it exactly as declared, `@concurrent` included: Hummingbird middleware's `next`, gRPC interceptors' `next`.
 - Hummingbird's `add(middleware:)` changes its group for every route added after it; give each route tier its own `group()`.
 - A route whose bearer token isn't an access token, such as a refresh request's refresh token, stays outside `BearerAuthenticationMiddleware`, which refuses any bearer token it can't verify.
-- A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls wait until their deadline, and an unrun reloader never reloads.
+- A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls wait until their deadline.
 - A process connected as the database owner bypasses row-level security, and an unset tenant setting reads as `''` on a reused connection, so policies wrap it in `NULLIF`.
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep`, a captured `Logger` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
 - A plain `import Foundation` in owned code links full Foundation; use the conditional `FoundationEssentials` import.
@@ -232,4 +233,4 @@ Load these, when installed, for the code inside the shapes:
 | Tests of use cases, handlers and workflows | A Swift Testing skill: `swift-testing-expert` |
 | An app that calls the gateway's API | `swiftui-architect` |
 
-Where this skill states a shape, such as a use case's files or a root's sections, follow it, and use those skills for everything inside it.
+Where this skill states a shape, follow it; those skills cover the code inside it.

@@ -122,7 +122,8 @@ struct PostgresLoanRepository: LoanRepository {
     let logger: Logger
 
     func create(_ command: CreateLoanCommand) async throws -> Loan {
-        let rows = try await connection.execute(CreateLoanStatement(command: command), logger: logger)
+        let statement = CreateLoanStatement(command: command)
+        let rows = try await connection.execute(statement, logger: logger)
         for try await loan in rows {
             return loan
         }
@@ -131,7 +132,8 @@ struct PostgresLoanRepository: LoanRepository {
     }
 
     func activeLoans(userID: UUID) async throws -> [Loan] {
-        let rows = try await connection.execute(ActiveLoansByUserIDStatement(userID: userID), logger: logger)
+        let statement = ActiveLoansByUserIDStatement(userID: userID)
+        let rows = try await connection.execute(statement, logger: logger)
         return try await Array(rows)
     }
 
@@ -249,4 +251,4 @@ package struct ValkeyResetCodeRepository<Client: ValkeyClientProtocol>: ResetCod
 - Every write sets its expiry, passed by the use case from its policy, never configured in the store.
 - A read that must happen once is atomic: `GETDEL`, not a read followed by a delete. Several commands that must apply together go in a transaction (`client.transaction(…)`); several independent ones in a pipeline (`client.execute(…)`).
 - A rate limit is `INCR` with an expiry set on the first increment.
-- The executable builds one `ValkeyClient(.hostname(host, port: port), configuration: ValkeyClientConfiguration(configReader:), logger:)` and runs it in the `ServiceGroup` ([composition](composition.md#the-composition-root)).
+- The executable reads `ValkeyClientConfiguration(configReader:)` into a `let`, builds one `ValkeyClient(.hostname(host, port: port), configuration: valkeyConfiguration, logger: logger)` from it, and runs it in the `ServiceGroup` ([composition](composition.md#the-composition-root)).
