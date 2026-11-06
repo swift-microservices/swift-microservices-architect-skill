@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks the swift-backend-architect skill against the authoring rules in CLAUDE.md.
+"""Checks the swift-microservices-architect skill against the authoring rules in CLAUDE.md.
 
 Run from anywhere after every change to the skill, and fix until it passes:
 
@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SKILL = ROOT / "skills" / "swift-backend-architect"
+SKILL = ROOT / "skills" / "swift-microservices-architect"
 REFERENCES = SKILL / "references"
 TERMS_FILE = ROOT / ".skill-check-terms"
 

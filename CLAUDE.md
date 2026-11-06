@@ -1,6 +1,6 @@
-# swift-backend-architect
+# swift-microservices-architect
 
-This repository is the `swift-backend-architect` agent skill. Agents read `skills/swift-backend-architect/SKILL.md` and its `references/`; people read `README.md`. It ships as a Claude Code plugin (`.claude-plugin/`) and through the skills CLI.
+This repository is the `swift-microservices-architect` agent skill. Agents read `skills/swift-microservices-architect/SKILL.md` and its `references/`; people read `README.md`. It ships as a Claude Code plugin (`.claude-plugin/`) and through the skills CLI.
 
 Every change to the skill ends with [the checks](#after-every-change), repeated until they pass.
 

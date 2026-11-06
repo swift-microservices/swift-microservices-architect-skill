@@ -1,9 +1,9 @@
 ---
-name: swift-backend-architect
+name: swift-microservices-architect
 description: Architects Swift server backends as gRPC microservices behind a Hummingbird API gateway, each service one Swift package with a Core target of domain models, repository protocols and typed-throws use cases, adapter targets for Postgres, gRPC, Temporal and Valkey, and an executable composition root on swift-configuration and swift-service-lifecycle, secured with mTLS, JWTs and Postgres row-level security through the swift-microservices libraries. Use when planning a backend or splitting it into services, designing a module map or Package.swift, writing use cases, repositories, gRPC services, Hummingbird routes and request contexts, Temporal workflows or a composition root, naming Swift server types and targets, adopting strict concurrency or FoundationEssentials, or reviewing a Swift backend's architecture or code style, even when the user doesn't name the architecture.
 ---
 
-# Swift Backend Architect
+# Swift Microservices Architect
 
 Decides how a Swift backend splits into services and modules, where code lives, the shapes of use cases, adapters and composition roots, and how the code reads.
 

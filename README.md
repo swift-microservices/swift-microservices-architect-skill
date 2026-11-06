@@ -1,8 +1,8 @@
-# Swift Backend Architect
+# Swift Microservices Architect
 
 An agent skill that designs and maintains Swift server backends: gRPC microservices behind a Hummingbird API gateway, each service one Swift package with a Core of typed-throws use cases and an adapter target per technology, composed and run by its executable.
 
-This README is for people. Agents read [SKILL.md](skills/swift-backend-architect/SKILL.md) and the files in [references/](skills/swift-backend-architect/references/). Agents changing the skill follow [CLAUDE.md](CLAUDE.md).
+This README is for people. Agents read [SKILL.md](skills/swift-microservices-architect/SKILL.md) and the files in [references/](skills/swift-microservices-architect/references/). Agents changing the skill follow [CLAUDE.md](CLAUDE.md).
 
 ## Why this architecture
 
@@ -39,9 +39,9 @@ Covered by other skills the agent loads alongside this one:
 ## Layout
 
 ```
-swift-backend-architect-skill/
+swift-microservices-architect-skill/
 ├── .claude-plugin/                  Claude Code plugin and marketplace manifests
-├── skills/swift-backend-architect/
+├── skills/swift-microservices-architect/
 │   ├── SKILL.md                     entry point: shape, rules, style, gotchas, workflows, which reference to read
 │   └── references/
 │       ├── system.md                services, contracts, how services talk, data ownership, shared packages, the plan
@@ -67,21 +67,21 @@ swift-backend-architect-skill/
 **Claude Code plugin**
 
 ```
-/plugin marketplace add the-braveknight/swift-backend-architect-skill
-/plugin install swift-backend-architect@swift-backend-architect-skill
+/plugin marketplace add swift-microservices/swift-microservices-architect-skill
+/plugin install swift-microservices-architect@swift-microservices-architect-skill
 ```
 
 **skills CLI**
 
 ```bash
-npx skills add https://github.com/the-braveknight/swift-backend-architect-skill --skill swift-backend-architect
+npx skills add https://github.com/swift-microservices/swift-microservices-architect-skill --skill swift-microservices-architect
 ```
 
 **Manual**
 
-Copy `skills/swift-backend-architect/` to `~/.claude/skills/swift-backend-architect/` (all your projects) or to `.claude/skills/swift-backend-architect/` in a repository (shared with the team).
+Copy `skills/swift-microservices-architect/` to `~/.claude/skills/swift-microservices-architect/` (all your projects) or to `.claude/skills/swift-microservices-architect/` in a repository (shared with the team).
 
-Claude Code loads the skill when a task matches its description, or on request with `/swift-backend-architect`.
+Claude Code loads the skill when a task matches its description, or on request with `/swift-microservices-architect`.
 
 ## License
 
