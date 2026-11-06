@@ -39,7 +39,7 @@ package enum LoanStatus: String, Equatable, Sendable {
 ```
 
 - A model is a `package struct` of `let` properties, `Equatable` and `Sendable`, with an explicit `package init`.
-- It's named for what it is in the service's language (`Loan`), never for a transport or a store (`LoanDTO`, `LoanRow`, `LoanResponse`).
+- It's named for what it is in the service's language ([naming](conventions.md#naming)).
 - Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text.
 - A rule more than one use case applies lives on a model or a policy, never in a use case for another to copy: `LoanPolicy.dueDate(borrowedAt:)`, a throwing `EmailAddress(_:)` that normalizes and validates.
 - Tunable rules are a policy value (`LoanPolicy`, with `maximumActiveLoans` and `loanPeriod`), passed to the use cases that apply it and read from configuration by the executable ([configuration](composition.md#configuration)).
@@ -64,10 +64,10 @@ package enum BorrowBookUseCaseError: Error, Equatable, Sendable {
 }
 ```
 
-- Each error is an enum, `Error, Equatable, Sendable`, without messages: a transport writes the message its caller reads.
+- Each error is an enum, `Error, Equatable, Sendable`, with no associated values unless the caller acts on them, and without messages: a transport writes the message its caller reads ([status codes](grpc.md#status-codes)).
 - A case names an outcome in the domain's terms (`bookNotFound`, `loanLimitReached`), never the failure that caused it (`queryFailed`).
 - `unknown` is the use case's last case: everything it can't name, logged where it's thrown.
-- A repository or port adapter raises only reasons it can detect, such as a constraint or a status code, and lets every other error propagate unchanged.
+- A repository or port adapter raises only reasons it can detect, such as a constraint or a status code, and lets every other error propagate unchanged. A cache's read is the one exception ([Valkey](persistence.md#valkey)).
 
 ## Repositories and commands
 
@@ -75,6 +75,7 @@ package enum BorrowBookUseCaseError: Error, Equatable, Sendable {
 package protocol LoanRepository: Sendable {
     func create(_ command: CreateLoanCommand) async throws -> Loan
     func loan(id: UUID) async throws -> Loan?
+    func loan(userID: UUID, idempotencyKey: String) async throws -> Loan?
     func activeLoans(userID: UUID) async throws -> [Loan]
     func loans(userID: UUID, page: Int, pageSize: Int) async throws -> Page<Loan>
     func loans(startingAfter: UUID?, pageSize: Int) async throws -> KeyedPage<Loan>
@@ -99,8 +100,8 @@ package struct CreateLoanCommand: Sendable {
 }
 ```
 
-- A repository is the persistence of one area, in Core's terms. Reads are noun phrases for what they return (`loan(id:)` returns an optional, `activeLoans(userID:)` an array); writes are verbs (`create(_:)`, `markReturned(id:)`).
-- A write that takes more than an id takes a command, `<Verb><Noun>Command`.
+- A repository is the persistence of one area, in Core's terms ([naming](conventions.md#naming)). A read of one row returns an optional (`loan(id:)`), of several an array (`activeLoans(userID:)`).
+- A write that takes more than an id takes a command.
 - Methods use untyped `async throws`: a driver throws errors the domain doesn't name, and `XRepositoryError` carries the few it does.
 - A scope builds the repository on its transaction's connection ([database roles](persistence.md#database-roles)); nothing keeps one past the transaction.
 
@@ -130,7 +131,6 @@ package struct KeyedPage<Item: Sendable>: Sendable {
 }
 ```
 
-When several services page, the two types may live in `<org>-core` instead, shared by every service.
 
 ## Ports
 
@@ -148,12 +148,14 @@ package enum CatalogClientError: Error, Equatable, Sendable {
 }
 ```
 
-| Port | Named | Implemented by |
+| Port | Example | Implemented in |
 |---|---|---|
-| Another service | `<Service>Client`, its error `<Service>ClientError` | `GRPC<Service>Client` in XGRPC |
-| A capability | A role noun: `NoticeSender`, `PasswordHasher`, `NoticeEventVerifier` | `<Provider><Role>` in `X<Provider>`: `ResendNoticeSender`, `BcryptPasswordHasher`, `ResendNoticeEventVerifier` |
-| The workflow engine | `XWorkflowClient` | `TemporalXWorkflowClient` in XTemporal |
-| A store outside the database | `XRepository`, like any repository | `Valkey<Name>Repository` in XValkey |
+| Another service | `CatalogClient` | XGRPC |
+| A capability | `NoticeSender`, `PasswordHasher`, `NoticeEventVerifier` | `X<Provider>` |
+| The workflow engine | `LoanWorkflowClient` | XTemporal |
+| A store outside the database | `ResetCodeRepository` | XValkey |
+
+Ports and their implementations are named as [naming](conventions.md#naming) gives them.
 
 - A port returns Core models in the consumer's words and uses untyped `async throws`.
 - A port isn't in a scope: it isn't part of the transaction, so the use case holds it directly.
@@ -241,6 +243,17 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
             }
 
             let loan = try await database.withTransaction { scope in
+                // A retry finds the loan its first attempt created, before the limit counts it.
+                let existingLoan = try await scope.loanRepository.loan(userID: subject.userID, idempotencyKey: input.idempotencyKey)
+                if let existingLoan, existingLoan.bookID == book.id {
+                    return existingLoan
+                }
+
+                guard existingLoan == nil else {
+                    logger.warning("Borrowing refused: idempotency key reused for another book")
+                    throw BorrowBookUseCaseError.idempotencyConflict
+                }
+
                 let activeLoans = try await scope.loanRepository.activeLoans(userID: subject.userID)
                 guard activeLoans.count < policy.maximumActiveLoans else {
                     logger.warning("Borrowing refused: loan limit reached")
@@ -294,14 +307,15 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 - A transaction holds a pooled connection until it ends, so it contains only database work. Remote calls go before it (the catalog lookup) or after it commits (the workflow start).
 - A decision that must be atomic with its write happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
 - A rule over rows that a concurrent transaction could change holds only with a lock or a constraint: `SELECT … FOR UPDATE`, or a unique or check constraint the repository maps to a case.
-- Work started after the commit is idempotent end to end: the row is keyed by the request's idempotency key and the workflow's id by the row, so a retry after a lost start finds the row and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
+- A state change is the repository's conditional write, never a read, a decision in Swift and a write ([state transitions](persistence.md#repositories-and-statements)); the use case maps its `nil` to its case (`alreadyReturned`).
+- Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
 
 ## Authorization
 
 - The caller reaches a use case as `subject: UserIdentity`. A use case never reads `OperationContext`.
-- **The caller's own.** The use case acts on `subject.userID`, never on an id from its input, and runs on the tenant database, where row-level security confines it as well ([row-level security](persistence.md#row-level-security)).
-- **Administrators.** The use case checks the role before anything else, then runs on the internal database. The handler's `requireAdministrator()` is an early gate; the use case's check is the rule.
+- **The caller's own.** The use case acts on `subject.userID`, never on a user id from its input, and runs on the tenant database, where row-level security confines it as well ([row-level security](persistence.md#row-level-security)).
+- **Administrators.** The use case checks the role before anything else, then runs on the internal database in a service with tenant tables. The handler's `requireAdministrator()` is an early gate; the use case's check is the rule.
 - **Internal callers.** The use case takes the user it acts for in its input; mTLS admitted the calling process.
 
 ```swift
