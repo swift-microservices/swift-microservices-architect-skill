@@ -417,4 +417,3 @@ let catalog = GRPCClient(transport: catalogTransport)
 - The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.
 - A client's host is the name in the peer certificate's DNS names. Its config sends keepalive pings on idle connections; its `ServiceConfig` waits for a ready connection, bounded by a deadline, so a transient reconnect doesn't fail a call and a down upstream still does.
 - One long-lived `GRPCClient` per upstream process, shared by every port and handler that calls it, run in the `ServiceGroup`. `GRPCServiceLifecycle` makes `GRPCServer` and `GRPCClient` services.
-- `GRPCHealthService` from grpc-swift-extras answers health checks when the platform probes gRPC health.
