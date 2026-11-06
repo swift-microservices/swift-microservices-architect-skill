@@ -94,7 +94,17 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
 
 3. When the change alters what an agent produces, compare it against the last commit. Check that commit out as the baseline (`git worktree add ../skill-baseline HEAD`), give two fresh agents the same two or three realistic tasks (plan a backend, add a service, add an operation, add a workflow, review a service), one with each skill, on the models the skill runs on. Fix whatever the edited skill still leaves them to guess, then remove the worktree.
 
-## Releases and commits
+## Pull requests and releases
 
-- The version appears three times, in `plugin.json` and twice in `marketplace.json` (the marketplace and its plugin entry); keep them equal and change them only when releasing.
-- Commit or push only when asked. A subject line names the guidance in the imperative, such as "Run tenant use cases on the service role", not the files touched.
+- Every change reaches `main` through a pull request from its own branch, carrying exactly one semver label; the PR label workflow refuses one without. The label says what the change does to agents following the skill:
+
+  | Label | When |
+  |---|---|
+  | `⚠️ semver/major` | A rule or shape changes so that code following the skill no longer conforms, such as a renamed target or a reversed rule |
+  | `🆕 semver/minor` | New guidance that contradicts none: a shape, a rule, a gotcha, a reference |
+  | `🔨 semver/patch` | A correction, clearer wording or a better example, with no rule changed |
+  | `semver/none` | Nothing the skill says changes: the README, this file, CI, scripts |
+
+- The Validate workflow runs `scripts/check_skill.py` on every pull request and push to `main`, with Claude Code installed so `claude plugin validate` runs too.
+- A release is the Auto Release workflow, run by hand on `main`. It takes the next version from the labels merged since the last release, writes it to the three version fields (`plugin.json`, and the marketplace and its plugin entry in `marketplace.json`), commits, tags and publishes the notes. A major release is cut by hand. Nothing else changes a version.
+- Commit, push or open a pull request only when asked. A subject line names the guidance in the imperative, such as "Run tenant use cases on the service role", not the files touched.
