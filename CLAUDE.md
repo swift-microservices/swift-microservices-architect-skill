@@ -80,7 +80,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
 
 1. `python3 .github/scripts/check_skill.py` passes. It checks:
    - the frontmatter's keys, `name` and `description`, against the limits above
-   - `SKILL.md`'s lines and estimated tokens, at 3.5 characters a token, against a budget of 4,500 that leaves headroom under the 5,000, and that its References table ends inside the first 5,000
+   - `SKILL.md`'s lines and estimated tokens, at 3.5 characters a token, and that its References table ends inside the first 5,000
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
    - every link and anchor
    - that the three descriptions and the three versions in `SKILL.md` and the manifests agree
