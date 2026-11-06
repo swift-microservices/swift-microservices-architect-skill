@@ -182,7 +182,7 @@ Copy the checklist for the task into the response and check items off as they're
 
 ```
 - [ ] The package's kind: public library, system library or service (delivery.md#package-kinds)
-- [ ] Its CI workflows, each `uses:` pinned to a release's commit; dependabot.yml; the secrets they read
+- [ ] Its CI workflows calling the kind's swift-microservices/ci pipeline at a release's commit; dependabot.yml; the secrets they read
 - [ ] A library: the semver labels and .github/release.yml; a service: its Containerfile
 - [ ] swift build and swift test with CI's flags; fix and repeat until both pass
 ```
@@ -216,7 +216,7 @@ Read the reference for the part at hand:
 | [references/security.md](references/security.md) | The trust model, mTLS and certificate reloading, user tokens, authorization layers, secrets |
 | [references/style.md](references/style.md) | Readability, errors, concurrency, imports and access control, Foundation, types, documentation |
 | [references/testing.md](references/testing.md) | Test targets per module, what each tests, mocks, the shared testing product |
-| [references/delivery.md](references/delivery.md) | CI/CD: each package kind's CI workflows, reusable workflows, test flags, releases, images, deployment, Dependabot |
+| [references/delivery.md](references/delivery.md) | CI/CD: each package kind's CI workflows over swift-microservices/ci's pipelines, test flags, releases, images, deployment, Dependabot |
 | [references/conventions.md](references/conventions.md) | Naming a package, target, type, file, key or folder |
 
 ## Related skills
