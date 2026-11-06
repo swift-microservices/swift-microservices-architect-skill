@@ -4,7 +4,7 @@ Tests follow the module map: each target is tested on its own, over mocks of the
 
 ## Test targets
 
-Each module has a test target that depends on the module and the mocks it needs, and nothing else:
+Each module has a test target. It depends on the module, the modules whose types its tests name (`XCore` for an adapter's), and the mocks it needs, never another adapter or the executable:
 
 ```swift
 .testTarget(
@@ -25,7 +25,7 @@ Each module has a test target that depends on the module and the mocks it needs,
 | `XPostgresTests` | Statements, repositories, row-level security as each role, migrations | A real Postgres, the one dependency a mock can't stand in for |
 | `GatewayHTTPTests` | Routes in their tiers, conversions, problem details | Mock upstream clients and `MockAuthenticator` |
 
-- A test target never depends on a sibling module or the executable: a handler's test doesn't build a use case, and a use case's test never reaches Postgres.
+- A test runs only its module's code, over mocks of the rest: a handler's test doesn't build a use case, and a use case's test never reaches Postgres.
 - Other adapter targets (`XValkeyTests`, `X<Provider>Tests`) test their own mapping the same way, and the executable's readers and defaults, when tested, are in `XTests`.
 
 ```

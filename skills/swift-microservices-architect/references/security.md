@@ -185,5 +185,5 @@ A provider's webhook arrives with no token: its signature over the body is its p
 - Its RPC is in `XService`'s anyone group ([contracts](grpc.md#contracts-in-the-protos-package)). The gateway forwards the body unparsed with the headers the provider signs with ([controllers](gateway.md#controllers)), since the signature covers the exact bytes.
 - The use case verifies before anything else, through a port its provider target implements (`NoticeEventVerifier`, `ResendNoticeEventVerifier`), with the signing secret read as a secret. A signature or timestamp the verifier refuses is the use case's `signatureRejected`, answered `unauthenticated`; checking the timestamp keeps a captured event from being replayed.
 - It runs on the internal database: no caller is bound, so a tenant policy would hide every row ([database roles](persistence.md#database-roles)).
-- Providers retry, so an event acts once: it's keyed by the provider's event id, and a repeat answers success without acting again.
+- Providers retry, so an event acts once: the transaction that acts also records the provider's event id under a unique key, and a repeat that finds it answers success without acting again.
 - It answers once the event is recorded. Work that takes longer, or calls out, is a workflow the use case starts.
