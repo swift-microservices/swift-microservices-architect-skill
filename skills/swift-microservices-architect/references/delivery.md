@@ -108,7 +108,7 @@ jobs:
 
 ## A service's CI workflows
 
-Loans' `ci.yml`. `service.yml` ends at a published image; the `staging` job deploys it through the Dokploy adapter, and on a pull request only checks that the token reads every application:
+Loans' `ci.yml`. `service.yml` ends at a published image; the `staging` job deploys each push to `main` through the Dokploy adapter:
 
 ```yaml
 name: CI
@@ -143,6 +143,7 @@ jobs:
   staging:
     name: Staging
     needs: [ci]
+    if: github.event_name == 'push'
     permissions:
       contents: read
       actions: read
@@ -152,7 +153,6 @@ jobs:
       environment: staging
       image_repository: ghcr.io/bookshelf/bookshelf-loans
       application_ids: '["<loans serve>", "<loans worker>"]'
-      check_only: ${{ github.event_name == 'pull_request' }}
     secrets:
       DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
       DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
@@ -162,7 +162,7 @@ jobs:
 - `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls `swift-microservices/ci`'s `deploy_dokploy.yml` with `environment: production`, that `commit`, the `image_repository`, the production `application_ids`, and `DOKPLOY_URL` and `DOKPLOY_TOKEN`. It deploys only a commit that staging ran.
 - `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package, which keeps its 30 newest versions. Deploying an older commit is the rollback, nothing is rebuilt, and it reaches only a commit whose image cleanup kept; its schema is the current one ([migrations](persistence.md#migrations)).
 - An image is published once, as `:<commit-sha>`, and deployed by its digest. Each environment runs it as one Dokploy application per process: `loans` (serve) and `loans worker run` ([commands](composition.md#commands)). The application that runs `serve --migrate-database` is listed first.
-- Secrets: `PACKAGES_TOKEN` ([tests](#tests)), and `DOKPLOY_URL` with `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy the applications, each also a Dependabot secret, since a Dependabot pull request runs the staging check.
+- Secrets: `PACKAGES_TOKEN` ([tests](#tests)), and `DOKPLOY_URL` with `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy the applications.
 
 ## The Containerfile
 
