@@ -181,13 +181,13 @@ let package = Package(
 
 Every target in every package, services and libraries, builds with the same settings:
 
-| Setting | Proposal | What it changes |
-|---|---|---|
-| `swiftLanguageModes: [.v6]` | Swift 6 language mode | Complete concurrency checking: a possible data race is a compile error |
-| `ExistentialAny` | [SE-0335](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0335-existential-any.md) | An existential is spelled `any P`, so a boxed value is visible where it's declared |
-| `MemberImportVisibility` | [SE-0444](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0444-member-import-visibility.md) | A file sees a module's extension members only when it imports that module, so dependencies stay declared |
-| `InternalImportsByDefault` | [SE-0409](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0409-access-level-on-imports.md) | Imports are internal; a module whose types appear in a `package` or `public` signature is imported `package` or `public` |
-| `NonisolatedNonsendingByDefault` | [SE-0461](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0461-async-function-isolation.md) | A nonisolated `async` function runs on its caller's actor; `@concurrent` asks for the concurrent executor |
+| Setting | Proposal |
+|---|---|
+| `swiftLanguageModes: [.v6]` | Swift 6 language mode, with complete concurrency checking |
+| `ExistentialAny` | [SE-0335](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0335-existential-any.md) |
+| `MemberImportVisibility` | [SE-0444](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0444-member-import-visibility.md) |
+| `InternalImportsByDefault` | [SE-0409](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0409-access-level-on-imports.md) |
+| `NonisolatedNonsendingByDefault` | [SE-0461](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0461-async-function-isolation.md) |
 
 The code also relies on `package` access ([SE-0386](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0386-package-access-modifier.md)), typed throws ([SE-0413](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0413-typed-throws.md)) and package traits ([SE-0450](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0450-swiftpm-package-traits.md)). A server package never sets `.defaultIsolation(MainActor.self)` ([SE-0466](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0466-control-default-actor-isolation.md)). How the code uses each: [style](style.md).
 

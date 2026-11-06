@@ -18,7 +18,7 @@ The public HTTP API: a Hummingbird application that verifies the caller, chooses
 
 - The only process clients reach. Every service listens privately, for gRPC over mTLS.
 - It owns the HTTP contract, `openapi.yaml`, and its conversion onto the services' `XService` contracts.
-- It owns no tables, no business rules and no use cases. It verifies a token only to choose a tier and to refuse early; each service verifies the same token again and authorizes in its use cases.
+- It owns no tables, no business rules and no use cases. It verifies a token only to choose a tier and to refuse early; each service verifies it again ([user tokens](security.md#user-tokens)).
 - It never routes to an `XInternalService`.
 
 ## The package
@@ -361,17 +361,7 @@ package struct Problem: HTTPResponseError {
 
 ## Upstream clients
 
-The executable builds one `GRPCClient` per upstream service over mTLS, its transport built like any client's ([transports](grpc.md#transports)), with `BearerPropagationInterceptor` scoped to the descriptors the gateway calls:
-
-```swift
-let propagation = BearerPropagationInterceptor<UserIdentity>()
-let loans = GRPCClient(
-    transport: loansTransport,
-    interceptorPipeline: [
-        .apply(propagation, to: .services([Bookshelf_Loans_V1_LoanService.descriptor]))
-    ]
-)
-```
+The executable builds one `GRPCClient` per upstream service over mTLS, its transport built like any client's ([transports](grpc.md#transports)), with `BearerPropagationInterceptor` applied to the descriptors the gateway calls ([the gateway's root](composition.md#the-gateways-root)).
 
 - Propagation presents the caller's original token, as `BearerAuthenticationMiddleware` bound it, when a route identified a caller; a public route's call goes upstream anonymously.
 - A service with several proto services behind one process gets one client, with every descriptor the gateway calls in its propagation list.
@@ -380,5 +370,4 @@ let loans = GRPCClient(
 ## The edge
 
 - Clients reach the gateway over TLS, terminated by the edge in front of it (a CDN or reverse proxy, which may itself re-encrypt to the proxy beside the gateway). The gateway listens for plain HTTP on its private interface; it never configures TLS for clients.
-- CORS is the gateway's, in `CORSMiddleware` on the router, for the origins, headers and methods browsers use.
-- Root middleware, in order: CORS, `ErrorMiddleware`, `LogRequestsMiddleware`; then `addRoutes(to: router.group("v1"))` ([the gateway's root](composition.md#the-gateways-root)).
+- CORS is the gateway's, in `CORSMiddleware` first on the router, for the origins, headers and methods browsers use ([the gateway's root](composition.md#the-gateways-root)).

@@ -8,7 +8,6 @@ The executable target: its commands, the composition root each command runs, con
 - Configuration
 - Logging
 - Lifecycle
-- Why ServiceLifecycle
 - The worker's root
 - The gateway's root
 
@@ -201,7 +200,6 @@ struct Serve: AsyncParsableCommand {
 - Infrastructure builds what talks to the outside: database clients per role, certificate reloaders, the authenticator, upstream clients, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
 - Each use case is a `let` named like the property that holds it, on the database its audience requires; the service then takes the names. Every value in a root is built this way ([build, then call](style.md#build-then-call)).
-- `Database/Migrations.swift` lists the migrations in applied order and applies them ([migrations](persistence.md#migrations)).
 
 ## Configuration
 
@@ -253,21 +251,13 @@ extension InMemoryProvider {
 
 ## Lifecycle
 
+One `ServiceGroup` runs every long-lived component (pools, servers, certificate reloaders, workers, clients) as a child task of the command's task. On `SIGTERM`, which container platforms send before `SIGKILL`, it shuts them down in reverse order, each draining before the next; when one throws or returns, it cancels the rest and the process exits non-zero, rather than answering requests with its database client gone. So a root lists its components and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
+
 - Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `TemporalClient`, `TemporalWorker`.
-- Order is dependency order: log processors, database clients, certificate reloaders, upstream and store clients, the Temporal client, and the server, application or worker last. Graceful shutdown runs in reverse, so the server stops accepting and drains before the clients it uses close.
+- Order is dependency order: log processors, database clients, certificate reloaders, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
 - `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. `try await serviceGroup.run()` is the root's last line.
-- Migrations run before the group, over `PostgresClient.withClient`, which runs its client only as long as the migrations take.
 - A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
 - A long-running component of the service's own is a `Service` whose `run()` returns on graceful shutdown: its loop iterates `sequence.cancelOnGracefulShutdown()`, or wraps its work in `withGracefulShutdownHandler`.
-
-## Why ServiceLifecycle
-
-A server process holds several components that each need a task running for their whole life: connection pools keep and replace connections, servers accept, certificate reloaders poll the disk, workers poll for tasks, clients keep their channels.
-
-- **Structure.** `ServiceGroup` runs them all as child tasks of the command's task. Nothing outlives the process's task, and no component starts a detached task of its own to keep itself alive.
-- **Graceful shutdown.** Container platforms send `SIGTERM`, then `SIGKILL` after a grace period. On the signal the group shuts components down one by one in reverse order, waiting for each: in-flight calls finish, then pools and clients close. Without it, `SIGTERM` cuts requests mid-flight.
-- **Failure.** When any component throws or returns, the group cancels the rest and `run()` throws, so the process exits non-zero and the platform restarts it, instead of a half-alive process whose server answers while its database client is gone.
-- **One shape for every library.** Libraries ship their long-running types as `Service`s, so a root composes them by listing them: no shutdown calls, no `defer` blocks, no ordering code of its own.
 
 ## The worker's root
 
