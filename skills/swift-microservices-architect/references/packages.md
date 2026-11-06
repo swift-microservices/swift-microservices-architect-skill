@@ -175,7 +175,7 @@ let package = Package(
 - `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's notes.
 - Every target lists each module it imports, product by product; `MemberImportVisibility` makes a missing one a build error.
 - Each `from:` is a lower bound, set to the release whose API the code uses ([choosing versions](stack.md#choosing-versions)).
-- A provider target (`LoansResend`) and test targets follow the same form. A target without generated code may add `.treatAllWarnings(as: .error)` ([SE-0480](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0480-swiftpm-warning-control.md)); a target with a generator plugin keeps warnings as warnings, since generated code can warn.
+- A provider target (`LoansResend`) and test targets follow the same form. A target without generated code may add `.treatAllWarnings(as: .error)` ([SE-0480](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0480-swiftpm-warning-control.md)); a target with a generator plugin keeps warnings as warnings, since a generator update can warn. CI's `-warnings-as-errors` still reports such a warning in the contracts package ([delivery](delivery.md#tests)), and a consumer never sees it, since SwiftPM silences a dependency's warnings.
 
 ## Swift settings
 
@@ -318,7 +318,7 @@ with `grpc-swift-proto-generator-config.json`:
 ```
 
 - One library product per target; swift-protobuf declared with `traits: []`.
-- The plugin generates at build time with `protoc` from the build machine's `PATH` (or `PROTOC_PATH`), so generated files are never committed or edited.
+- The plugin generates at build time with the `protoc` swift-protobuf builds from source (`PROTOC_PATH` overrides it), so a build machine installs nothing, and generated files are never committed or edited.
 - The package holds the `.proto` files and nothing else in Swift: conversions and validation belong to each service's `Protobuf/` folders.
 
 ## The gateway package
@@ -331,9 +331,9 @@ SPM enforces what each target declares, but not what a declaration should be. Ru
 
 - Core imports no adapter technology: `grep -rlE '^(package |public )?import (GRPC[A-Za-z]*|Hummingbird[A-Za-z]*|PostgresNIO|PersistencePostgres|Temporal|Valkey|Configuration|ServiceLifecycle|SwiftProtobuf|AsyncHTTPClient)$' Sources/*Core`
 - Adapters import no sibling adapter. This lists the service's own modules each target imports; an adapter lists only `LoansCore`, and XGRPC its contracts too: `for t in Sources/*/; do echo "$t: $(grep -rhoE '^(package |public )?import Loans[A-Za-z]+' "$t" | sort -u | tr '\n' ' ')"; done`
-- Generated contract types stay in XGRPC and the executable: `grep -rlE 'Bookshelf_[A-Za-z]+_V[0-9]+_' Sources | grep -vE '/Sources/(LoansGRPC|Loans)/'`
-- Only the executable reads configuration: `grep -rlE '^(package )?import Configuration$' Sources | grep -v '/Sources/Loans/'`
-- Every Foundation import is the conditional one; this lists files importing Foundation without it: `grep -rlE '^(package |public )?import Foundation$' Sources | xargs grep -L 'canImport(FoundationEssentials)'`
+- Generated contract types stay in XGRPC and the executable: `grep -rlE 'Bookshelf_[A-Za-z]+_V[0-9]+_' Sources | grep -vE '^Sources/(LoansGRPC|Loans)/'`
+- Only the executable reads configuration: `grep -rlE '^(package )?import Configuration$' Sources | grep -v '^Sources/Loans/'`
+- Every Foundation import is the conditional one; this lists files importing Foundation without it: `grep -rlE '^(package |public )?import Foundation$' Sources | xargs -r grep -L 'canImport(FoundationEssentials)'`
 - No unchecked concurrency or unstructured tasks: `grep -rnE '@unchecked Sendable|nonisolated\(unsafe\)|@preconcurrency|Task(\.detached)? *\{' Sources`
 - Every use case protocol has typed throws: `grep -rL 'throws(' Sources/*Core/*/UseCases/*/*UseCaseProtocol.swift`
 - No package defaults to the main actor: `grep -n 'defaultIsolation' Package.swift`

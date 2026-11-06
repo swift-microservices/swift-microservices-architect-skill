@@ -1,6 +1,6 @@
 ---
 name: swift-microservices-architect
-description: Architects Swift server backends as gRPC microservices behind a Hummingbird API gateway, each service one Swift package with a Core target of domain models, repository protocols and typed-throws use cases, adapter targets for Postgres, gRPC, Temporal and Valkey, and an executable composition root on swift-configuration and swift-service-lifecycle, secured with mTLS, JWTs and Postgres row-level security through the swift-microservices libraries. Use when planning a backend or splitting it into services, designing a module map or Package.swift, writing use cases, repositories, gRPC services, Hummingbird routes and request contexts, Temporal workflows or a composition root, naming Swift server types and targets, adopting strict concurrency or FoundationEssentials, or reviewing a Swift backend's architecture or code style, even when the user doesn't name the architecture.
+description: Architects Swift server backends as gRPC microservices behind a Hummingbird API gateway, each service one Swift package with a Core target of domain models, repository protocols and typed-throws use cases, adapter targets for Postgres, gRPC, Temporal and Valkey, and an executable composition root on swift-configuration and swift-service-lifecycle, secured with mTLS, JWTs and Postgres row-level security through the swift-microservices libraries. Use when planning a backend or splitting it into services, designing a module map or Package.swift, writing use cases, repositories, gRPC services, Hummingbird routes and request contexts, Temporal workflows or a composition root, naming Swift server types and targets, adopting strict concurrency or FoundationEssentials, setting up a package's CI/CD on GitHub Actions, or reviewing a Swift backend's architecture or code style, even when the user doesn't name the architecture.
 ---
 
 # Swift Microservices Architect
@@ -152,6 +152,7 @@ Copy the checklist for the task into the response and check items off as they're
 - [ ] X: commands, InMemoryProvider defaults, Migrations, Serve, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module, over mocks (testing.md)
+- [ ] Its workflows, Containerfile and Dependabot as a service (delivery.md)
 - [ ] swift build and swift test; fix and repeat until both pass without warnings
 ```
 
@@ -177,6 +178,16 @@ Copy the checklist for the task into the response and check items off as they're
 - [ ] Executable: the Temporal client in Serve; the worker group and its Run root
 - [ ] Tests: the workflow on the time-skipping server, its activities over mocks
 - [ ] swift build and swift test; fix and repeat until both pass without warnings
+```
+
+**Set up CI/CD**
+
+```
+- [ ] The package's kind: public library, system library or service (delivery.md#package-kinds)
+- [ ] The kind's workflows, each `uses:` pinned to its latest release's commit
+- [ ] A library: the semver labels and .github/release.yml; a service: its Containerfile
+- [ ] dependabot.yml for the kind; the secrets its workflows read
+- [ ] actionlint passes; open a pull request and fix until every check passes
 ```
 
 **Review a backend**
@@ -208,6 +219,7 @@ Read the reference for the part at hand:
 | [references/security.md](references/security.md) | The trust model, mTLS and certificate reloading, user tokens, authorization layers, secrets |
 | [references/style.md](references/style.md) | Readability, errors, concurrency, imports and access control, Foundation, types, documentation |
 | [references/testing.md](references/testing.md) | Test targets per module, what each tests, mocks, the shared testing product |
+| [references/delivery.md](references/delivery.md) | CI/CD: each package kind's GitHub Actions workflows, reusable workflows, test flags, releases, images, deployment, Dependabot |
 | [references/conventions.md](references/conventions.md) | Naming a package, target, type, file, key or folder |
 
 ## Related skills

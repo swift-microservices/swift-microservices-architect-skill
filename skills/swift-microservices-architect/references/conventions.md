@@ -14,6 +14,8 @@
 | Service | A noun for the capability, clashing with no module in the package graph ([naming a service](system.md#naming-a-service)) | `Identity`, `Catalog`, `Loans`; not `Authentication` |
 | Service package and repository | `<org>-<service>` | `bookshelf-loans` |
 | Shared packages | `<org>-core`, `<org>-protos`, `<org>-gateway` | `bookshelf-core` |
+| Package kind | Public library, system library or service; workflow files and jobs as [delivery](delivery.md#workflows) names them | `bookshelf-core` is a system library |
+| Service image | `ghcr.io/<org>/<org>-<x>`, tagged with the full commit SHA | `ghcr.io/bookshelf/bookshelf-loans:<commit-sha>` |
 | Service targets | `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`, `XHTTP`; the executable `X`; tests `XCoreTests`, `XGRPCTests`, `XTemporalTests` | `LoansTemporal`, `LoansResend` |
 | Executable product and command | `x`; subcommands `serve`, `worker run` | `loans serve --migrate-database` |
 | Org core products | `<Org>Authentication`, `<Org>Persistence`, `<Org>Transport`, `<Org>Testing` | `BookshelfTransport` |
