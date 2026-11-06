@@ -216,14 +216,17 @@ bookshelf-loans/
     │   ├── Loans/
     │   │   ├── Loan.swift, LoanStatus.swift, LoanPolicy.swift
     │   │   ├── Repository/         LoanRepository.swift, LoanRepositoryError.swift, Commands/CreateLoanCommand.swift
-    │   │   ├── UseCases/           BorrowBook/, ReturnBook/, ListLoans/, ListAllLoans/, MarkLoanOverdue/
+    │   │   ├── UseCases/           BorrowBook/, ReturnBook/, ListLoans/, ListAllLoans/, MarkLoanOverdue/, ReceiveNoticeEvent/
     │   │   └── Workflow/           LoanWorkflowClient.swift
+    │   ├── Paging/                 Page.swift, KeyedPage.swift
     │   └── Ports/                  Book.swift, CatalogClient.swift, CatalogClientError.swift,
-    │                               Member.swift, IdentityClient.swift, OverdueNotice.swift, NoticeSender.swift
+    │                               Member.swift, IdentityClient.swift, OverdueNotice.swift, NoticeSender.swift,
+    │                               NoticeEvent.swift, NoticeEventVerifier.swift
     ├── LoansPostgres/
     │   ├── Scopes/                 PostgresLoansScope.swift, PostgresLoansInternalScope.swift, PostgresLoansWorkerScope.swift
     │   ├── Repositories/Loan/      PostgresLoanRepository.swift
-    │   ├── Statements/Loan/        CreateLoanStatement.swift, ActiveLoansByUserIDStatement.swift, Loan+PostgresRow.swift
+    │   ├── Statements/Loan/        CreateLoanStatement.swift, ActiveLoansByUserIDStatement.swift, LoansByUserIDStatement.swift,
+    │   │                       CountLoansByUserIDStatement.swift, Loan+PostgresRow.swift
     │   ├── Extensions/             LoanStatus+PostgresCodable.swift
     │   └── Migrations/             Role/CreateServiceRole.swift, …, Loan/CreateLoansTable.swift, Loan/CreateLoansRLSPolicy.swift
     ├── LoansGRPC/
@@ -232,7 +235,7 @@ bookshelf-loans/
     ├── LoansTemporal/
     │   ├── Loan/                   LoanWorkflow.swift, LoanActivities.swift, TemporalLoanWorkflowClient.swift
     │   └── ActivityOptions+Loans.swift
-    ├── LoansResend/                ResendNoticeSender.swift
+    ├── LoansResend/                ResendNoticeSender.swift, ResendNoticeEventVerifier.swift
     └── Loans/
         ├── Loans.swift             the @main command
         ├── Configuration/          InMemoryProvider+ApplicationDefaults.swift, LoanPolicy+ConfigReader.swift

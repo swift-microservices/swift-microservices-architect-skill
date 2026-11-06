@@ -20,6 +20,8 @@
 | Contract target, proto package and file | `XProtos`; `<org>.<x>.v1`; `<org>/<x>/v1/<x>.proto` | `LoansProtos`, `bookshelf.loans.v1` |
 | Proto services | `<Resource>Service` and `<Resource>InternalService`; the service's name when its RPCs aren't about one resource | `LoanService`, `BookInternalService`, `IdentityService` |
 | RPCs | Standard verbs, or a domain verb and noun; an administrators' list of everyone's is `ListAll…` | `GetBook`, `ListLoans`, `ListAllLoans`, `BorrowBook` |
+| Paging | Requests carry `page_size` and `page`, or `page_token`; responses `page_info` (`page`, `page_size`, `total_count`, `total_pages`) or `next_page_token`. Core has `Page<Item>` and `KeyedPage<Item>` (`nextCursor`) and reads `page:pageSize:` or `startingAfter:pageSize:`. Over HTTP the same names in camelCase | `loans(userID:page:pageSize:)`, `loans(startingAfter:pageSize:)`, `LoansByUserIDStatement`, `CountLoansByUserIDStatement` |
+| Webhooks | An anyone RPC `Receive<Event>`; the route `webhooks/<provider>`; `<Provider>WebhookController`; the port `<Event>Verifier` | `ReceiveNoticeEvent`, `ResendWebhookController`, `NoticeEventVerifier` |
 | Domain model | A plain noun in the service's language; never `DTO`, `Row`, `Entity`, `Response` or `Detail` | `Loan`, `LoanStatus` |
 | Another service's data, as this service knows it | A noun in this service's words, in `Ports/` | `Book`, `Member` |
 | Tunable rules | `XPolicy` | `LoanPolicy` |
@@ -54,7 +56,7 @@
 
 | Target | Folders |
 |---|---|
-| XCore | A folder per area (`Loans/`) with its models and policy, `Repository/` (and `Repository/Commands/`), `UseCases/<Name>/`, `Workflow/`; `Ports/` for what the service needs from other systems, with the models they return |
+| XCore | A folder per area (`Loans/`) with its models and policy, `Repository/` (and `Repository/Commands/`), `UseCases/<Name>/`, `Workflow/`; `Ports/` for what the service needs from other systems, with the models they return; `Paging/` for the page types |
 | XPostgres | `Scopes/`, `Repositories/<Area>/`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/`, `Migrations/Role/` |
 | XGRPC | A folder per area with its proto services and `Protobuf/`; `Clients/` with `Clients/Protobuf/` |
 | XTemporal | A folder per process with its workflow, activities and Temporal client; `ActivityOptions+X.swift` |

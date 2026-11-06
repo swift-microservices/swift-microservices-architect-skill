@@ -22,8 +22,8 @@ This README is for people. Agents read [SKILL.md](skills/swift-microservices-arc
 - The swift-microservices libraries (`OperationContext`, `Authentication` with its JWT, gRPC and Hummingbird adapters, `Persistence` and `PersistencePostgres`) and the server stack around them.
 - The application layer: domain models, errors, repositories, ports, use cases with typed throws, scope protocols, transactions, authorization and logging.
 - Persistence: Postgres scopes per database role, row-level security bound from the caller's token, statements, migrations, other stores, and Valkey for short-lived values.
-- gRPC: contracts, `XService` and `XInternalService`, handlers, conversions, status codes, interceptors, clients for ports and transports.
-- The gateway: Hummingbird request contexts in tiers, the router, controllers, problem details, and upstream clients that forward the caller's token.
+- gRPC: contracts with paged lists, `XService` and `XInternalService`, handlers, conversions, status codes, interceptors, clients for ports and transports.
+- The gateway: Hummingbird request contexts in tiers, the router, controllers, provider webhooks, problem details, and upstream clients that forward the caller's token.
 - Temporal: starting workflows from use cases, deterministic workflows, activities over use cases and ports, options, versioning and the worker.
 - Composition: commands, configuration readers and defaults, logging, the `ServiceGroup` and why it matters.
 - Security: the trust model, mTLS with certificate reloading, user tokens, authorization layers and secrets.

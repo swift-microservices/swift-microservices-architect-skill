@@ -52,6 +52,8 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
   - a use case's five files and body: `BorrowBook`; an administrators' use case: `ListAllLoans`
   - a workflow, its activities and options: `LoanWorkflow`, `LoanActivities`
   - the gateway: `BookshelfAPI`, `LoanController`, the request contexts, `ErrorMiddleware`
+  - an internal service: Catalog's `BookInternalService`; paged lists: `ListAllLoans` by key, `ListLoans` by page number
+  - a provider's webhook: Resend's notice events to Loans, `ResendWebhookController`, `NoticeEventVerifier`
 
   Reuse these, and add an example only when none of them can show a new idea. Never bring in names, services, endpoints or details from the systems the skill is used on; write the rule they illustrate instead.
 - Code shows a shape the skill prescribes: a use case's files and its body, a handler, a scope, a workflow's `run`, a composition root's sections, a reader. It isn't an implementation to copy: no helper functions, no test code, no internals of a library, and a method body appears only where the body is the shape. Elide the rest with `…`.
