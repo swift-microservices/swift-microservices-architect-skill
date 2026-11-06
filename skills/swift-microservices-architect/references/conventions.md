@@ -7,18 +7,18 @@
 
 ## Naming
 
-`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); `<Org>` and `<org>` are the organization's (`Bookshelf`, `bookshelf`). Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/): they read as English at the point of use, name things by role, and keep an initialism in one case (`userID`, `GetLoanByIDUseCase`, `baseURL`, `XGRPC`).
+`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); in a type's name, `X` is what the type is named for, the operation, resource or process the table gives (`BorrowBookUseCase`, `LoanRepository`); `<Org>` and `<org>` are the organization's (`Bookshelf`, `bookshelf`). Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/): they read as English at the point of use, name things by role, and keep an initialism in one case (`userID`, `GetLoanByIDUseCase`, `baseURL`, `XGRPC`).
 
 | Kind | Name | Example |
 |---|---|---|
 | Service | A noun for the capability, clashing with no module in the package graph ([naming a service](system.md#naming-a-service)) | `Identity`, `Catalog`, `Loans`; not `Authentication` |
-| Service package and repository | `<org>-<service>`; the gateway's `<org>-gateway` | `bookshelf-loans`, `bookshelf-gateway` |
+| Service package and repository | `<org>-<x>`; the gateway's `<org>-gateway` | `bookshelf-loans`, `bookshelf-gateway` |
 | Shared packages | `<org>-core`, `<org>-protos` | `bookshelf-core` |
 | Package kind | Public library, system library or service; CI workflow files and jobs as [delivery](delivery.md#ci-workflows) names them | `bookshelf-core` is a system library |
 | Service image | `ghcr.io/<org>/<org>-<x>` | `ghcr.io/bookshelf/bookshelf-loans` |
 | Service targets | `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`, `XHTTP`; the executable `X`; tests `XCoreTests`, `XGRPCTests`, `XTemporalTests` | `LoansTemporal`, `LoansResend` |
 | Executable product and command | `x`; subcommands `serve`, `worker run` | `loans serve --migrate-database` |
-| Org core products | `<Org>Authentication`, `<Org>Persistence`, `<Org>Transport`, `<Org>Testing` | `BookshelfTransport` |
+| Org core products | `<Org>Authentication`, `<Org>Persistence`, `<Org>Transport`, `<Org>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |
 | Contract target, proto package and file | `XProtos`; `<org>.<x>.v1`; `<org>/<x>/v1/<x>.proto` | `LoansProtos`, `bookshelf.loans.v1` |
 | Proto services | `<Resource>Service` and `<Resource>InternalService`; the service's name when its RPCs aren't about one resource | `LoanService`, `BookInternalService`, `IdentityService` |
 | RPCs | Standard verbs, or a domain verb and noun; an administrators' list of everyone's is `ListAll…` | `GetBook`, `ListLoans`, `ListAllLoans`, `BorrowBook` |
@@ -39,12 +39,14 @@
 | Workflow, activity container | `<Process>Workflow`, `<Process>Activities`; activities are verbs, inputs `<Activity>Input` | `LoanWorkflow`, `LoanActivities.markOverdue(input:)`, `MarkOverdueInput` |
 | Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `markReturned(input:)`, `currentState(input:)` |
 | Workflow id, task queue | `<x>-<workflow>-<id>`; `x` | `loans-loan-0193…`; `loans` |
-| Named activity options | The kind of step | `ActivityOptions.database`, `.notification` |
+| Named activity options | The kind of step, never where it's used | `ActivityOptions.database`, `.notification` |
 | Postgres scopes | `Postgres<X>Scope`, `Postgres<X>InternalScope`, `Postgres<X>WorkerScope` | `PostgresLoansScope` |
 | Mock | `Mock` + the protocol's name, without `Protocol` | `MockCatalogClient`, `MockBorrowBookUseCase`, `MockDatabase` |
 | Statement | What it does + `Statement` | `CreateLoanStatement`, `ActiveLoansByUserIDStatement` |
 | Migration | What it changes | `CreateLoansTable`, `CreateLoansRLSPolicy`, `CreateServiceRole` |
 | Database, roles, policies | `<org>_<x>`; `<x>_service`, `<x>_internal`, `<x>_worker`; `tenant_isolation`, `<role>_all` | `bookshelf_loans`, `loans_service`, `internal_all` |
+| Columns | The snake_case of the Swift property; a stored date is a noun, never `…At` | `creation_date` for `creationDate`, `due_date`; not `created_at` |
+| Indexes unique while active | `<table>_active_<columns>_key` | `loans_active_user_id_book_id_key` |
 | Tenant setting | `app.caller_user_id` | |
 | gRPC service types | The proto service's name | `LoanService`, `BookInternalService` |
 | Gateway | Targets `GatewayHTTP`, `Gateway`; router builder `<Org>API`; `XController` per resource; `IdentityRequestContext`, `AdminRequestContext` | `BookshelfAPI`, `LoanController` |

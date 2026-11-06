@@ -46,7 +46,6 @@ let rows = try await connection.execute(statement, logger: logger)
 - The `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
 - Each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
 - Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` has no contextual type and is spelled in full: `throw BorrowBookUseCaseError.bookNotFound`.
-- An error enum has no associated values unless the caller acts on them, and no messages: a transport writes the message ([status codes](grpc.md#status-codes)).
 - `String(reflecting: error)` goes into the log line of an unknown error, never into a response.
 - `CancellationError` propagates; nothing catches it to carry on.
 
@@ -55,7 +54,7 @@ let rows = try await connection.execute(statement, logger: logger)
 Every package builds with [the Swift settings](packages.md#swift-settings).
 
 - Everything that crosses a boundary is `Sendable`: models, inputs, commands, errors, protocols. Structs and enums by default; an actor only for mutable state shared across tasks; `Mutex` from `Synchronization` for a small piece of state touched synchronously.
-- No `@unchecked Sendable`, `nonisolated(unsafe)` or `@preconcurrency` in owned code. When a dependency needs one, it appears once, in the adapter that wraps the dependency, with the reason beside it.
+- No `@unchecked Sendable`, `nonisolated(unsafe)` or `@preconcurrency` in owned code. When a dependency needs one, it appears once, in the adapter that wraps the dependency, with the reason on the line above.
 - No unstructured tasks in a service. Long-running work is a `Service` in the `ServiceGroup`; work that must outlive a request is a [workflow](workflows.md#when-work-is-a-workflow); concurrency inside a request is `async let` or a task group, which end with the request.
 - With `NonisolatedNonsendingByDefault` an `async` function runs on its caller's isolation, and so does a plain `async` closure such as a transaction's. `@concurrent` marks work that must leave its caller's actor.
 - A requirement declared by a library built without that feature is implemented with its signature exactly as declared, `@concurrent` included: Hummingbird's `RouterMiddleware.handle` takes `next: @concurrent (Request, Context) async throws -> Response`, and grpc-swift's interceptors take `next: @concurrent @Sendable (…)`. An unannotated `async` closure type there means something else and fails to conform.
@@ -108,7 +107,9 @@ package import Foundation
 - Ids are `UUID` in Swift and lowercase strings only on the wire. Instants are `Date`, durations `Duration`.
 - Absence is an optional, never a sentinel such as `""`, `-1` or `.distantPast`.
 - A value that can be invalid is validated where it's made, by a throwing or failable initializer, so a model never holds an invalid one.
+- Protocols exist only where substitution is real: use cases, repositories, scopes, the database and ports. Models, commands, policies and configuration are concrete. There is no clock or id-generator protocol: ids and stored dates come from the database, and a use case that decides on time reads `Date.now`.
 - Stored dependencies are existentials (`any CatalogClient`), parameters opaque where they can be (`some JWTAlgorithm`), and a type is generic where static dispatch matters (a use case over its database).
+- `logger` is the last parameter of every initializer and function that takes one, and the last stored dependency; only a trailing closure follows it.
 
 ## Documentation comments
 
@@ -119,5 +120,4 @@ package import Foundation
 ## Formatting
 
 - swift-format with the repository's `.swift-format`; `swift-format lint --strict --recursive Sources Package.swift` passes.
-- Four-space indentation. A call or declaration that wraps puts one argument per line, and a multi-line collection ends with a trailing comma.
-- Imports sorted, one per line.
+- `.swift-format` sets four-space indentation and 400-column lines; a line break before each argument of a call or declaration that wraps, respecting existing line breaks; ordered imports; trailing commas in multi-element collections; and `indentConditionalCompilationBlocks: false`, so the `FoundationEssentials` block stays flush left.
