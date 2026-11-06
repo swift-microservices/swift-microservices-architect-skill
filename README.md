@@ -56,6 +56,7 @@ swift-microservices-architect-skill/
 │       ├── security.md              trust model, mTLS, tokens, authorization, secrets
 │       ├── style.md                 how the code reads
 │       └── conventions.md           naming, folders, files
+├── .github/                         CI: validation, the semver label check, releases
 ├── scripts/check_skill.py           the checks to run after every change to the skill
 ├── CLAUDE.md                        authoring rules and skill best practices for agents changing the skill
 ├── README.md

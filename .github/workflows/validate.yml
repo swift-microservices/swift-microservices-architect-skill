@@ -1,0 +1,22 @@
+name: Validate
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    name: Skill
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      # The check script also runs claude plugin validate when Claude Code is installed; it needs no login.
+      - run: npm install --global @anthropic-ai/claude-code@2.1.318
+      - run: python3 scripts/check_skill.py
