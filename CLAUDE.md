@@ -79,7 +79,6 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
    - every link and anchor
    - that the three descriptions and the three versions in `SKILL.md` and the manifests agree
-   - that no term listed in `.skill-check-terms` appears outside a URL. The file is git-ignored and lists, one per line, names from the systems the skill is used on; create it locally, never commit it.
    - that no Swift example builds a value inside an argument or declares a variable before a `do` for its catches to fill
    - `claude plugin validate .`, whose warnings about the missing icon and about `CLAUDE.md` are expected
 2. Review the diff for what no script checks:

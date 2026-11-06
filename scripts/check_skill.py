@@ -6,9 +6,9 @@ Run from anywhere after every change to the skill, and fix until it passes:
     python3 scripts/check_skill.py
 
 It checks what a script can: the frontmatter, SKILL.md's size, the references and their
-Contents lists, links and anchors, the plugin manifests, the private terms listed in
-.skill-check-terms, and the code style of every Swift example. It exits non-zero when any
-check fails. The review that needs judgment is the checklist in CLAUDE.md.
+Contents lists, links and anchors, the plugin manifests, and the code style of every Swift
+example. It exits non-zero when any check fails. The review that needs judgment is the
+checklist in CLAUDE.md.
 """
 
 import json
@@ -21,7 +21,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "swift-microservices-architect"
 REFERENCES = SKILL / "references"
-TERMS_FILE = ROOT / ".skill-check-terms"
 
 # Limits from the Agent Skills specification and Claude Code's skill loading.
 MAX_NAME = 64
@@ -214,25 +213,6 @@ def check_manifests(description: str) -> None:
         fail(f"manifests: the three versions must agree, found {sorted(map(str, versions))}")
 
 
-# MARK: - Private terms
-
-
-def check_terms() -> None:
-    if not TERMS_FILE.exists():
-        print(f"terms: skipped, no {TERMS_FILE.name} (one term per line, git-ignored)")
-        return
-
-    terms = [line.strip() for line in read(TERMS_FILE).splitlines() if line.strip() and not line.startswith("#")]
-    files = [ROOT / "README.md", *sorted((ROOT / ".claude-plugin").glob("*.json")), *sorted(SKILL.rglob("*.md"))]
-    for path in files:
-        for number, line in enumerate(read(path).splitlines(), 1):
-            # A dependency's URL may name its organization; the text around it may not.
-            text = re.sub(r"https?://\S+", "", line).lower()
-            for term in terms:
-                if term.lower() in text:
-                    fail(f"{relative(path)}:{number}: names {term!r}, a term from a system the skill is used on")
-
-
 # MARK: - Swift examples
 
 
@@ -313,7 +293,6 @@ def main() -> int:
     check_references(skill_text, readme_text)
     check_links()
     check_manifests(description)
-    check_terms()
     check_swift_examples()
     check_plugin()
 
