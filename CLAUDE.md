@@ -41,7 +41,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - One home per example, too. Code shown in one reference is linked from the others: the composition root holds the transports, the gateway's root its upstream clients.
 - `SKILL.md`'s gotchas are mistakes any task can make; a mistake only one shape invites is stated once, in that shape's reference.
 - One term per concept, no time-sensitive statements, concrete examples, and one default rather than a menu of options.
-- A checklist is what the agent copies into its response for a task, ending in a build and a test run it repeats until both pass. `SKILL.md` calls them checklists, so "workflow" means only a Temporal workflow or a CI workflow.
+- A checklist is what the agent copies into its response for a task. One that changes code ends in a build and a test run it repeats until both pass; a review runs both and reports the results. `SKILL.md` calls them checklists, so "workflow" means only a Temporal workflow or a CI workflow.
 
 ## What a change must respect
 
