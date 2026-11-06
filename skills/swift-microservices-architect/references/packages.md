@@ -48,7 +48,7 @@ Core links a library that saves every service re-declaring a concept, when the l
 Loans, the service with the most targets:
 
 ```swift
-// swift-tools-version: 6.3
+// swift-tools-version: 6.4
 
 import PackageDescription
 
@@ -171,7 +171,7 @@ let package = Package(
 )
 ```
 
-- The tools version is the toolchain the services build and deploy with; 6.2 is the floor for these settings.
+- The tools version is the newest Swift release: the toolchain the services build and deploy with, which the system libraries share. A public library's is instead the oldest Swift its users build with. 6.2 is the floor for these settings, and the gateway has a higher one ([choosing versions](stack.md#choosing-versions)).
 - `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's README.
 - Every target lists each module it imports, product by product; CI's `--explicit-target-dependency-import-check error` fails a target that imports one it doesn't list ([delivery](delivery.md#tests)).
 - Each `from:` is a lower bound, set to the release whose API the code uses ([choosing versions](stack.md#choosing-versions)).

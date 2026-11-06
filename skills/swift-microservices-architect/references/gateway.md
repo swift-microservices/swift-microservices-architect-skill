@@ -51,6 +51,7 @@ namingStrategy: idiomatic
 
 - The routes are Hummingbird's, so request contexts and middleware stay native; the generated `Components.Schemas` types are the request and response bodies.
 - `openapi.yaml` is the contract clients code against: it changes before the routes do, and a route answers exactly the statuses it documents.
+- Not every generated file uses each of its imports; the gateway's toolchain and generator versions keep them from warning ([choosing versions](stack.md#choosing-versions)).
 
 ## Request contexts and tiers
 

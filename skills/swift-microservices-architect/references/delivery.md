@@ -59,7 +59,7 @@ The CI pipelines run the tests, and they're the gate. A library tests in release
 | `--explicit-target-dependency-import-check error` | Every kind | Importing only the modules its target declares |
 | `-Xswiftc -require-explicit-sendable` | Libraries | Every `public` type stating whether it's `Sendable`; a service's `package` declarations aren't checked |
 
-- The toolchain is the package's `swift-tools-version`, which the CI pipelines read: a service and a system library test on it, on Ubuntu noble and linux/arm64, the platform services run on, and the `Containerfile` builds on it. Moving a package to a newer Swift is its tools version and its `Containerfile`'s `FROM`, in one pull request.
+- The toolchain is the package's `swift-tools-version`, which the CI pipelines read: Soundness runs on it, a service and a system library test on it, on Ubuntu noble and linux/arm64, the platform services run on, and the `Containerfile` builds on it. Moving a package to a newer Swift is its tools version and its `Containerfile`'s `FROM`, in one pull request.
 - The image build passes none of the flags. CI held the commit to them already, and a warning a newer toolchain adds mustn't stop a deploy or a hotfix.
 - `XPostgresTests` need a real Postgres: the CI workflow passes `postgres_image: postgres:<major>-alpine`, the major the services run, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, unset without it.
 - Private dependencies are marked by passing `PACKAGES_TOKEN`, and nothing else: a fine-grained token owned by the organization, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret.
