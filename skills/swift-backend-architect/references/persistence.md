@@ -72,7 +72,6 @@ CREATE POLICY worker_all ON loans TO loans_worker USING (true) WITH CHECK (true)
 ```
 
 - The tenant policy is a predicate on the tenant and nothing else. Whether a caller is an administrator is decided in the use case, which runs on the internal role; a policy that reads a role is authorization in SQL, where the domain's rules can't see it.
-- `USING` filters reads, updates and deletes; `WITH CHECK` refuses writing a row the caller couldn't read.
 - `NULLIF(…, '')` is required: once a pooled connection has carried the setting, reading it in a later transaction yields `''` rather than `NULL`, and `''::uuid` is an error rather than a non-match.
 - Policies combine with `OR`, so a role's `USING (true)` widens only that role.
 - Nothing bound means nothing visible: with no caller set, the tenant policy matches no row. A service running as its owner or a superuser bypasses every policy, so processes always connect as their roles.

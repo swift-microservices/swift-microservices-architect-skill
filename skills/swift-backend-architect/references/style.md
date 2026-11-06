@@ -46,22 +46,21 @@ let rows = try await connection.execute(statement, logger: logger)
 - The `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
 - Each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
 - Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` has no contextual type and is spelled in full: `throw BorrowBookUseCaseError.bookNotFound`.
-- An error enum has no associated values unless the caller acts on them, and no messages. A transport writes the message for its caller: one sentence, ending in a period, naming nothing internal.
+- An error enum has no associated values unless the caller acts on them, and no messages: a transport writes the message ([status codes](grpc.md#status-codes)).
 - `String(reflecting: error)` goes into the log line of an unknown error, never into a response.
 - `CancellationError` propagates; nothing catches it to carry on.
 
 ## Concurrency
 
-Every package builds in the Swift 6 language mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault` ([Swift settings](packages.md#swift-settings)).
+Every package builds with [the Swift settings](packages.md#swift-settings).
 
 - Everything that crosses a boundary is `Sendable`: models, inputs, commands, errors, protocols. Structs and enums by default; an actor only for mutable state shared across tasks; `Mutex` from `Synchronization` for a small piece of state touched synchronously.
 - No `@unchecked Sendable`, `nonisolated(unsafe)` or `@preconcurrency` in owned code. When a dependency needs one, it appears once, in the adapter that wraps the dependency, with the reason beside it.
-- No unstructured tasks in a service. Long-running work is a `Service` in the `ServiceGroup`; work that must outlive a request is a workflow; concurrency inside a request is `async let` or a task group, which end with the request.
+- No unstructured tasks in a service. Long-running work is a `Service` in the `ServiceGroup`; work that must outlive a request is a [workflow](workflows.md#when-work-is-a-workflow); concurrency inside a request is `async let` or a task group, which end with the request.
 - With `NonisolatedNonsendingByDefault` ([SE-0461](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0461-async-function-isolation.md)) an `async` function runs on its caller's isolation, and so does a plain `async` closure such as a transaction's. `@concurrent` marks work that must leave its caller's actor.
 - A requirement declared by a library built without that feature is implemented with its signature exactly as declared, `@concurrent` included: Hummingbird's `RouterMiddleware.handle` takes `next: @concurrent (Request, Context) async throws -> Response`, and grpc-swift's interceptors take `next: @concurrent @Sendable (…)`. An unannotated `async` closure type there means something else and fails to conform.
 - CPU-heavy synchronous work, such as hashing a password, runs on `NIOThreadPool.singleton.runIfActive { … }`, off the cooperative pool.
-- `OperationContext` carries a request's cross-cutting values, the principal and the Postgres settings, for libraries that read them. Application code takes what it needs as parameters: a use case gets `subject:`, never `OperationContext.current`.
-- A server package never sets `.defaultIsolation(MainActor.self)`, and no server type is `@MainActor`.
+- No server type is `@MainActor`.
 
 ## Access control and imports
 
@@ -108,12 +107,11 @@ package import Foundation
 - Absence is an optional, never a sentinel such as `""`, `-1` or `.distantPast`.
 - A value that can be invalid is validated where it's made, by a throwing or failable initializer, so a model never holds an invalid one.
 - Stored dependencies are existentials (`any CatalogClient`), parameters opaque where they can be (`some JWTAlgorithm`), and a type is generic where static dispatch matters (a use case over its database).
-- Initialisms keep one case: `userID`, `bookID`, `GetLoanByIDUseCase`, `baseURL`, `XGRPC`.
 
 ## Documentation comments
 
 - `///`, starting with a one-line summary; a following paragraph says why, or what a caller must know.
-- Every use case says the requirement it implements and the database role it runs on; every port, what the service needs from it; every reader, the keys it reads.
+- Every use case says the requirement it implements and the database role it runs on; every port, what the service needs from it.
 - A name that says everything gets no comment.
 
 ## Formatting

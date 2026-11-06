@@ -68,24 +68,16 @@ Hard rules:
 
 | Concern | Owner |
 |---|---|
-| Business rules, authorization decisions, what an error means | The use case, in XCore |
+| Business rules, authorization decisions, what an error means | The use case, in XCore; adapters only convert and delegate |
+| What a service knows about another's data | A model in its XCore `Ports/`, beside the port that returns it |
 | Protobuf ↔ domain, HTTP ↔ protobuf | XGRPC's `Protobuf/` conversions; the gateway's `Schemas/` |
-| Who the caller is | The gateway verifies and forwards the token; each service verifies it again |
+| Messages between processes; the public API | `<org>-protos`; the gateway's `openapi.yaml` |
+| Who the caller is | The gateway verifies and forwards the token; each service verifies it again ([security](references/security.md)) |
 | Which process may call an internal RPC | mTLS trust at the listener |
 | Tenant isolation | Row-level security; `<Org>Persistence` binds the caller to each transaction |
 | Durable, delayed or multi-service work | A Temporal workflow in XTemporal |
-| Contracts; the public API | `<org>-protos`; the gateway's `openapi.yaml` |
-
-## Principles
-
-1. **A service owns a capability and its data.** Other processes reach its data only through its contracts. Where its storage lives is a deployment decision; its targets don't change with it ([the system](references/system.md)).
-2. **Core is the service; adapters translate.** gRPC services, routes, activities and repositories convert and delegate to use cases.
-3. **SPM enforces the boundaries.** A layer is a target, and a target imports only what it declares.
-4. **One composition root per process.** A command's `run()` reads configuration, builds every concrete type and runs them in one `ServiceGroup`.
-5. **Every hop proves itself.** mTLS between processes, the caller's token verified by each service, row-level security under tenant queries ([security](references/security.md)).
-6. **Code reads like the requirement.** Use cases, workflows and handlers read top to bottom, with typed throws and one `catch` per case; Apple's WWDC sample code is the bar ([style](references/style.md)).
-7. **Modern Swift throughout.** Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault` in every package ([Swift settings](references/packages.md#swift-settings)); structured concurrency.
-8. **Share only what every service needs identically.** Identity, tenant binding and transport configuration go in `<org>-core`; a service models another's data in its own words.
+| What every service needs identically: identity, tenant binding, transport readers | `<org>-core` |
+| Where a service's data lives | The deployment; the targets don't change with it ([the system](references/system.md)) |
 
 ## The shapes in brief
 
@@ -99,7 +91,7 @@ Hard rules:
 
 ## Code style
 
-A use case maps errors this way, and adapters read the same:
+Code reads like the requirement it implements, with Apple's WWDC sample code as the bar ([style](references/style.md)). A use case maps errors this way, and adapters read the same:
 
 ```swift
 do {
@@ -118,7 +110,7 @@ do {
 - One `do` holds the work through its `return`, then one `catch` per case the caller acts on, then `unknown`. Each `catch` ends its own path: nothing is declared before the `do` for a `catch` to fill, and nothing follows it. A handler maps every case to a status, with no catch-all.
 - Build, then call: a value a call takes is a `let` named for what it is (`let statement = …`, then `connection.execute(statement, logger: logger)`), never a conversion, `try` or `await` in the arguments ([style](references/style.md#build-then-call)).
 - No private helper methods in use cases, workflows or activities, and no workarounds: no `Result` juggling, steering flags, `try?`, nested `do` in a `catch`, or force unwraps.
-- `package` across a service's targets with `package import`, the conditional `FoundationEssentials` import, `Duration` and `FormatStyle` over legacy Foundation types.
+- Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault` in every package ([Swift settings](references/packages.md#swift-settings)); `package` across a service's targets with `package import`; the conditional `FoundationEssentials` import; `Duration` and `FormatStyle` over legacy Foundation types.
 - Everything crossing a boundary is `Sendable`; no `@unchecked Sendable`, `nonisolated(unsafe)`, `Task {}` or `Task.detached`.
 
 ## Gotchas
@@ -193,15 +185,6 @@ Copy the checklist for the task into the response and check items off as they're
 - [ ] Swift settings, FoundationEssentials imports, package access, naming (conventions.md)
 - [ ] Report each finding with its file, the rule it breaks and the fix; change code only when asked
 ```
-
-**Decide where a type belongs**
-
-1. A rule or concept of one service → its XCore, in the area it belongs to.
-2. What a service knows about another's data → a model in its XCore `Ports/`, beside the port that returns it.
-3. A message between processes → `<org>-protos`; a public request or response → the gateway's `openapi.yaml`.
-4. A conversion → the adapter target of the technology it converts to.
-5. Identical in every service (identity, tenant binding, transport readers) → `<org>-core`.
-6. Reading configuration, building and running things → the executable.
 
 ## References
 

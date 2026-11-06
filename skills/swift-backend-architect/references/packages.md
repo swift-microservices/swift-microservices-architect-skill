@@ -29,19 +29,9 @@ The targets inside a service's package, how they depend on each other, its `Pack
 
 A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC` and `Catalog`.
 
-```
-X ─────────────► every X target, <Org>Transport, <Org>Persistence, drivers, transports, lifecycle
-XGRPC, XHTTP ──► XCore, contracts, the transport's framework, <Org>Authentication
-XPostgres ─────► XCore, PersistencePostgres
-XTemporal ─────► XCore, Temporal
-XValkey ───────► XCore, Valkey
-X<Provider> ───► XCore, the provider's SDK
-XCore ─────────► Persistence, <Org>Authentication, Logging
-```
-
 - Adapter targets never import each other. They meet in the executable, which hands one to another through Core's protocols: `GRPCCatalogClient` from XGRPC goes into `BorrowBookUseCase`, which XTemporal's activities never see.
 - Generated contract types stay in XGRPC and the executable (descriptors for interceptors, `Client(wrapping:)`); Postgres types stay in XPostgres and the executable; Temporal types in XTemporal and the executable.
-- Nothing outside the package links a service, so a service has one product, its executable, and its cross-target API is `package`, never `public`.
+- Nothing outside the package links a service, so a service has one product, its executable, and its cross-target API is `package` ([access control](style.md#access-control-and-imports)).
 
 ## What Core may link
 
@@ -274,7 +264,7 @@ bookshelf-core/
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
 - `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, grpc-swift-2 for the interceptor, Hummingbird for the middleware (`traits: []`) and swift-configuration; only executables link it, and each already links its transport. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
-- Its API is `public`, with `public import` for every module whose types it exposes. A reader documents the keys it reads ([configuration](composition.md#configuration)).
+- Its API is `public`, with `public import` for every module whose types it exposes.
 - It releases with semantic versions; services depend on it `from:` a release, never a branch.
 
 ## The contracts package
@@ -330,15 +320,7 @@ with `grpc-swift-proto-generator-config.json`:
 
 ## The gateway package
 
-```
-bookshelf-gateway/
-├── Package.swift
-└── Sources/
-    ├── GatewayHTTP/        the HTTP surface: openapi.yaml, request contexts, controllers, middleware, conversions, BookshelfAPI
-    └── Gateway/            the executable: configuration, the authenticator, upstream clients, the router, lifecycle
-```
-
-`GatewayHTTP` links Hummingbird (`traits: ["ConfigurationSupport"]`), HummingbirdAuth, swift-openapi-runtime with the generator plugin, `Authentication`, `AuthenticationHummingbird`, `BookshelfAuthentication`, `GRPCCore` and the `XProtos` of every upstream. It has no Core, Postgres or persistence target ([gateway](gateway.md)).
+`bookshelf-gateway` has two targets, laid out in [the gateway's package](gateway.md#the-package): `GatewayHTTP`, the HTTP surface, and `Gateway`, the executable. `GatewayHTTP` links Hummingbird (`traits: ["ConfigurationSupport"]`), HummingbirdAuth, swift-openapi-runtime with the generator plugin, `Authentication`, `AuthenticationHummingbird`, `BookshelfAuthentication`, `GRPCCore` and the `XProtos` of every upstream. It has no Core, Postgres or persistence target.
 
 ## Checking the boundaries
 

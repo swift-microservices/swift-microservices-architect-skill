@@ -3,7 +3,6 @@
 XCore is the service: what it knows (domain models), what it decides (use cases), and what it needs from outside (repositories and ports), with no knowledge of how any of them is reached.
 
 ## Contents
-- Inside XCore
 - Domain models
 - Errors
 - Repositories and commands
@@ -14,21 +13,7 @@ XCore is the service: what it knows (domain models), what it decides (use cases)
 - Authorization
 - Logging
 
-## Inside XCore
-
-```
-LoansCore/
-├── Loans/                      an area: one resource and everything about it
-│   ├── Loan.swift, LoanStatus.swift, LoanPolicy.swift
-│   ├── Repository/             LoanRepository.swift, LoanRepositoryError.swift, Commands/CreateLoanCommand.swift
-│   ├── UseCases/
-│   │   └── BorrowBook/         BorrowBookUseCase.swift, BorrowBookUseCaseProtocol.swift, BorrowBookUseCaseInput.swift,
-│   │                           BorrowBookUseCaseError.swift, BorrowBookUseCaseScope.swift
-│   └── Workflow/               LoanWorkflowClient.swift
-└── Ports/                      what the service needs from other systems, in its own words
-```
-
-There is one use case per operation: one per RPC, and one per database step an activity runs (`MarkLoanOverdue`).
+Its folders, an area per resource and `Ports/`, are in [the folder layout](packages.md#folder-layout).
 
 ## Domain models
 
@@ -53,9 +38,9 @@ package enum LoanStatus: String, Equatable, Sendable {
 }
 ```
 
-- A model is a `package struct` of `let` properties, `Equatable` and `Sendable`, with an explicit `package init`, since the memberwise one is internal.
+- A model is a `package struct` of `let` properties, `Equatable` and `Sendable`, with an explicit `package init`.
 - It's named for what it is in the service's language (`Loan`), never for a transport or a store (`LoanDTO`, `LoanRow`, `LoanResponse`).
-- Ids are `UUID`, instants `Date`, closed sets enums; strings only where the domain has free text.
+- Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text.
 - A rule more than one use case applies lives on a model or a policy, never in a use case for another to copy: `LoanPolicy.dueDate(borrowedAt:)`, a throwing `EmailAddress(_:)` that normalizes and validates.
 - Tunable rules are a policy value (`LoanPolicy`, with `maximumActiveLoans` and `loanPeriod`), passed to the use cases that apply it and read from configuration by the executable ([configuration](composition.md#configuration)).
 - What the service knows about another service's data is its own model, in `Ports/`, beside the port that returns it: Loans' `Book` holds an id and a title, not Catalog's whole book.
@@ -146,7 +131,7 @@ package enum CatalogClientError: Error, Equatable, Sendable {
 
 ## A use case
 
-Five files in `UseCases/<Name>/`:
+There is one use case per operation: one per RPC, and one per database step an activity runs (`MarkLoanOverdue`). Its five files sit in `UseCases/<Name>/`:
 
 ```swift
 package protocol BorrowBookUseCaseProtocol: Sendable {
@@ -174,7 +159,7 @@ package protocol BorrowBookUseCaseScope: Sendable {
 
 with the error above and the implementation below.
 
-- One operation per use case, named like its RPC: a domain verb and noun (`BorrowBook`), or a standard verb for plain reads and writes (`ListLoans`, `GetLoan`); an administrators' view of what callers list for themselves is `ListAll…`.
+- A use case is named like its RPC ([naming](conventions.md#naming)).
 - `callAsFunction` takes `subject: UserIdentity` first when it acts for a caller, then `input:` when the request carries values. A use case that needs neither takes neither.
 - It returns a domain model, an array of them, or nothing. A result that combines values is a domain type named for what it is (`Session`), never `XUseCaseOutput`.
 - The input is a plain value of what the request carries. Wire validity, such as an id that isn't a UUID, is the conversion's to refuse ([conversions](grpc.md#conversions)); business validity is the use case's, as an error case.
@@ -270,10 +255,10 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 
 1. Input checks that need no data come first, before the `do`, throwing the case directly (`throw .invalidIdempotencyKey`).
 2. One `do` holds the work through its `return`, in the order the requirement states it: look up, decide, write, start what follows. Each value a step takes is a `let` first ([build, then call](style.md#build-then-call)).
-3. A refusal the use case decides is logged as a warning and thrown where it's decided. Inside the `do` it's spelled with its type (`throw BorrowBookUseCaseError.bookNotFound`), since a `do` body gives `throw` no contextual type.
+3. A refusal the use case decides is logged as a warning and thrown where it's decided, spelled with its type inside the `do` (`throw BorrowBookUseCaseError.bookNotFound`).
 4. The catches, in this order: `catch let error as XUseCaseError { throw error }`, when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch LoanRepositoryError.idempotencyConflict`), each logged and mapped to the use case's case; a final `catch` that logs an error with `String(reflecting: error)` and throws `.unknown`.
 5. A completed change is logged at info with the ids it created or changed.
-6. Nothing else: no private helper methods, no nested `do` in a `catch`, no `Result`, no `try?` ([reading like the requirement](style.md#reading-like-the-requirement)). A step long enough to want a name is a policy's method, a port, or a sign the use case does two things.
+6. Nothing else: no helper methods and no workarounds ([reading like the requirement](style.md#reading-like-the-requirement)).
 
 ## Transactions
 

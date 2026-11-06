@@ -4,7 +4,6 @@ Durable processes on Temporal with swift-temporal-sdk: when work is a workflow, 
 
 ## Contents
 - When work is a workflow
-- The Temporal target
 - Starting a workflow from a use case
 - A workflow
 - Determinism
@@ -21,19 +20,6 @@ Work is a workflow when it must happen even if every process restarts, and it:
 - or spans several services, each step's effect owned by a different one.
 
 A request that only needs an answer stays a synchronous RPC. Work after a response is never a `Task {}`: an unstructured task dies with the process and nobody retries it.
-
-## The Temporal target
-
-```
-LoansTemporal/
-├── Loan/                       one folder per process
-│   ├── LoanWorkflow.swift
-│   ├── LoanActivities.swift
-│   └── TemporalLoanWorkflowClient.swift
-└── ActivityOptions+Loans.swift
-```
-
-XTemporal depends on XCore and Temporal only. Its activities reach other services and providers through Core's ports, which the worker's composition root fills with XGRPC and provider types.
 
 ## Starting a workflow from a use case
 
@@ -87,9 +73,8 @@ package struct TemporalLoanWorkflowClient: LoanWorkflowClient {
 
 - A workflow's id derives from the business id it's about, `<service>-<workflow>-<id>`, declared once on the workflow (`LoanWorkflow.id(loanID:)`). A retried request then reaches the same run instead of starting a second.
 - `idConflictPolicy: .useExisting` joins a run in flight. `idReusePolicy` decides a completed run's id: `.rejectDuplicate` when the work happens once per id; `.allowDuplicateFailedOnly` when a failed run may be retried by a new trigger.
-- The use case starts the workflow after its transaction commits. A start lost after the commit is recovered by the next attempt, which finds the row and starts the same id ([transactions](use-cases.md#transactions)).
+- The use case starts the workflow after its transaction commits; [transactions](use-cases.md#transactions) say how a lost start is recovered.
 - A start doesn't wait for the result. A use case that needs a workflow's state reads it with a query (`handle.query(queryType:)`), and one that delivers an event sends a signal.
-- The serve process holds one `TemporalClient`, in its `ServiceGroup`; the worker holds the `TemporalWorker`.
 
 ## A workflow
 
@@ -176,7 +161,7 @@ Workflows and their inputs are value types; nothing in a workflow holds a refere
 
 ## Activities
 
-An activity container is the worker's adapter, the way a gRPC service is the server's: it holds use cases and ports, and maps their errors.
+An activity container is the worker's adapter, the way a gRPC service is the server's: it holds use cases and ports, and maps their errors. Its ports reach other services and providers through the XGRPC and provider types the worker's root passes in, so XTemporal imports only XCore and Temporal.
 
 ```swift
 /// The loan workflow's side effects, each over a use case or a port.
@@ -276,8 +261,6 @@ extension ActivityOptions {
 
 ## The worker
 
-- `<service> worker run` is its own process, from the same executable and image, with its own composition root ([the worker's root](composition.md#the-workers-root)).
+`<service> worker run` builds the worker in [its own root](composition.md#the-workers-root):
 - It connects to Postgres as the worker role, so only use cases whose scopes the worker scope adopts can run in it.
-- It reaches Temporal over mTLS with a certificate pair of its own (`temporal.tls`), independent of the services' trust.
-- `TemporalWorker(configuration: .init(configReader:), target:, transportSecurity:, activityContainers:, workflows:, logger:)` reads the namespace, task queue and identity from configuration, and runs in the `ServiceGroup`.
 - Each service has one task queue, named for it (`loans`), used by the serve process's starts (`temporal.taskQueue`) and the worker's polling (`temporal.worker.taskqueue`), set to the same default.

@@ -353,6 +353,5 @@ let loans = GRPCClient(
 ## The edge
 
 - Clients reach the gateway over TLS, terminated by the edge in front of it (a CDN or reverse proxy, which may itself re-encrypt to the proxy beside the gateway). The gateway listens for plain HTTP on its private interface; it never configures TLS for clients.
-- Its upstream calls are mTLS like every call between processes.
 - CORS is the gateway's, in `CORSMiddleware` on the router, for the origins, headers and methods browsers use.
 - Root middleware, in order: CORS, `ErrorMiddleware`, `LogRequestsMiddleware`; then `addRoutes(to: router.group("v1"))` ([the gateway's root](composition.md#the-gateways-root)).

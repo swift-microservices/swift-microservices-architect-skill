@@ -214,7 +214,7 @@ extension Bookshelf_Loans_V1_Loan {
 | A dependency is down (`…Unavailable`) | `unavailable` |
 | `unknown` | `internalError` |
 
-A missing caller is `unauthenticated`, from `requireUser()`. A message is one sentence for the client, ending in a period, naming nothing internal. A `notFound` and a `permissionDenied` that would reveal whether another user's resource exists answer the same as each other.
+A missing caller is `unauthenticated`, from `requireUser()`. A message is one sentence for the client, ending in a period, naming nothing internal.
 
 ## Interceptors
 

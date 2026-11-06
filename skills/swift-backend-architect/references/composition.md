@@ -232,12 +232,12 @@ extension InMemoryProvider {
 - Readers every executable shares are `<Org>Transport`'s and `<Org>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)`, with the key names that library chose.
 - Keys are dotted scopes with lowerCamelCase leaves. Environment names derive from them: `postgres.service.password` is `POSTGRES_SERVICE_PASSWORD`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
 - A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
-- Secrets are read with `isSecret: true`. Key material is configured by path (`jwt.publicKeyPath`), never inline.
+- Secrets and key material follow [secrets](security.md#secrets).
 - A reader's doc comment lists its keys, their types, defaults and whether they're secret.
 
 ## Logging
 
-- `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Org>Authentication`, which adds the bound caller's `userID` to every line of a request.
+- `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Org>Authentication` ([user tokens](security.md#user-tokens)).
 - The level comes from `logLevel`, defaulting to `info`. The label is the repository's name, with `-worker` for the worker: `bookshelf-loans`, `bookshelf-loans-worker`.
 - The root's `logger` is passed to every client, database, use case and server it builds. Nothing creates a logger of its own.
 - A log shipper's handler joins the stream handler in a `MultiplexLogHandler`, and its processor runs first in the `ServiceGroup`.

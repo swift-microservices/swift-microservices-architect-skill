@@ -7,7 +7,7 @@
 
 ## Naming
 
-`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); `<Org>` and `<org>` are the organization's (`Bookshelf`, `bookshelf`). Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/): they read as English at the point of use, name things by role, and keep an initialism in one case.
+`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); `<Org>` and `<org>` are the organization's (`Bookshelf`, `bookshelf`). Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/): they read as English at the point of use, name things by role, and keep an initialism in one case (`userID`, `GetLoanByIDUseCase`, `baseURL`, `XGRPC`).
 
 | Kind | Name | Example |
 |---|---|---|
