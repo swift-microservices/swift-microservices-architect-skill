@@ -105,5 +105,6 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
   | `semver/none` | Nothing the skill says changes: the README, this file, CI, scripts |
 
 - The Validate workflow runs `scripts/check_skill.py` on every pull request and push to `main`, with Claude Code installed so `claude plugin validate` runs too.
+- Dependabot checks the workflows' pinned actions weekly and opens a pull request labeled `semver/none` for each update. The Claude Code version Validate installs is a shell command Dependabot doesn't read, so it's raised by hand.
 - A release is the Release workflow, run by hand on `main`. It takes the next version from the labels merged since the last release, writes it to the three version fields (`plugin.json`, and the marketplace and its plugin entry in `marketplace.json`), commits, tags and publishes the notes. A major release is cut by hand. Nothing else changes a version.
 - Commit, push or open a pull request only when asked. A subject line names the guidance in the imperative, such as "Run tenant use cases on the service role", not the files touched.
