@@ -1,0 +1,311 @@
+# Composition
+
+The executable target: its commands, the composition root each command runs, configuration, logging, and the lifecycle that runs everything.
+
+## Contents
+- Commands
+- The composition root
+- Configuration
+- Logging
+- Lifecycle
+- Why ServiceLifecycle
+- The worker's root
+- The gateway's root
+
+## Commands
+
+```swift
+import ArgumentParser
+
+@main
+struct Loans: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "loans",
+        abstract: "The Bookshelf loans service",
+        subcommands: [
+            Serve.self,
+            Worker.self,
+        ],
+        defaultSubcommand: Serve.self
+    )
+}
+```
+
+- One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
+- `serve --migrate-database` applies pending migrations as the owner, then serves. Without the flag it never reads the owner's credentials.
+- A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
+- Each command's `run()` is a composition root: the only code that reads configuration, constructs concrete types and runs them. Nothing below it reads configuration, builds a client or starts a task.
+
+## The composition root
+
+`Serve/Serve.swift`, in sections marked in this order:
+
+```swift
+struct Serve: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "serve",
+        abstract: "Serve the loans gRPC services"
+    )
+
+    @Flag(help: "Apply pending database migrations before serving")
+    var migrateDatabase = false
+
+    func run() async throws {
+        // MARK: - Configuration
+        let config = ConfigReader(providers: [
+            EnvironmentVariablesProvider(),
+            InMemoryProvider.applicationDefaults,
+        ])
+
+        // MARK: - Logging
+        let logLevel = config.string(forKey: "logLevel", default: Logger.Level.info)
+        LoggingSystem.bootstrap(
+            { label, metadataProvider in
+                var handler = StreamLogHandler.standardOutput(label: label, metadataProvider: metadataProvider)
+                handler.logLevel = logLevel
+                return handler
+            },
+            metadataProvider: .user
+        )
+        let logger = Logger(label: "bookshelf-loans")
+
+        // MARK: - Infrastructure
+        let postgresConfig = config.scoped(to: "postgres")
+        if migrateDatabase {
+            try await PostgresClient.withClient(configuration: .init(config: postgresConfig, role: "owner"), logger: logger) { client in
+                try await Migrations(client: client, …, logger: logger).apply()
+            }
+        }
+        let postgresClient = PostgresClient(configuration: try .init(config: postgresConfig, role: "service"), backgroundLogger: logger)
+        let internalPostgresClient = PostgresClient(configuration: try .init(config: postgresConfig, role: "internal"), backgroundLogger: logger)
+
+        let tlsConfig = config.scoped(to: "tls")
+        let certificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
+            configuration: .init(config: tlsConfig, logger: logger)
+        )
+        let authenticator = try await JWTAuthenticator<UserIdentity>(config: config.scoped(to: "jwt"))
+
+        let catalogConfig = config.scoped(to: "grpc.catalog")
+        let catalogGRPCClient = GRPCClient(
+            transport: try .http2NIOPosix(
+                target: .dns(host: try catalogConfig.requiredString(forKey: "host"), port: try catalogConfig.requiredInt(forKey: "port")),
+                transportSecurity: try .mTLS(config: tlsConfig, certificateReloader: certificateReloader),
+                config: HTTP2ClientTransport.Posix.Config(config: catalogConfig),
+                serviceConfig: ServiceConfig(config: catalogConfig)
+            )
+        )
+
+        let temporalConfig = config.scoped(to: "temporal")
+        let temporalCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
+            configuration: .init(config: temporalConfig.scoped(to: "tls"), logger: logger)
+        )
+        let temporalClient = try TemporalClient(
+            target: .dns(host: try temporalConfig.requiredString(forKey: "host"), port: temporalConfig.int(forKey: "port", default: 7233)),
+            transportSecurity: try .mTLS(config: temporalConfig.scoped(to: "tls"), certificateReloader: temporalCertificateReloader),
+            configuration: .init(configReader: temporalConfig),
+            logger: logger
+        )
+
+        // MARK: - Composition
+        // The caller's own loans run on the tenant database, where the policy confines each
+        // transaction to the caller; administrators' reads run on the internal one.
+        let database = PostgresDatabase<PostgresLoansScope>(client: postgresClient, logger: logger)
+        let internalDatabase = PostgresDatabase<PostgresLoansInternalScope>(client: internalPostgresClient, logger: logger)
+        let catalogClient = GRPCCatalogClient(client: catalogGRPCClient)
+        let loanWorkflowClient = TemporalLoanWorkflowClient(client: temporalClient, taskQueue: try temporalConfig.requiredString(forKey: "taskQueue"))
+        let policy = LoanPolicy(config: config.scoped(to: "loans"))
+
+        let loanService = LoanService(
+            borrowBookUseCase: BorrowBookUseCase(
+                database: database,
+                catalogClient: catalogClient,
+                loanWorkflowClient: loanWorkflowClient,
+                policy: policy,
+                logger: logger
+            ),
+            returnBookUseCase: ReturnBookUseCase(database: database, loanWorkflowClient: loanWorkflowClient, logger: logger),
+            listLoansUseCase: ListLoansUseCase(database: database, logger: logger),
+            listAllLoansUseCase: ListAllLoansUseCase(database: internalDatabase, logger: logger)
+        )
+
+        // MARK: - gRPC
+        let serverConfig = config.scoped(to: "grpc.server")
+        let server = GRPCServer(
+            transport: .http2NIOPosix(
+                address: .ipv4(host: try serverConfig.requiredString(forKey: "host"), port: try serverConfig.requiredInt(forKey: "port")),
+                transportSecurity: try .mTLS(config: tlsConfig, certificateReloader: certificateReloader),
+                config: HTTP2ServerTransport.Posix.Config(config: serverConfig)
+            ),
+            services: [loanService],
+            interceptorPipeline: [
+                .apply(BearerAuthenticationInterceptor(authenticator: authenticator), to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
+                .apply(UserSettingsInterceptor(), to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
+            ]
+        )
+
+        // MARK: - Lifecycle
+        let serviceGroup = ServiceGroup(
+            services: [
+                postgresClient,
+                internalPostgresClient,
+                certificateReloader,
+                temporalCertificateReloader,
+                catalogGRPCClient,
+                temporalClient,
+                server,
+            ],
+            gracefulShutdownSignals: [.sigterm, .sigint],
+            logger: logger
+        )
+        try await serviceGroup.run()
+    }
+}
+```
+
+- **Configuration, Logging, Infrastructure, Composition, the server, Lifecycle**: every root has these sections, in this order.
+- Infrastructure builds what talks to the outside: database clients per role, certificate reloaders, the authenticator, upstream clients, the Temporal and Valkey clients.
+- Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
+- Use cases are built inline at the service's initializer, each on the database its audience requires.
+- `Database/Migrations.swift` lists the migrations in applied order and applies them ([migrations](persistence.md#migrations)).
+
+## Configuration
+
+swift-configuration reads every value through one `ConfigReader`, built first in each root:
+
+- Providers in order: `EnvironmentVariablesProvider()` first, then `InMemoryProvider.applicationDefaults`. A value a command also takes as an option goes into an `InMemoryProvider` of the parsed options at the front.
+- `Configuration/InMemoryProvider+ApplicationDefaults.swift` holds the deployment's layout, which environment variables override key by key:
+
+```swift
+import Configuration
+
+extension InMemoryProvider {
+    static var applicationDefaults: Self {
+        .init(values: [
+            "grpc.server.host": "0.0.0.0",
+            "grpc.server.port": 50051,
+            "tls.certificatePath": "/run/tls/cert.pem",
+            "tls.privateKeyPath": "/run/tls/key.pem",
+            "tls.trustRootsPath": "/run/tls/ca.pem",
+            "jwt.publicKeyPath": "/run/secrets/jwt-public.pem",
+            "postgres.db": "bookshelf_loans",
+            "postgres.service.user": "loans_service",
+            "postgres.internal.user": "loans_internal",
+            "postgres.worker.user": "loans_worker",
+            "temporal.tls.certificatePath": "/run/temporal-tls/cert.pem",
+            "temporal.tls.privateKeyPath": "/run/temporal-tls/key.pem",
+            "temporal.tls.trustRootsPath": "/run/temporal-tls/ca.pem",
+            "temporal.taskQueue": "loans",
+            "temporal.worker.taskqueue": "loans",
+        ])
+    }
+}
+```
+
+- Defaults hold mount paths, ports, the database's name, role names and task queues. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
+- A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes: `TimedCertificateReloader.Configuration(config: config.scoped(to: "tls"), logger:)`. Required keys and validation live in the reader, not in the root.
+- Readers every executable shares are `<Org>Transport`'s and `<Org>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)`, with the key names that library chose.
+- Keys are dotted scopes with lowerCamelCase leaves. Environment names derive from them: `postgres.service.password` is `POSTGRES_SERVICE_PASSWORD`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
+- A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
+- Secrets are read with `isSecret: true`. Key material is configured by path (`jwt.publicKeyPath`), never inline.
+- A reader's doc comment lists its keys, their types, defaults and whether they're secret.
+
+## Logging
+
+- `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Org>Authentication`, which adds the bound caller's `userID` to every line of a request.
+- The level comes from `logLevel`, defaulting to `info`. The label is the repository's name, with `-worker` for the worker: `bookshelf-loans`, `bookshelf-loans-worker`.
+- The root's `logger` is passed to every client, database, use case and server it builds. Nothing creates a logger of its own.
+- A log shipper's handler joins the stream handler in a `MultiplexLogHandler`, and its processor runs first in the `ServiceGroup`.
+
+## Lifecycle
+
+- Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `TemporalClient`, `TemporalWorker`.
+- Order is dependency order: log processors, database clients, certificate reloaders, upstream and store clients, the Temporal client, and the server, application or worker last. Graceful shutdown runs in reverse, so the server stops accepting and drains before the clients it uses close.
+- `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. `try await serviceGroup.run()` is the root's last line.
+- Migrations run before the group, over `PostgresClient.withClient`, which runs its client only as long as the migrations take.
+- A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
+- A long-running component of the service's own is a `Service` whose `run()` returns on graceful shutdown: its loop iterates `sequence.cancelOnGracefulShutdown()`, or wraps its work in `withGracefulShutdownHandler`.
+
+## Why ServiceLifecycle
+
+A server process holds several components that each need a task running for their whole life: connection pools keep and replace connections, servers accept, certificate reloaders poll the disk, workers poll for tasks, clients keep their channels.
+
+- **Structure.** `ServiceGroup` runs them all as child tasks of the command's task. Nothing outlives the process's task, and no component starts a detached task of its own to keep itself alive.
+- **Graceful shutdown.** Container platforms send `SIGTERM`, then `SIGKILL` after a grace period. On the signal the group shuts components down one by one in reverse order, waiting for each: in-flight calls finish, then pools and clients close. Without it, `SIGTERM` cuts requests mid-flight.
+- **Failure.** When any component throws or returns, the group cancels the rest and `run()` throws, so the process exits non-zero and the platform restarts it, instead of a half-alive process whose server answers while its database client is gone.
+- **One shape for every library.** Libraries ship their long-running types as `Service`s, so a root composes them by listing them: no shutdown calls, no `defer` blocks, no ordering code of its own.
+
+## The worker's root
+
+`Worker/Run.swift` follows the same sections, with the worker's own infrastructure:
+
+```swift
+// MARK: - Infrastructure
+let workerPostgresClient = PostgresClient(configuration: try .init(config: postgresConfig, role: "worker"), backgroundLogger: logger)
+let identityGRPCClient = GRPCClient(transport: …)   // grpc.identity, as catalog above
+let catalogGRPCClient = GRPCClient(transport: …)    // grpc.catalog
+
+// MARK: - Composition
+let workerDatabase = PostgresDatabase<PostgresLoansWorkerScope>(client: workerPostgresClient, logger: logger)
+let loanActivities = LoanActivities(
+    markLoanOverdueUseCase: MarkLoanOverdueUseCase(database: workerDatabase, logger: logger),
+    identityClient: GRPCIdentityClient(client: identityGRPCClient),
+    catalogClient: GRPCCatalogClient(client: catalogGRPCClient),
+    noticeSender: ResendNoticeSender(…)
+)
+
+// MARK: - Worker
+let worker = try TemporalWorker(
+    configuration: .init(configReader: temporalConfig),
+    target: .dns(host: try temporalConfig.requiredString(forKey: "host"), port: temporalConfig.int(forKey: "port", default: 7233)),
+    transportSecurity: try .mTLS(config: temporalConfig.scoped(to: "tls"), certificateReloader: temporalCertificateReloader),
+    activityContainers: loanActivities,
+    workflows: [LoanWorkflow.self],
+    logger: logger
+)
+
+// MARK: - Lifecycle
+// workerPostgresClient, certificateReloader, temporalCertificateReloader, identityGRPCClient, catalogGRPCClient, worker
+```
+
+The worker builds no server and no authenticator: it serves no RPCs, and the users it acts for are named in workflow inputs.
+
+## The gateway's root
+
+`Gateway/Serve/Serve.swift`:
+
+```swift
+// MARK: - Infrastructure
+let authenticator = try await JWTAuthenticator<UserIdentity>(config: config.scoped(to: "jwt"))
+let propagation = BearerPropagationInterceptor<UserIdentity>()
+let loans = GRPCClient(transport: …, interceptorPipeline: [.apply(propagation, to: .services([Bookshelf_Loans_V1_LoanService.descriptor]))])
+…  // one client per upstream service
+
+// MARK: - Composition
+let api = BookshelfAPI(
+    dependencies: .init(
+        authenticator: authenticator,
+        identity: Bookshelf_Identity_V1_IdentityService.Client(wrapping: identity),
+        books: Bookshelf_Catalog_V1_BookService.Client(wrapping: catalog),
+        loans: Bookshelf_Loans_V1_LoanService.Client(wrapping: loans)
+    )
+)
+
+// MARK: - Router
+let router = Router(context: BasicRequestContext.self)
+router.add(middleware: CORSMiddleware(allowOrigin: .originBased, allowHeaders: [.contentType, .authorization], allowMethods: [.get, .post, .put, .delete]))
+router.add(middleware: ErrorMiddleware())
+router.add(middleware: LogRequestsMiddleware(logLevel))
+api.addRoutes(to: router.group("v1"))
+
+// MARK: - Hummingbird
+let application = Application(
+    router: router,
+    configuration: ApplicationConfiguration(reader: config.scoped(to: "http.server")),
+    logger: logger
+)
+
+// MARK: - Lifecycle
+// certificateReloader, every upstream client, application
+```
+
+The gateway's defaults hold `http.server.host` and `http.server.port`; Hummingbird's configuration reader comes from its `ConfigurationSupport` trait.

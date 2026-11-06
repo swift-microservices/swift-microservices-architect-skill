@@ -1,0 +1,301 @@
+# The gateway
+
+The public HTTP API: a Hummingbird application that verifies the caller, chooses a route's tier by request context, and forwards each request with the caller's token to the owning service.
+
+## Contents
+- What the gateway is
+- The package
+- OpenAPI types
+- Request contexts and tiers
+- The router
+- Controllers
+- Conversions
+- Errors
+- Upstream clients
+- The edge
+
+## What the gateway is
+
+- The only process clients reach. Every service listens privately, for gRPC over mTLS.
+- It owns the HTTP contract, `openapi.yaml`, and its conversion onto the services' `XService` contracts.
+- It owns no tables, no business rules and no use cases. It verifies a token only to choose a tier and to refuse early; each service verifies the same token again and authorizes in its use cases.
+- It never routes to an `XInternalService`.
+
+## The package
+
+```
+bookshelf-gateway/Sources/
+├── GatewayHTTP/
+│   ├── openapi.yaml, openapi-generator-config.yaml
+│   ├── BookshelfAPI.swift          the router builder and its dependencies
+│   ├── Contexts/                   IdentityRequestContext.swift, AdminRequestContext.swift
+│   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift
+│   ├── Middlewares/                ErrorMiddleware/: ErrorMiddleware.swift, Problem/
+│   └── Schemas/                    Requests/, Responses/, Shared/: X+RPC.swift conversions
+└── Gateway/
+    ├── Gateway.swift               the @main command
+    ├── Configuration/              InMemoryProvider+ApplicationDefaults.swift
+    └── Serve/                      Serve.swift
+```
+
+## OpenAPI types
+
+`GatewayHTTP` generates types only, with the OpenAPI generator plugin:
+
+```yaml
+generate:
+  - types
+accessModifier: package
+namingStrategy: idiomatic
+```
+
+- The routes are Hummingbird's, so request contexts and middleware stay native; the generated `Components.Schemas` types are the request and response bodies.
+- `openapi.yaml` is the contract clients code against: it changes before the routes do, and a route answers exactly the statuses it documents.
+
+## Request contexts and tiers
+
+Each group of routes runs in the context that states what it guarantees:
+
+| Tier | Context | Guarantees |
+|---|---|---|
+| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, public reads, signed webhooks |
+| A caller, if there is one | `IdentityRequestContext`, behind `BearerAuthenticationMiddleware` | A token present was valid; `identity` is optional |
+| A caller, required | `IdentityRequestContext`, behind `IsAuthenticatedMiddleware` | `identity` is set |
+| Administrators | `AdminRequestContext`, converted at the verb | A non-optional administrator `identity` |
+
+```swift
+package struct IdentityRequestContext: ChildRequestContext, AuthRequestContext {
+    package var coreContext: CoreRequestContextStorage
+    package var identity: UserIdentity?
+
+    /// Carries the parent's storage rather than rebuilding it: path parameters are already
+    /// extracted by the time a child context is made.
+    package init(context: BasicRequestContext) throws {
+        self.coreContext = context.coreContext
+        self.identity = nil
+    }
+}
+
+/// A caller checked to be an administrator: reaching a handler through this context is the proof.
+package struct AdminRequestContext: ChildRequestContext {
+    package var coreContext: CoreRequestContextStorage
+    package let identity: UserIdentity
+
+    package init(context: IdentityRequestContext) throws {
+        guard let identity = context.identity else {
+            throw HTTPError(.unauthorized, message: "Authentication is required.")
+        }
+
+        guard identity.role == .admin else {
+            throw HTTPError(.forbidden, message: "Administrator access is required.")
+        }
+
+        self.coreContext = context.coreContext
+        self.identity = identity
+    }
+}
+```
+
+- A child context's throwing initializer is the check: a handler that takes `AdminRequestContext` never re-tests the role.
+- Absent and insufficient answer differently: `401` when no one identified, `403` when the caller can't do this whatever token they hold.
+- The administrator check happens at the verb, not behind an `/admin` path prefix, so a resource's path is shared by its audiences. `/admin/…` is only for an administrator's view of a collection that callers also list (`/admin/loans`).
+- A route whose bearer token isn't an access token, such as the refresh token a refresh request presents, stays in the first tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the first tier too, since there is no caller yet.
+
+## The router
+
+```swift
+/// The whole HTTP surface, built from the clients it needs and nothing else.
+package struct BookshelfAPI: Sendable {
+    private let dependencies: Dependencies
+
+    package init(dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
+
+    package func addRoutes(to group: RouterGroup<BasicRequestContext>) {
+        let accountController = AccountController(client: dependencies.identity)
+        let bookController = BookController(client: dependencies.books)
+        let loanController = LoanController(client: dependencies.loans)
+
+        // MARK: - No caller
+
+        group.get("health") { _, _ -> HTTPResponse.Status in .ok }
+        accountController.addPublicRoutes(to: group.group("account"))
+        bookController.addPublicRoutes(to: group.group("books"))
+
+        // MARK: - A caller, if there is one
+
+        let identified = group
+            .group(context: IdentityRequestContext.self)
+            .add(middleware: BearerAuthenticationMiddleware<IdentityRequestContext>(authenticator: dependencies.authenticator))
+
+        // MARK: - A caller, required
+
+        let authenticated = identified
+            .group()
+            .add(middleware: IsAuthenticatedMiddleware())
+
+        accountController.addAuthenticatedRoutes(to: authenticated.group("account"))
+        bookController.addAuthenticatedRoutes(to: authenticated.group("books"))
+        loanController.addAuthenticatedRoutes(to: authenticated.group("loans"))
+        loanController.addAdministratorRoutes(to: authenticated.group("admin/loans"))
+    }
+}
+
+extension BookshelfAPI {
+    /// One generated client per upstream proto service, and the authenticator for the tiers.
+    package struct Dependencies: Sendable {
+        package let authenticator: any Authenticator<String, UserIdentity>
+        package let identity: any Bookshelf_Identity_V1_IdentityService.ClientProtocol
+        package let books: any Bookshelf_Catalog_V1_BookService.ClientProtocol
+        package let loans: any Bookshelf_Loans_V1_LoanService.ClientProtocol
+
+        package init(…) {
+            …
+        }
+    }
+}
+```
+
+- `add(middleware:)` changes the group it's called on, for every route added after it. Each tier is its own group (`identified.group()`), so a tier's middleware never reaches a sibling tier's routes.
+- The router builder takes its clients and the authenticator as dependencies; the executable builds them, which keeps the whole surface buildable over stub clients.
+- Liveness (`/health`) answers without consulting any upstream: it reports this process serving HTTP.
+
+## Controllers
+
+One controller per resource, holding the client of the proto service behind it:
+
+```swift
+/// The `/v1/loans` resource: the caller's own loans, and every member's for administrators.
+package struct LoanController: Sendable {
+    private let client: any Bookshelf_Loans_V1_LoanService.ClientProtocol
+
+    package init(client: any Bookshelf_Loans_V1_LoanService.ClientProtocol) {
+        self.client = client
+    }
+
+    /// Wired at `loans`.
+    package func addAuthenticatedRoutes(to group: RouterGroup<IdentityRequestContext>) {
+        group
+            .post(use: borrowBook)
+            .get(use: listLoans)
+            .post(":id/return", use: returnBook)
+    }
+
+    /// Wired at `admin/loans`.
+    package func addAdministratorRoutes(to group: RouterGroup<IdentityRequestContext>) {
+        group
+            .group(context: AdminRequestContext.self)
+            .get(use: listAllLoans)
+    }
+
+    private func borrowBook(
+        request: Request,
+        context: IdentityRequestContext
+    ) async throws -> EditedResponse<Components.Schemas.LoanResponse> {
+        let body = try await request.decode(as: Components.Schemas.BorrowBookRequest.self, context: context)
+        let loan = try await client.borrowBook(Bookshelf_Loans_V1_BorrowBookRequest(body))
+        return EditedResponse(status: .created, response: try Components.Schemas.LoanResponse(loan))
+    }
+
+    private func returnBook(
+        request: Request,
+        context: IdentityRequestContext
+    ) async throws -> Components.Schemas.LoanResponse {
+        let loanID = try context.parameters.require("id", as: UUID.self)
+        let loan = try await client.returnBook(
+            Bookshelf_Loans_V1_ReturnBookRequest.with { $0.loanID = loanID.uuidString.lowercased() }
+        )
+        return try Components.Schemas.LoanResponse(loan)
+    }
+
+    …
+}
+```
+
+- A controller registers its routes in `addPublicRoutes(to:)`, `addAuthenticatedRoutes(to:)` and `addAdministratorRoutes(to:)`, each taking the group of its tier; the router decides the paths.
+- A handler is a `private func` with the signature `(Request, Context) async throws -> Response`: decode the body or parameters, call the client, convert the answer. Nothing else.
+- The caller's own routes send no user id upstream: the forwarded token names the caller.
+- Status codes follow the method: `201` with `EditedResponse` for a create, `202` for work accepted to run later, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, `200` otherwise.
+- Hummingbird keys a path capture by one name per segment, so every route on one path shares its capture name (`:id`).
+
+## Conversions
+
+`Schemas/Requests/` and `Schemas/Responses/` hold one file per type, `XRequest+RPC.swift` and `XResponse+RPC.swift`:
+
+```swift
+extension Components.Schemas.LoanResponse: ResponseCodable {
+    init(_ loan: Bookshelf_Loans_V1_Loan) throws {
+        guard let id = UUID(uuidString: loan.id), let bookID = UUID(uuidString: loan.bookID) else {
+            throw HTTPError(.internalServerError, message: "The loan record is malformed.")
+        }
+
+        self.init(id: id, bookID: bookID, status: try Components.Schemas.LoanStatus(loan.status), dueDate: loan.dueDate.date)
+    }
+}
+
+extension Bookshelf_Loans_V1_BorrowBookRequest {
+    init(_ body: Components.Schemas.BorrowBookRequest) {
+        self.init()
+        self.bookID = body.bookID.uuidString.lowercased()
+        self.idempotencyKey = body.idempotencyKey
+    }
+}
+```
+
+- A response conversion throws on a malformed upstream value, such as a non-UUID id or an unspecified enum, answering `500` rather than dropping or inventing a field.
+- A body field the client omits reaches the service as the proto default; the service's conversion decides what an empty value means.
+
+## Errors
+
+`ErrorMiddleware`, first on the router, answers every failure as RFC 9457 problem details (`application/problem+json`):
+- `HTTPError` and Hummingbird's own errors answer their status.
+- `RPCError` maps by code, through a retroactive `HTTPResponseError` conformance:
+
+| `RPCError.Code` | HTTP |
+|---|---|
+| `invalidArgument`, `failedPrecondition`, `outOfRange` | `400` |
+| `unauthenticated` | `401` |
+| `permissionDenied` | `403` |
+| `notFound` | `404` |
+| `alreadyExists`, `aborted` | `409` |
+| `resourceExhausted` | `429` |
+| `cancelled` | `499` |
+| `unimplemented` | `501` |
+| `unavailable` | `503` |
+| `deadlineExceeded` | `504` |
+| `unknown`, `internalError`, `dataLoss`, anything else | `500` |
+
+- The problem's `title` is the upstream's message, written for clients ([status codes](grpc.md#status-codes)); `instance` is the request path.
+- Anything else is logged with its cause and answered as a generic `500` problem.
+
+## Upstream clients
+
+The executable builds one `GRPCClient` per upstream service over mTLS, with `BearerPropagationInterceptor` scoped to the descriptors the gateway calls:
+
+```swift
+let propagation = BearerPropagationInterceptor<UserIdentity>()
+
+let loans = GRPCClient(
+    transport: try .http2NIOPosix(
+        target: .dns(host: try loansConfig.requiredString(forKey: "host"), port: try loansConfig.requiredInt(forKey: "port")),
+        transportSecurity: try .mTLS(config: tlsConfig, certificateReloader: certificateReloader),
+        config: HTTP2ClientTransport.Posix.Config(config: loansConfig),
+        serviceConfig: ServiceConfig(config: loansConfig)
+    ),
+    interceptorPipeline: [
+        .apply(propagation, to: .services([Bookshelf_Loans_V1_LoanService.descriptor]))
+    ]
+)
+```
+
+- Propagation presents the caller's original token, as `BearerAuthenticationMiddleware` bound it, when a route identified a caller; a public route's call goes upstream anonymously.
+- A service with several proto services behind one process gets one client, with every descriptor the gateway calls in its propagation list.
+- `BookshelfAPI.Dependencies` holds each as the generated client protocol: `Bookshelf_Loans_V1_LoanService.Client(wrapping: loans)`.
+
+## The edge
+
+- Clients reach the gateway over TLS, terminated by the edge in front of it (a CDN or reverse proxy, which may itself re-encrypt to the proxy beside the gateway). The gateway listens for plain HTTP on its private interface; it never configures TLS for clients.
+- Its upstream calls are mTLS like every call between processes.
+- CORS is the gateway's, in `CORSMiddleware` on the router, for the origins, headers and methods browsers use.
+- Root middleware, in order: CORS, `ErrorMiddleware`, `LogRequestsMiddleware`; then `addRoutes(to: router.group("v1"))` ([the gateway's root](composition.md#the-gateways-root)).

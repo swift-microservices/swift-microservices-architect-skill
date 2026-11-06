@@ -1,0 +1,155 @@
+# Security
+
+Who proves what on each hop, mutual TLS with certificate reloading, user tokens, authorization in layers, and secrets.
+
+## Contents
+- The trust model
+- Mutual TLS
+- User tokens
+- Authorization
+- Secrets
+
+## The trust model
+
+| Hop | Transport | Proves |
+|---|---|---|
+| Client to the edge | TLS | The edge to the client |
+| Edge to the gateway | TLS between proxies, as the deployment chooses; plain HTTP on the gateway's private interface | Nothing more: the gateway trusts its private network for this hop only |
+| Gateway to a service's `XService` | gRPC over mTLS, with the caller's token | Both processes by certificate; the user by the token, verified again by the service |
+| A service or worker to another's `XInternalService` | gRPC over mTLS | Both processes by certificate; the request names the user it acts for |
+| A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate |
+| A process to Postgres | TLS when offered (`.prefer(.clientDefault)`), as one of the service's roles | The role, by its password |
+| Inside the database | Row-level security | The tenant, by the setting bound to the transaction |
+
+The edge proxy and certificate issuance belong to the deployment; this skill fixes what each process presents and checks.
+
+## Mutual TLS
+
+Every connection between processes is mutual TLS against a private certificate authority per environment. Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial.
+
+`<Org>Transport` holds the readers every executable uses:
+
+```swift
+public import Configuration
+public import GRPCNIOTransportHTTP2
+public import Logging
+public import NIOCertificateReloading
+
+extension HTTP2ServerTransport.Posix.TransportSecurity {
+    /// Requires every peer to present a certificate the trust roots signed.
+    ///
+    /// ## Configuration keys
+    /// - `trustRootsPath` (string, required): the PEM bundle of the authority that signs peers.
+    public static func mTLS(config: ConfigReader, certificateReloader: any CertificateReloader) throws -> Self {
+        let trustRootsPath = try config.requiredString(forKey: "trustRootsPath")
+        return try .mTLS(certificateReloader: certificateReloader) {
+            $0.trustRoots = .certificates([.file(path: trustRootsPath, format: .pem)])
+            $0.clientCertificateVerification = .noHostnameVerification
+        }
+    }
+}
+
+extension HTTP2ClientTransport.Posix.TransportSecurity {
+    /// Verifies the server's certificate and that it names the dialed host.
+    ///
+    /// ## Configuration keys
+    /// - `trustRootsPath` (string, required): the PEM bundle of the authority that signs peers.
+    public static func mTLS(config: ConfigReader, certificateReloader: any CertificateReloader) throws -> Self {
+        let trustRootsPath = try config.requiredString(forKey: "trustRootsPath")
+        return try .mTLS(certificateReloader: certificateReloader) {
+            $0.trustRoots = .certificates([.file(path: trustRootsPath, format: .pem)])
+            $0.serverCertificateVerification = .fullVerification
+        }
+    }
+}
+
+extension TimedCertificateReloader.Configuration {
+    /// The process's certificate and key, reloaded from disk as the deployment renews them.
+    ///
+    /// ## Configuration keys
+    /// - `certificatePath`, `privateKeyPath` (string, required): the PEM pair.
+    /// - `refreshIntervalSeconds` (int, default 60): how often the files are read.
+    public init(config: ConfigReader, logger: Logger) throws {
+        self.init(
+            refreshInterval: config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60)),
+            certificateSource: .init(location: .file(path: try config.requiredString(forKey: "certificatePath")), format: .pem),
+            privateKeySource: .init(location: .file(path: try config.requiredString(forKey: "privateKeyPath")), format: .pem)
+        )
+        self.logger = logger
+        self.onCertificateLoadFailed = { failure in
+            logger.warning("TLS certificate reload failed", metadata: ["error": "\(failure.error)"])
+        }
+    }
+}
+```
+
+- The server requires a client certificate signed by the trust roots and doesn't match it against a hostname; the client verifies the server's chain and hostname in full.
+- `TimedCertificateReloader` from swift-nio-extras is the `CertificateReloader` that `.mTLS(certificateReloader:)` takes. `makeReloaderValidatingSources(configuration:)` loads the pair before any transport is built, so missing, malformed or mismatched files fail startup.
+- The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair; a failed reload keeps the last good pair and logs a warning.
+- Servers bound connection age, so long-lived connections re-handshake with renewed certificates ([transports](grpc.md#transports)).
+- One reloader per certificate pair: the service pair under `tls` for gRPC, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services'.
+- Issuing and renewing certificates is the deployment's job; the process only reads files. A new trust root needs a restart.
+- An internal RPC is admitted by the listener's trust alone, so every peer the authority signs may call it; internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.
+
+## User tokens
+
+One issuer signs every access token. Identity alone holds the EdDSA private key and issues tokens with `JWTIssuer<UserIdentity>`; every other process holds the public key and verifies with `JWTAuthenticator<UserIdentity>`.
+
+The token's payload is the org core's `UserIdentity`:
+
+```swift
+public struct UserIdentity: JWTPayload, Equatable, Sendable {
+    public let userID: UUID
+    public let role: UserRole
+    public let issuer: String
+    public let issueDate: Date
+    public let expirationDate: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case userID = "sub"
+        case role
+        case issuer = "iss"
+        case issueDate = "iat"
+        case expirationDate = "exp"
+    }
+
+    public func verify(using algorithm: some JWTAlgorithm) throws {
+        try ExpirationClaim(value: expirationDate).verifyNotExpired()
+    }
+}
+
+/// A role as the token names it, open so a role added later decodes everywhere.
+public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByStringLiteral, Sendable {
+    public static let user: UserRole = "user"
+    public static let admin: UserRole = "admin"
+    …
+}
+```
+
+- The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
+- `OperationContext.user` spells the lookup of `Principal<UserIdentity, String>` once; `Logger.MetadataProvider.user` adds `userID` to every log line while a user is bound.
+- `<Org>Transport` reads the keys by path: `JWTAuthenticator<UserIdentity>(config:)` from `jwt.publicKeyPath`, and in Identity `JWTIssuer<UserIdentity>(config:)` from `jwt.privateKeyPath`.
+- Access tokens are short-lived. A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh RPC, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)).
+- The gateway verifies the token to pick a tier and forwards the original with `BearerPropagationInterceptor`; each service's `BearerAuthenticationInterceptor` verifies it again. A token never travels on an internal RPC, into a workflow's input, or into a log.
+
+## Authorization
+
+Each layer refuses what it can see; the use case decides.
+
+| Layer | Checks |
+|---|---|
+| The gateway's tier | A valid token where the route needs a caller; the role where it needs an administrator |
+| The handler | `requireUser()` or `requireAdministrator()`, before converting the request |
+| The use case | The rule: the role, the resource's ownership and state ([authorization](use-cases.md#authorization)) |
+| Row-level security | The tenant: a caller's transaction sees only the caller's rows ([row-level security](persistence.md#row-level-security)) |
+
+- Every layer but the use case is defense in depth. A rule that exists only in the gateway or only in a policy is missing from the domain.
+- An anonymous RPC that could confirm whether an account exists answers the same either way: a password reset for an unknown address succeeds and sends nothing.
+- A caller asking for another user's resource gets the answer a missing resource gets.
+
+## Secrets
+
+- Configuration reads passwords, API keys and webhook secrets with `isSecret: true`, so access reporting redacts them; keys and certificates are files at configured paths, never in an image or a repository.
+- Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres stores their SHA-256 digest (`Crypto`), never the secret; Valkey stores a short-lived one with its expiry.
+- Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), on `NIOThreadPool.singleton.runIfActive { … }`, so the hash never blocks the cooperative pool.
+- A provider's webhook carries no caller: its RPC is in the anyone group, and the use case verifies the provider's signature over the raw body before acting.
