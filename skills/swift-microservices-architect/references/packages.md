@@ -273,7 +273,7 @@ bookshelf-core/
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
 - `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, grpc-swift-2 for the interceptor, Hummingbird for the middleware (`traits: []`) and swift-configuration; only executables link it, and each already links its transport. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
 - Its API is `public`, with `public import` for every module whose types it exposes.
-- It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<org>-protos`, is released and tagged first; each consumer then raises its requirement.
+- It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<org>-protos`, is released and tagged first; each service and the gateway then raise their requirement.
 
 ## The contracts package
 

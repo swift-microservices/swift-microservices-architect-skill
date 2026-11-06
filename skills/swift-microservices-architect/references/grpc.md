@@ -105,7 +105,7 @@ service LoanService {
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
 - A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).
 - A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`.
-- Contracts release before the services that implement or call them ([the organization's core package](packages.md#the-organizations-core-package)). A producer that serves a new RPC or field deploys before any consumer or gateway route that uses it, and never removes an RPC a deployed caller still uses.
+- Contracts release before the services that implement or call them ([the organization's core package](packages.md#the-organizations-core-package)). A service that serves a new RPC or field deploys before any caller or gateway route that uses it, and never removes an RPC a deployed caller still uses.
 
 ## A service's gRPC services
 
@@ -378,5 +378,5 @@ The executable builds the server's and each client's transport from `<Org>Transp
 - One `clientSecurity` serves every client of the process, and each upstream gets its own scoped configuration (`grpc.catalog`) with its host, port, transport config and service config.
 - The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.
 - A client's host is the name in the peer certificate's DNS names. Its config sends keepalive pings on idle connections; its `ServiceConfig` waits for a ready connection, bounded by a deadline, so a transient reconnect doesn't fail a call and a down upstream still does.
-- A client neither retries nor hedges: its `ServiceConfig` sets only the deadline and wait-for-ready. Each call chain has one owner of retries: Temporal for activities, and the client app, with an idempotency key, for public creates. A port call inside an activity never retries on its own.
+- A client neither retries nor hedges: its `ServiceConfig` sets only the deadline and wait-for-ready. Each call chain has one owner of retries: Temporal for activities, and the app calling the public API, with an idempotency key, for public creates. A port call inside an activity never retries on its own.
 - One long-lived `GRPCClient` per upstream process, shared by every port and handler that calls it, run in the `ServiceGroup`. `GRPCServiceLifecycle` makes `GRPCServer` and `GRPCClient` services.

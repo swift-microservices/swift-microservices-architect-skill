@@ -135,7 +135,7 @@ Copy the task's checklist into the response and check items off as they're done.
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, short-lived state
 - [ ] Per service: its targets, commands and database roles
 - [ ] <org>-core's products, <org>-protos' contracts, the gateway's routes by tier
-- [ ] Build order: <org>-core and <org>-protos, the token issuer, each service (owner before consumer), the gateway
+- [ ] Build order: <org>-core and <org>-protos, the token issuer, each service before its callers, the gateway
 - [ ] Write the plan from system.md#the-plan; check it against the hard rules before any code
 ```
 

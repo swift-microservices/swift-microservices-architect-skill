@@ -38,7 +38,7 @@ Each service's database has an owner and a role per purpose. A process connects 
 
 A service declares only the roles it uses: Catalog has no tenant table and runs everything as `catalog_service`.
 
-The internal and worker roles see every row, so a query on them that acts for one user names that user in its own `WHERE`. A read by id written for the tenant scope confines nothing there.
+The internal and worker roles see every row, so a query on them that acts for one user names that user in its own `WHERE`. A read by id that relies on the tenant policy confines nothing there.
 
 ```swift
 package import Logging
@@ -251,7 +251,7 @@ package struct CreateLoansTable: DatabaseMigration {
 - Migrations create the roles, since the database and its owner exist before the service first deploys; the owner has `CREATEROLE` for them. Role names are cluster-wide, so they carry the service's name (`loans_service`). `CreateServiceRole(role:password:database:)` creates the login role and grants it `CONNECT`, schema usage, table and sequence privileges, and the same for future tables through default privileges. Role names and passwords come from configuration and are quoted into `PostgresQuery(unsafeSQL:)`, since a statement that names a role takes no bindings.
 - The executable's `Database/Migrations.swift` lists them in applied order. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited.
 - `serve --migrate-database` applies them as the owner over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before the role clients and the `ServiceGroup` are built ([commands](composition.md#commands)).
-- One process migrates, before the serving replicas start: postgres-migrations takes no lock, so replicas that apply at once race and all but one fail. The application that runs `serve --migrate-database` has one replica and deploys first ([a service's CI workflows](delivery.md#a-services-ci-workflows)); any other serve replica runs without the flag.
+- One process migrates, before the serving replicas start: postgres-migrations takes no lock, so replicas that apply at once race and all but one fail. `serve --migrate-database` runs in one process, deployed first ([a service's CI workflows](delivery.md#a-services-ci-workflows)); every other serve replica runs without the flag.
 
 ## Other stores
 

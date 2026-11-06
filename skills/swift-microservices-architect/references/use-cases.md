@@ -307,7 +307,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 - A transaction holds a pooled connection until it ends, so it contains only database work. Remote calls go before it (the catalog lookup) or after it commits (the workflow start).
 - A decision that must be atomic with its write happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
 - A rule over rows that a concurrent transaction could change holds only with a lock or a constraint: `SELECT … FOR UPDATE`, or a unique or check constraint the repository maps to a case.
-- A state change is the repository's conditional write, never a read, a decision in Swift and a write ([state transitions](persistence.md#repositories-and-statements)); the use case maps its `nil` to its case (`alreadyReturned`).
+- A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)); the use case maps its `nil` to its case (`alreadyReturned`).
 - Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
 
