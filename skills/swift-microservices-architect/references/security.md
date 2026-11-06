@@ -88,8 +88,7 @@ extension TimedCertificateReloader.Configuration {
 
 - The server requires a client certificate signed by the trust roots and doesn't match it against a hostname; the client verifies the server's chain and hostname in full.
 - `TimedCertificateReloader` from swift-nio-extras is the `CertificateReloader` that `.mTLS(certificateReloader:)` takes. `makeReloaderValidatingSources(configuration:)` loads the pair before any transport is built, so missing, malformed or mismatched files fail startup.
-- The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair; a failed reload keeps the last good pair and logs a warning.
-- Servers bound connection age, so long-lived connections re-handshake with renewed certificates ([transports](grpc.md#transports)).
+- The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair, and servers bound connection age so every connection handshakes again ([transports](grpc.md#transports)); a failed reload keeps the last good pair and logs a warning.
 - One reloader per certificate pair: the service pair under `tls` for gRPC, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services'.
 - Issuing and renewing certificates is the deployment's job; the process only reads files. A new trust root needs a restart.
 - An internal RPC is admitted by the listener's trust alone, so every peer the authority signs may call it; internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.

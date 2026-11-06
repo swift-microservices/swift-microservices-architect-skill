@@ -25,10 +25,10 @@ This README is for people. Agents read [SKILL.md](skills/swift-microservices-arc
 - gRPC: contracts with paged lists, `XService` and `XInternalService`, handlers, conversions, status codes, interceptors, clients for ports and transports.
 - The gateway: Hummingbird request contexts in tiers, the router, controllers, provider webhooks, problem details, and upstream clients that forward the caller's token.
 - Temporal: starting workflows from use cases, deterministic workflows, activities over use cases and ports, options, versioning and the worker.
-- Composition: commands, configuration readers and defaults, logging, the `ServiceGroup` and why it matters.
+- Composition: commands, configuration readers and defaults, logging, and the `ServiceGroup` that runs and shuts down every component.
 - Security: the trust model, mTLS with certificate reloading, user tokens, authorization layers, secrets and webhooks.
 - Testing: a test target per module over mocks of its protocols, and the shared mocks in `<org>-core`'s testing product.
-- CI/CD: the GitHub Actions CI workflows of a public library, a system library and a service, which call only swift-microservices/ci's CI pipelines and deployment adapter, semver releases, an image per commit on GitHub Container Registry deployed through Dokploy to staging and then to production, and Dependabot.
+- CI/CD: the GitHub Actions CI workflows a public library, a system library and a service declare, calling only swift-microservices/ci; semver releases; an image per commit on GitHub Container Registry, built by the service's Containerfile and deployed through Dokploy to staging and then to production; and Dependabot.
 - Code style and naming conventions.
 
 Out of scope for now: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
@@ -36,6 +36,7 @@ Out of scope for now: setting up Dokploy and its servers, compose files, network
 Covered by other skills the agent loads alongside this one:
 - Swift Concurrency: [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill)
 - Swift Testing: [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill)
+- Argument labels, method names and documentation comments: a `swift-api-design-guidelines` skill
 
 ## Layout
 
@@ -43,7 +44,7 @@ Covered by other skills the agent loads alongside this one:
 swift-microservices-architect-skill/
 ├── .claude-plugin/                  Claude Code plugin and marketplace manifests
 ├── skills/swift-microservices-architect/
-│   ├── SKILL.md                     entry point: shape, rules, style, gotchas, workflows, which reference to read
+│   ├── SKILL.md                     entry point: shape, rules, style, gotchas, checklists, which reference to read
 │   └── references/
 │       ├── system.md                services, contracts, how services talk, data ownership, shared packages, the plan
 │       ├── packages.md              targets, dependency direction, Package.swift, Swift settings, traits, layouts, boundary checks
@@ -56,7 +57,7 @@ swift-microservices-architect-skill/
 │       ├── composition.md           commands, composition roots, configuration, logging, lifecycle
 │       ├── security.md              trust model, mTLS, tokens, authorization, secrets, webhooks
 │       ├── testing.md               test targets per module, mocks, the shared testing product
-│       ├── delivery.md              CI/CD per package kind: workflows, tests, releases, images, deployment
+│       ├── delivery.md              CI/CD per package kind: CI workflows, tests, releases, deployment, Containerfile
 │       ├── style.md                 how the code reads
 │       └── conventions.md           naming, folders, files
 ├── .github/                         CI: validation, the semver label check, releases, Dependabot, and scripts/check_skill.py, the checks to run after every change

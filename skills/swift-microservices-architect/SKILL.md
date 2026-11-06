@@ -123,7 +123,7 @@ do {
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep`, a captured `Logger` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
 - A plain `import Foundation`, or a scoped `import struct Foundation.Data`, in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
 
-## Workflows
+## Checklists
 
 Copy the checklist for the task into the response and check items off as they're done.
 
@@ -182,7 +182,7 @@ Copy the checklist for the task into the response and check items off as they're
 
 ```
 - [ ] The package's kind: public library, system library or service (delivery.md#package-kinds)
-- [ ] Its CI workflows, calling swift-microservices/ci at a release's commit; dependabot.yml; .license_header_template; the secrets
+- [ ] Its CI workflows, calling swift-microservices/ci at a release's commit; dependabot.yml; .license_header_template and .licenseignore; the secrets
 - [ ] A library: the semver labels and .github/release.yml; a service: its Containerfile
 - [ ] swift build and swift test with CI's flags; fix and repeat until both pass
 ```
@@ -212,11 +212,11 @@ Read the reference for the part at hand:
 | [references/grpc.md](references/grpc.md) | Contracts, gRPC services and handlers, conversions, status codes, interceptors, clients for ports, transports |
 | [references/gateway.md](references/gateway.md) | Request contexts and tiers, the router, controllers, errors, upstream clients, the edge |
 | [references/workflows.md](references/workflows.md) | Starting workflows, workflows, determinism, activities, options, versions, the worker |
-| [references/composition.md](references/composition.md) | Commands, the composition root, configuration, logging, the ServiceGroup and why |
+| [references/composition.md](references/composition.md) | Commands, the composition root, configuration, logging, the ServiceGroup |
 | [references/security.md](references/security.md) | The trust model, mTLS and certificate reloading, user tokens, authorization layers, secrets |
 | [references/style.md](references/style.md) | Readability, errors, concurrency, imports and access control, Foundation, types, documentation |
 | [references/testing.md](references/testing.md) | Test targets per module, what each tests, mocks, the shared testing product |
-| [references/delivery.md](references/delivery.md) | CI/CD: each package kind's CI workflows over swift-microservices/ci, test flags, Foundation linking, releases, images, deployment, Dependabot |
+| [references/delivery.md](references/delivery.md) | CI/CD per package kind: CI workflows over swift-microservices/ci, test flags, Foundation linking, releases, deployment, the Containerfile, Dependabot |
 | [references/conventions.md](references/conventions.md) | Naming a package, target, type, file, key or folder |
 
 ## Related skills

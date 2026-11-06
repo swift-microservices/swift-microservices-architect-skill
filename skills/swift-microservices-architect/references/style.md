@@ -41,7 +41,7 @@ let rows = try await connection.execute(statement, logger: logger)
 
 ## Errors
 
-- A use case declares its error with typed throws ([SE-0413](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0413-typed-throws.md)): `async throws(BorrowBookUseCaseError) -> Loan`. Repositories, ports, clients and handlers use untyped `throws`.
+- A use case declares its error with typed throws: `async throws(BorrowBookUseCaseError) -> Loan`. Repositories, ports, clients and handlers use untyped `throws`.
 - Errors are mapped with `do` and one `catch` per case: `catch LoanRepositoryError.idempotencyConflict { throw .idempotencyConflict }`. The order and the final `catch` are in [the body of a use case](use-cases.md#the-body-of-a-use-case); a handler maps every case and has no final `catch` ([a handler](grpc.md#a-handler)).
 - The `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
 - Each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
@@ -57,17 +57,17 @@ Every package builds with [the Swift settings](packages.md#swift-settings).
 - Everything that crosses a boundary is `Sendable`: models, inputs, commands, errors, protocols. Structs and enums by default; an actor only for mutable state shared across tasks; `Mutex` from `Synchronization` for a small piece of state touched synchronously.
 - No `@unchecked Sendable`, `nonisolated(unsafe)` or `@preconcurrency` in owned code. When a dependency needs one, it appears once, in the adapter that wraps the dependency, with the reason beside it.
 - No unstructured tasks in a service. Long-running work is a `Service` in the `ServiceGroup`; work that must outlive a request is a [workflow](workflows.md#when-work-is-a-workflow); concurrency inside a request is `async let` or a task group, which end with the request.
-- With `NonisolatedNonsendingByDefault` ([SE-0461](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0461-async-function-isolation.md)) an `async` function runs on its caller's isolation, and so does a plain `async` closure such as a transaction's. `@concurrent` marks work that must leave its caller's actor.
+- With `NonisolatedNonsendingByDefault` an `async` function runs on its caller's isolation, and so does a plain `async` closure such as a transaction's. `@concurrent` marks work that must leave its caller's actor.
 - A requirement declared by a library built without that feature is implemented with its signature exactly as declared, `@concurrent` included: Hummingbird's `RouterMiddleware.handle` takes `next: @concurrent (Request, Context) async throws -> Response`, and grpc-swift's interceptors take `next: @concurrent @Sendable (…)`. An unannotated `async` closure type there means something else and fails to conform.
 - CPU-heavy synchronous work, such as hashing a password, runs on `NIOThreadPool.singleton.runIfActive { … }`, off the cooperative pool.
 - No server type is `@MainActor`.
 
 ## Access control and imports
 
-- Inside a service's package, what another target uses is `package` ([SE-0386](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0386-package-access-modifier.md)), the rest internal or `private`. `public` is for libraries other packages link: `<org>-core`, `<org>-protos`.
+- Inside a service's package, what another target uses is `package`, the rest internal or `private`. `public` is for libraries other packages link: `<org>-core`, `<org>-protos`.
 - A `package` struct spells its `package init`, since the memberwise initializer is internal.
-- Imports are internal by default ([SE-0409](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0409-access-level-on-imports.md)). A file imports a module `package` when the module's types appear in its `package` declarations, `public` when in `public` ones, and plainly otherwise.
-- A file imports every module whose members it uses, since `MemberImportVisibility` ([SE-0444](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0444-member-import-visibility.md)) hides members of modules it doesn't import.
+- Imports are internal by default. A file imports a module `package` when the module's types appear in its `package` declarations, `public` when in `public` ones, and plainly otherwise.
+- A file imports every module whose members it uses, since `MemberImportVisibility` hides members of modules it doesn't import.
 - Access levels go on members, never on an extension.
 
 ## Foundation

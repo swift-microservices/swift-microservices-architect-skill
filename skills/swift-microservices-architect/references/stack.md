@@ -23,11 +23,7 @@ Small libraries that give every service the same shape for identity, request-sco
 | [swift-persistence-postgres](https://github.com/swift-microservices/swift-persistence-postgres) | `PersistencePostgres` | `PostgresDatabase<Scope>`, `PostgresScope`, `PostgresSettings` (transaction-local `set_config`, read from `OperationContext`), `PostgresClient.withClient` | XPostgres, `<Org>Persistence`, executables |
 | [swift-openapi-token-authentication](https://github.com/swift-microservices/swift-openapi-token-authentication) | `OpenAPITokenAuthentication` | Client-side sessions and token refresh for generated OpenAPI clients | Client SDKs, out of this skill's scope |
 
-How they fit together on a call:
-1. `BearerAuthenticationInterceptor` proves the token with a `JWTAuthenticator<UserIdentity>` and binds a `Principal<UserIdentity, String>` in `OperationContext`.
-2. The handler reads it through `OperationContext.current.user` (`<Org>Authentication`) and passes the identity to the use case.
-3. `UserSettingsInterceptor` (`<Org>Persistence`) turns the principal into `PostgresSettings`, which `PostgresDatabase` applies at the start of every transaction, so row-level security sees the tenant.
-4. `BearerPropagationInterceptor` on an outgoing client presents the same token to the next service.
+On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `OperationContext`, the handler passes its identity to the use case ([user tokens](security.md#user-tokens)), and `UserSettingsInterceptor` binds the tenant for every transaction ([binding the tenant](persistence.md#binding-the-tenant)).
 
 ## The server stack
 

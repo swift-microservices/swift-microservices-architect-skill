@@ -240,11 +240,10 @@ package struct CreateLoansTable: DatabaseMigration {
 ```
 
 - One migration per change, named for what it does: `CreateServiceRole`, `CreateLoansTable`, `CreateLoansRLSPolicy`, `CreateInternalRole`, `AddLoansReturnDate`.
-- A migration keeps the schema usable by the image before it: it expands now and contracts in a later deploy, since a rollback runs the previous image on the current schema ([deployment](delivery.md#a-services-ci-workflows)).
+- A migration keeps the schema usable by the image before it, since a rollback runs that image on the current schema ([deployment](delivery.md#a-services-ci-workflows)): it expands now and contracts in a later deploy, and a change that renames or moves data ships with code that reads both shapes.
 - Migrations create the roles, since the database and its owner exist before the service first deploys. `CreateServiceRole(role:password:database:)` creates the login role and grants it `CONNECT`, schema usage, table and sequence privileges, and the same for future tables through default privileges. Role names and passwords come from configuration, as identifiers are quoted into `PostgresQuery(unsafeSQL:)`.
 - The executable's `Database/Migrations.swift` lists them in applied order. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited.
-- `serve --migrate-database` applies them as the owner over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before building the role clients ([commands](composition.md#commands)).
-- A change that renames or moves data ships with the code that reads both shapes, or after every process reading the old shape is replaced.
+- `serve --migrate-database` applies them as the owner over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before the role clients and the `ServiceGroup` are built ([commands](composition.md#commands)).
 
 ## Other stores
 
@@ -252,7 +251,6 @@ Storage is an adapter target behind Core's protocols, so a service whose data fi
 
 - A store with transactions gets its own target (`X<Store>`) whose database type adopts swift-persistence's `Database`, with scopes built on its transaction the way `PostgresScope` is. Use cases don't change.
 - A store without transactions implements Core's repository protocols directly, and a use case holds the repository as a port, the way it holds a Valkey repository.
-- The storage topology (shared instance, instance per service, managed service) stays out of the code: it's configuration.
 
 ## Valkey
 

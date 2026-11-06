@@ -16,7 +16,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 **How Claude loads a skill**, in three stages, each with its own limit:
 
-1. **The listing.** Every session lists each installed skill's `name` and `description` on every turn, and Claude decides from them alone whether to invoke the skill. Claude Code cuts an entry at 1,536 characters.
+1. **The listing.** Every session lists each installed skill's `name` and `description` on every turn, and Claude decides from them alone whether to invoke the skill. Claude Code cuts an entry at 1,536 characters, and when the listing outgrows its budget, about 1% of the context window, it drops the descriptions of the least-used skills first.
 2. **Invocation.** The `SKILL.md` body enters the conversation as one message and stays: under 500 lines and about 5,000 tokens. After compaction Claude Code re-attaches the first 5,000 tokens of each invoked skill, within 25,000 tokens shared by every skill invoked, the most recent first.
 3. **References.** A file in `references/` loads only when `SKILL.md` sends Claude to it. A file reached only through another reference may be read in part, such as its first 100 lines.
 
@@ -29,7 +29,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 **Structure**
 
 - The skill folder holds only what agents read: `SKILL.md` and `references/`. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
-- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, the shapes in brief, code style, gotchas, workflows, references and related skills.
+- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, the shapes in brief, code style, gotchas, checklists, references and related skills.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
 - Links are relative, with forward slashes and GitHub heading anchors; renaming a heading means updating every link to it.
@@ -37,10 +37,11 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 **Content**
 
 - Only what Claude doesn't already know: a placement, an ownership rule, a shape, a style rule, a gotcha, or a reason that guides judgment. Cut explanations of Swift, SPM, Postgres or a library's basics.
-- One home per rule. A rule lives in one reference; `SKILL.md` carries at most one line for it (a hard rule, an ownership row, a brief, a style point, a gotcha or a workflow step); other references link to it instead of restating it. `conventions.md` holds only names. A rule stated twice drifts apart and costs tokens twice.
+- One home per rule. A rule lives in one reference; `SKILL.md` carries at most one line for it (a hard rule, an ownership row, a brief, a style point, a gotcha or a checklist item); other references link to it instead of restating it. `conventions.md` holds only names. A rule stated twice drifts apart and costs tokens twice.
+- One home per example, too. Code shown in one reference is linked from the others: the composition root holds the transports, the gateway's root its upstream clients.
 - `SKILL.md`'s gotchas are mistakes any task can make; a mistake only one shape invites is stated once, in that shape's reference.
 - One term per concept, no time-sensitive statements, concrete examples, and one default rather than a menu of options.
-- A workflow is a checklist the agent copies into its response, ending in a build and a test run it repeats until both pass.
+- A checklist is what the agent copies into its response for a task, ending in a build and a test run it repeats until both pass. `SKILL.md` calls them checklists, so "workflow" means only a Temporal workflow or a CI workflow.
 
 ## What a change must respect
 
@@ -59,6 +60,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
   Reuse these, and add an example only when none of them can show a new idea. Never bring in names, services, endpoints or details from the systems the skill is used on; write the rule they illustrate instead.
 - Code shows a shape the skill prescribes: a use case's files and its body, a handler, a scope, a workflow's `run`, a composition root's sections, a reader. It isn't an implementation to copy: no helper functions, no test code, no internals of a library, and a method body appears only where the body is the shape. Elide the rest with `…`.
 - The stack is fixed: Hummingbird for HTTP, grpc-swift-2 and its siblings for RPC, swift-temporal-sdk, valkey-swift, PostgresNIO with the swift-microservices libraries, swift-configuration, swift-service-lifecycle, swift-argument-parser; for CI/CD, GitHub Actions CI workflows that call only swift-microservices/ci, which builds on swiftlang/github-workflows and Apple's workflows, with images on GitHub Container Registry deployed through Dokploy. No other HTTP framework is named, and no invented infrastructure (DI containers, buses, generic repositories) is added.
+- CI/CD guidance states what a repository declares: its files, the inputs it passes, its secrets and settings. What swift-microservices/ci does inside its CI pipelines is that repository's documentation, not the skill's.
 - The code style is fixed, and every example follows it: one `do` holding the whole path, one `catch` per case, typed throws on use cases, build then call (a value a call takes is a named `let`), no helper methods in use cases, workflows or activities, Swift 6 mode with the four upcoming features, `package` access, the conditional `FoundationEssentials` import. A change never weakens it.
 - Describe the current design only, with no dates, old names, renames, migrations of the skill or history. A library's version appears only in `Package.swift` lower bounds and `stack.md`.
 - One term per concept, as `conventions.md` names it: service, capability, area, use case, repository, command, port, scope, database role, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, CI pipeline (`library.yml`, `service.yml`), image.
@@ -94,7 +96,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - [ ] README.md still describes what the skill covers
    ```
 
-3. When the change alters what an agent produces, compare it against the last commit. Check that commit out as the baseline (`git worktree add ../skill-baseline HEAD`), give two fresh agents the same two or three realistic tasks (plan a backend, add a service, add an operation, add a workflow, review a service), one with each skill, on the models the skill runs on. Fix whatever the edited skill still leaves them to guess, then remove the worktree.
+3. When the change alters what an agent produces, compare it against the last commit. Check that commit out as the baseline (`git worktree add ../skill-baseline HEAD`), give two fresh agents the same two or three realistic tasks (plan a backend, add a service, add an operation, add a durable process, set up CI/CD, review a service), one with each skill, on the models the skill runs on. A change to the description is compared on prompts that should and shouldn't invoke the skill. Fix whatever the edited skill still leaves them to guess, then remove the worktree.
 
 ## Pull requests and releases
 

@@ -105,7 +105,7 @@ service LoanService {
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
 - A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).
 - A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`.
-- Contracts are released before the services that implement or call them, and services pin the release.
+- Contracts are released before the services that implement or call them, which raise their `from:` to that release.
 
 ## A service's gRPC services
 
@@ -384,36 +384,9 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 
 ## Transports
 
-Built in the executable from `<Org>Transport`'s readers ([mutual TLS](security.md#mutual-tls)):
+The executable builds the server's and each client's transport from `<Org>Transport`'s readers ([mutual TLS](security.md#mutual-tls)), as [the composition root](composition.md#the-composition-root) shows:
 
-```swift
-let serverHost = try serverConfig.requiredString(forKey: "host")
-let serverPort = try serverConfig.requiredInt(forKey: "port")
-let serverSecurity: HTTP2ServerTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
-let serverTransportConfig = HTTP2ServerTransport.Posix.Config(config: serverConfig)
-let serverTransport = HTTP2ServerTransport.Posix(
-    address: .ipv4(host: serverHost, port: serverPort),
-    transportSecurity: serverSecurity,
-    config: serverTransportConfig
-)
-let server = GRPCServer(transport: serverTransport, services: [loanService], interceptorPipeline: […])
-
-let catalogHost = try catalogConfig.requiredString(forKey: "host")
-let catalogPort = try catalogConfig.requiredInt(forKey: "port")
-let clientSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
-let catalogTransportConfig = HTTP2ClientTransport.Posix.Config(config: catalogConfig)
-let catalogServiceConfig = ServiceConfig(config: catalogConfig)
-let catalogTransport = try HTTP2ClientTransport.Posix(
-    target: .dns(host: catalogHost, port: catalogPort),
-    transportSecurity: clientSecurity,
-    config: catalogTransportConfig,
-    serviceConfig: catalogServiceConfig
-)
-let catalog = GRPCClient(transport: catalogTransport)
-```
-
-- One `clientSecurity` serves every client of the process, and each upstream gets its own host, port, transport config and service config.
-
+- One `clientSecurity` serves every client of the process, and each upstream gets its own scoped configuration (`grpc.catalog`) with its host, port, transport config and service config.
 - The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.
 - A client's host is the name in the peer certificate's DNS names. Its config sends keepalive pings on idle connections; its `ServiceConfig` waits for a ready connection, bounded by a deadline, so a transient reconnect doesn't fail a call and a down upstream still does.
 - One long-lived `GRPCClient` per upstream process, shared by every port and handler that calls it, run in the `ServiceGroup`. `GRPCServiceLifecycle` makes `GRPCServer` and `GRPCClient` services.
