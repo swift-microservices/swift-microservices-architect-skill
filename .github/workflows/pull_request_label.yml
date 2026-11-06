@@ -1,18 +1,16 @@
 name: PR label
 
-permissions:
-  contents: read
-  pull-requests: read
-
 on:
   pull_request:
     types: [labeled, unlabeled, opened, reopened, synchronize]
 
+permissions:
+  contents: read
+
 jobs:
-  semver-label-check:
-    name: Semantic version label check
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    steps:
-      - name: Check for Semantic Version label
-        uses: apple/swift-nio/.github/actions/pull_request_semver_label_checker@2f58d8ef84438d6517fc78bcea2f8527e3c72936  # 2.105.0
+  label:
+    name: PR label
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: swift-microservices/ci/.github/workflows/pull_request_label.yml@b0f6615808222202e3278abc346fcd93fd4d6395  # 0.2.0
