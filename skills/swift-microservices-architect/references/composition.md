@@ -340,8 +340,8 @@ let dependencies = BookshelfAPI.Dependencies(
 let api = BookshelfAPI(dependencies: dependencies)
 
 // MARK: - Router
-let cors = CORSMiddleware(allowOrigin: .originBased, allowHeaders: [.contentType, .authorization], allowMethods: [.get, .post, .put, .delete])
-let requestLogging = LogRequestsMiddleware(logLevel)
+let cors = CORSMiddleware<BasicRequestContext>(allowOrigin: .originBased, allowHeaders: [.contentType, .authorization], allowMethods: [.get, .post, .put, .delete])
+let requestLogging = LogRequestsMiddleware<BasicRequestContext>(logLevel)
 let router = Router(context: BasicRequestContext.self)
 router.add(middleware: cors)
 router.add(middleware: ErrorMiddleware())
