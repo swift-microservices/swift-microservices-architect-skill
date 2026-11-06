@@ -104,6 +104,7 @@ jobs:
 
 - A public library widens the platforms to every toolchain its users may build with: `linux_swift_versions` from its tools version up through the newest release, then `nightly-main` and the next release's nightly; `linux_host_archs: '["x86_64", "aarch64"]'`; and `enable_linux_static_sdk_build: true`.
 - `api_breakage_check_enabled` stays `false` below 1.0, where a minor release may break the API, and is `true` from 1.0, so a breaking change shows on its pull request before it merges.
+- The documentation check is optional, for a library that writes a DocC catalog: `docs_check_targets` lists the targets that have one, and Soundness builds their documentation. A library without a catalog lists none, and the check doesn't run. `bookshelf-core` ships a catalog for each product.
 - `<org>-protos`, with no tests, passes `linux_build_command: swift build -c release`.
 
 ## A service's CI workflows
