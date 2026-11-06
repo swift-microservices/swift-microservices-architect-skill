@@ -28,7 +28,7 @@ This README is for people. Agents read [SKILL.md](skills/swift-microservices-arc
 - Composition: commands, configuration readers and defaults, logging, the `ServiceGroup` and why it matters.
 - Security: the trust model, mTLS with certificate reloading, user tokens, authorization layers, secrets and webhooks.
 - Testing: a test target per module over mocks of its protocols, and the shared mocks in `<org>-core`'s testing product.
-- CI/CD: the GitHub Actions CI workflows of a public library, a system library and a service, as thin callers of swift-microservices/ci's pipelines, semver releases, an image per commit on GitHub Container Registry deployed through Dokploy to staging and then to production, and Dependabot.
+- CI/CD: the GitHub Actions CI workflows of a public library, a system library and a service, which call only swift-microservices/ci's CI pipelines and deployment adapter, semver releases, an image per commit on GitHub Container Registry deployed through Dokploy to staging and then to production, and Dependabot.
 - Code style and naming conventions.
 
 Out of scope for now: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
@@ -59,8 +59,7 @@ swift-microservices-architect-skill/
 │       ├── delivery.md              CI/CD per package kind: workflows, tests, releases, images, deployment
 │       ├── style.md                 how the code reads
 │       └── conventions.md           naming, folders, files
-├── .github/                         CI: validation, the semver label check, releases, Dependabot
-├── scripts/check_skill.py           the checks to run after every change to the skill
+├── .github/                         CI: validation, the semver label check, releases, Dependabot, and scripts/check_skill.py, the checks to run after every change
 ├── CLAUDE.md                        authoring rules and skill best practices for agents changing the skill
 ├── README.md
 └── LICENSE

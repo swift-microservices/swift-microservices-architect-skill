@@ -326,7 +326,7 @@ A missing caller is `unauthenticated`, from `requireUser()`. A message is one se
 
 ## Interceptors
 
-The server's pipeline applies to the person-facing descriptors only:
+The server's interceptors apply to the person-facing descriptors only:
 
 ```swift
 let bearerAuthentication = BearerAuthenticationInterceptor(authenticator: authenticator)

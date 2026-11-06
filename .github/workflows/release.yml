@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Validate the skill and manifests
-        run: python3 scripts/check_skill.py
+        run: python3 .github/scripts/check_skill.py
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
