@@ -24,7 +24,7 @@ The targets inside a service's package, how they depend on each other, its `Pack
 | `XTemporal` | Workflows, activity containers, the Temporal client for Core's workflow port | `XCore`, `Temporal` |
 | `XValkey` | Repositories over Valkey | `XCore`, `Valkey` |
 | `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK |
-| `XHTTP` | HTTP the service serves itself, only for a caller that can't go through the gateway, such as a provider's signed webhook | `XCore`, `Hummingbird`, `<Org>Authentication` |
+| `XHTTP` | HTTP the service serves itself, only for a caller that can't go through the gateway, named in the plan with the reason; a provider's webhook goes through the gateway | `XCore`, `Hummingbird`, `<Org>Authentication` |
 | `X` | The executable: commands, configuration defaults and readers, the migration list, composition roots | Every target above, `<Org>Transport`, `<Org>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser` |
 
 A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC` and `Catalog`.

@@ -127,10 +127,33 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 ```
 
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
-- `OperationContext.user` spells the lookup of `Principal<UserIdentity, String>` once; `Logger.MetadataProvider.user` adds `userID` to every log line while a user is bound.
 - `<Org>Transport` reads the keys by path: `JWTAuthenticator<UserIdentity>(config:)` from `jwt.publicKeyPath`, and in Identity `JWTIssuer<UserIdentity>(config:)` from `jwt.privateKeyPath`.
+- Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes the `JWTIssuer`.
 - Access tokens are short-lived. A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh RPC, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)).
 - The gateway verifies the token to pick a tier and forwards the original with `BearerPropagationInterceptor`; each service's `BearerAuthenticationInterceptor` verifies it again. A token never travels on an internal RPC, into a workflow's input, or into a log.
+
+`<Org>Authentication` spells the lookup of the bound principal once, for handlers, interceptors and logging:
+
+```swift
+extension OperationContext {
+    /// The user behind the current request: the verified identity and the token that proved it.
+    public var user: Principal<UserIdentity, String>? {
+        get { self[PrincipalKey<UserIdentity, String>.self] }
+        set { self[PrincipalKey<UserIdentity, String>.self] = newValue }
+    }
+}
+
+extension Logger.MetadataProvider {
+    /// The bound user's id on every log line of a request; nothing when no user is bound.
+    public static let user = Logger.MetadataProvider {
+        guard let user = OperationContext.current.user else {
+            return [:]
+        }
+
+        return ["userID": "\(user.identity.userID)"]
+    }
+}
+```
 
 ## Authorization
 

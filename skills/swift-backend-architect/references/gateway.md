@@ -30,7 +30,7 @@ bookshelf-gateway/Sources/
 │   ├── BookshelfAPI.swift          the router builder and its dependencies
 │   ├── Contexts/                   IdentityRequestContext.swift, AdminRequestContext.swift
 │   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift
-│   ├── Middlewares/                ErrorMiddleware/: ErrorMiddleware.swift, Problem/
+│   ├── Middlewares/                ErrorMiddleware/: ErrorMiddleware.swift, Problem.swift, HTTPResponse.Status+RPCError.swift
 │   └── Schemas/                    Requests/, Responses/, Shared/: X+RPC.swift conversions
 └── Gateway/
     ├── Gateway.swift               the @main command
@@ -218,6 +218,7 @@ package struct LoanController: Sendable {
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
 - Status codes follow the method: `201` with `EditedResponse` for a create, `202` for work accepted to run later, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, `200` otherwise.
 - Hummingbird keys a path capture by one name per segment, so every route on one path shares its capture name (`:id`).
+- A provider's webhook route, in the first tier, collects the raw body up to a bound and forwards it unparsed, with the signature header, to the owning service's RPC, which verifies the signature over those exact bytes ([secrets](security.md#secrets)).
 
 ## Conversions
 
@@ -248,9 +249,70 @@ extension Bookshelf_Loans_V1_BorrowBookRequest {
 
 ## Errors
 
-`ErrorMiddleware`, first on the router, answers every failure as RFC 9457 problem details (`application/problem+json`):
-- `HTTPError` and Hummingbird's own errors answer their status.
-- `RPCError` maps by code, through a retroactive `HTTPResponseError` conformance:
+`ErrorMiddleware`, on the router after CORS, answers every failure as RFC 9457 problem details (`application/problem+json`), one `catch` per kind of error:
+
+```swift
+/// Answers every failure on the router as problem details.
+package struct ErrorMiddleware<Context: RequestContext>: RouterMiddleware {
+    package init() {}
+
+    package func handle(
+        _ request: Request,
+        context: Context,
+        next: @concurrent (Request, Context) async throws -> Response
+    ) async throws -> Response {
+        let problem: Problem
+
+        do {
+            return try await next(request, context)
+        } catch let error as HTTPError {
+            problem = Problem(status: error.status, detail: error.body)
+        } catch let error as any HTTPResponseError {
+            problem = Problem(status: error.status)
+        } catch let error as RPCError where HTTPResponse.Status(error.code).kind == .clientError {
+            problem = Problem(status: HTTPResponse.Status(error.code), detail: error.message)
+        } catch let error as RPCError {
+            context.logger.error("Upstream call failed", metadata: ["error": "\(String(reflecting: error))"])
+            problem = Problem(status: HTTPResponse.Status(error.code))
+        } catch {
+            context.logger.error("Request failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
+            problem = Problem(status: .internalServerError)
+        }
+
+        return try problem.response(from: request, context: context)
+    }
+}
+
+/// RFC 9457 problem details. Without a `type`, a problem means what its status means.
+package struct Problem: ResponseGenerator, Sendable {
+    package let status: HTTPResponse.Status
+    package let detail: String?
+
+    package init(status: HTTPResponse.Status, detail: String? = nil) {
+        …
+    }
+
+    package func response(from request: Request, context: some RequestContext) throws -> Response {
+        let body = Body(title: status.reasonPhrase, status: status.code, detail: detail, instance: request.uri.path)
+        var response = try context.responseEncoder.encode(body, from: request, context: context)
+        response.status = status
+        response.headers[.contentType] = "application/problem+json"
+        return response
+    }
+
+    private struct Body: Encodable {
+        …  // title, status, detail, instance
+    }
+}
+```
+
+- A refusal answers in its own words: an `HTTPError`'s message, which the gateway or Hummingbird wrote, and a `4xx` upstream's message, which the service wrote for clients ([status codes](grpc.md#status-codes)).
+- An upstream's server error answers its status alone, since a transport's message can name internal hosts. It's logged with its cause, as is anything that isn't an HTTP or RPC error, which answers `500`.
+- Hummingbird's other `HTTPResponseError`s keep their status, such as `413` for a body over the upload limit. Router middleware also wraps the not-found responder, so an unmatched path's `404` is a problem too.
+- `RPCError` gets no retroactive `HTTPResponseError` conformance: the middleware is the one place it becomes a status.
+- `openapi.yaml` declares the `Problem` schema once and references it from every error response a route documents.
+
+`HTTPResponse.Status.init(_ code: RPCError.Code)`, a `switch` with a `default`, maps the codes:
 
 | `RPCError.Code` | HTTP |
 |---|---|
@@ -265,9 +327,6 @@ extension Bookshelf_Loans_V1_BorrowBookRequest {
 | `unavailable` | `503` |
 | `deadlineExceeded` | `504` |
 | `unknown`, `internalError`, `dataLoss`, anything else | `500` |
-
-- The problem's `title` is the upstream's message, written for clients ([status codes](grpc.md#status-codes)); `instance` is the request path.
-- Anything else is logged with its cause and answered as a generic `500` problem.
 
 ## Upstream clients
 

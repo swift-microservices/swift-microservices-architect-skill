@@ -216,7 +216,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
         subject: UserIdentity,
         input: BorrowBookUseCaseInput
     ) async throws(BorrowBookUseCaseError) -> Loan {
-        guard !input.idempotencyKey.isEmpty, input.idempotencyKey.count <= 128 else {
+        guard !input.idempotencyKey.isEmpty else {
             throw .invalidIdempotencyKey
         }
 
