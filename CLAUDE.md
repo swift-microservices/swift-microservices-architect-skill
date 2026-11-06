@@ -28,7 +28,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 **Structure**
 
-- The skill folder holds only what agents read: `SKILL.md` and `references/`. Everything for people, such as `README.md`, this file, `scripts/` and the license, stays outside it.
+- The skill folder holds only what agents read: `SKILL.md` and `references/`. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
 - `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, the shapes in brief, code style, gotchas, workflows, references and related skills.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
@@ -58,10 +58,10 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
   Reuse these, and add an example only when none of them can show a new idea. Never bring in names, services, endpoints or details from the systems the skill is used on; write the rule they illustrate instead.
 - Code shows a shape the skill prescribes: a use case's files and its body, a handler, a scope, a workflow's `run`, a composition root's sections, a reader. It isn't an implementation to copy: no helper functions, no test code, no internals of a library, and a method body appears only where the body is the shape. Elide the rest with `…`.
-- The stack is fixed: Hummingbird for HTTP, grpc-swift-2 and its siblings for RPC, swift-temporal-sdk, valkey-swift, PostgresNIO with the swift-microservices libraries, swift-configuration, swift-service-lifecycle, swift-argument-parser; for CI/CD, GitHub Actions callers of swift-microservices/ci's pipelines, built on swiftlang/github-workflows and Apple's workflows, with images on GitHub Container Registry deployed through Dokploy. No other HTTP framework is named, and no invented infrastructure (DI containers, buses, generic repositories) is added.
+- The stack is fixed: Hummingbird for HTTP, grpc-swift-2 and its siblings for RPC, swift-temporal-sdk, valkey-swift, PostgresNIO with the swift-microservices libraries, swift-configuration, swift-service-lifecycle, swift-argument-parser; for CI/CD, GitHub Actions CI workflows that call only swift-microservices/ci, which builds on swiftlang/github-workflows and Apple's workflows, with images on GitHub Container Registry deployed through Dokploy. No other HTTP framework is named, and no invented infrastructure (DI containers, buses, generic repositories) is added.
 - The code style is fixed, and every example follows it: one `do` holding the whole path, one `catch` per case, typed throws on use cases, build then call (a value a call takes is a named `let`), no helper methods in use cases, workflows or activities, Swift 6 mode with the four upcoming features, `package` access, the conditional `FoundationEssentials` import. A change never weakens it.
 - Describe the current design only, with no dates, old names, renames, migrations of the skill or history. A library's version appears only in `Package.swift` lower bounds and `stack.md`.
-- One term per concept, as `conventions.md` names it: service, capability, area, use case, repository, command, port, scope, database role, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, image.
+- One term per concept, as `conventions.md` names it: service, capability, area, use case, repository, command, port, scope, database role, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, CI pipeline (`library.yml`, `service.yml`), image.
 - A new rule mustn't contradict an existing one. When it replaces one, change every place the old rule appears.
 - Voice: plain declarative sentences in the present tense, lists over paragraphs, no "you", no all-caps emphasis, no hedging.
 
@@ -76,7 +76,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
 
 ## After every change
 
-1. `python3 scripts/check_skill.py` passes. It checks:
+1. `python3 .github/scripts/check_skill.py` passes. It checks:
    - the frontmatter's keys, `name` and `description`, against the limits above
    - `SKILL.md`'s lines and estimated tokens, at 3.5 characters a token, and that its References table ends inside the first 5,000
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
@@ -107,7 +107,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
   | `🔨 semver/patch` | A correction, clearer wording or a better example, with no rule changed |
   | `semver/none` | Nothing the skill says changes: the README, this file, CI, scripts |
 
-- The Validate workflow runs `scripts/check_skill.py` on every pull request and push to `main`, with Claude Code installed so `claude plugin validate` runs too.
+- The Validate workflow runs `.github/scripts/check_skill.py` on every pull request and push to `main`, with Claude Code installed so `claude plugin validate` runs too.
 - Dependabot checks the workflows' pinned actions weekly and opens a pull request labeled `semver/none` for each update. The Claude Code version Validate installs is a shell command Dependabot doesn't read, so it's raised by hand.
 - A release is the Release workflow, run by hand on `main`. It takes the next version from the labels merged since the last release, writes it to the three version fields (`plugin.json`, and the marketplace and its plugin entry in `marketplace.json`), commits, tags and publishes the notes. A major release is cut by hand. Nothing else changes a version.
 - Commit, push or open a pull request only when asked. A subject line names the guidance in the imperative, such as "Run tenant use cases on the service role", not the files touched.

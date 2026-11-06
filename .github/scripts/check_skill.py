@@ -3,7 +3,7 @@
 
 Run from anywhere after every change to the skill, and fix until it passes:
 
-    python3 scripts/check_skill.py
+    python3 .github/scripts/check_skill.py
 
 It checks what a script can: the frontmatter, SKILL.md's size, the references and their
 Contents lists, links and anchors, the plugin manifests, and the code style of every Swift
@@ -18,7 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "skills" / "swift-microservices-architect"
 REFERENCES = SKILL / "references"
 

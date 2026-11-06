@@ -132,7 +132,7 @@ if [[ -z $remote_tag ]]; then
   cat "$temp_dir/plugin.json" > "$plugin"
   jq --arg version "$new_version" '.version = $version | .plugins[].version = $version' "$marketplace" > "$temp_dir/marketplace.json"
   cat "$temp_dir/marketplace.json" > "$marketplace"
-  python3 scripts/check_skill.py
+  python3 .github/scripts/check_skill.py
   git add -- "$plugin" "$marketplace"
   if ! git diff --cached --quiet; then
     git_bot commit -m "Version $new_version"
