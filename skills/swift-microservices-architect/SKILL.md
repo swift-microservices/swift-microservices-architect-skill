@@ -7,9 +7,9 @@ description: Architects Swift server backends as gRPC microservices behind a Hum
 
 Decides how a Swift backend splits into services and modules, where code lives, the shapes of use cases, adapters and composition roots, and how the code reads.
 
-`X` stands for a service (`Loans` → `LoansCore`, `LoansGRPC`, `BorrowBookUseCase`), `<Org>` and `<org>` for the organization (`Bookshelf`, `bookshelf-core`).
+`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Org>` and `<org>` for the organization (`Bookshelf`, `bookshelf-core`).
 
-A backend built another way keeps its structure until the user asks to change it. A change there follows its own conventions and takes a shape from this skill only where it has none.
+A backend built another way keeps its structure and conventions until the user asks to change them; a change there takes a shape from this skill only where it has none.
 
 The examples are Bookshelf, a small lending library:
 
@@ -52,9 +52,9 @@ A service has only the targets it needs. Each imports only what its arrow points
 ```
 X ─────────────► every X target, <Org>Transport, <Org>Persistence, drivers, transports, lifecycle
 XGRPC, XHTTP ──► XCore, contracts, the transport's framework, <Org>Authentication
-XPostgres ─────► XCore, PersistencePostgres      XTemporal ──► XCore, Temporal
+XPostgres ─────► XCore, PersistencePostgres      XTemporal ──► XCore, Temporal, Logging
 XValkey ───────► XCore, Valkey                   X<Provider> ► XCore, the provider's SDK
-XCore ─────────► Persistence, <Org>Authentication, Logging
+XCore ─────────► Persistence, Authentication, <Org>Authentication, Logging
 ```
 
 Hard rules:
@@ -77,14 +77,14 @@ Hard rules:
 | Tenant isolation | Row-level security; `<Org>Persistence` binds the caller to each transaction |
 | Durable, delayed or multi-service work | A Temporal workflow in XTemporal |
 | What every service needs identically: identity, tenant binding, transport readers | `<org>-core` |
-| Where a service's data lives | The deployment; the targets don't change with it ([the system](references/system.md)) |
+| Where a service's data lives | The deployment, without changing the targets ([the system](references/system.md)) |
 
 ## The shapes in brief
 
 - **Use case.** Five files: `XUseCaseProtocol` (`callAsFunction(subject:input:) async throws(XUseCaseError) -> Output`), `XUseCaseInput`, `XUseCaseError` (outcomes the caller acts on, then `unknown`), `XUseCaseScope` (the repositories it touches) and `XUseCase<DatabaseType>`, held as `any XUseCaseProtocol` in `xUseCase` ([use cases](references/use-cases.md)).
 - **Repositories and ports.** Core protocols with untyped `throws`: repositories reached through a transaction's scope; ports to other services, providers, the workflow engine and Valkey held directly.
 - **Persistence.** A Postgres scope per database role adopts the scope protocols of the use cases allowed to run as that role, so the compiler checks which role runs what ([persistence](references/persistence.md)).
-- **gRPC.** `XService` for people through the gateway, `XInternalService` for processes. A handler requires its caller, converts the request, calls one use case and maps every error case to a status; a list that can grow large pages, by key or by page number ([gRPC](references/grpc.md)).
+- **gRPC.** `XService` for people through the gateway, `XInternalService` for processes. A handler requires its caller, converts the request, calls one use case and maps every error case to a status, with no catch-all; a list that can grow large pages, by key or by page number ([gRPC](references/grpc.md)).
 - **Gateway.** Hummingbird routes in tiers of request contexts, one controller per resource, forwarding the caller's token; plain HTTP behind the edge's TLS ([gateway](references/gateway.md)).
 - **Workflows.** A Core port starts a workflow by a deterministic id; XTemporal holds the workflow, activities over use cases and ports, and the client; `x worker run` runs them as the worker role ([workflows](references/workflows.md)).
 - **Composition.** ArgumentParser commands; one `ConfigReader` over environment variables and `InMemoryProvider.applicationDefaults`; shared readers from `<Org>Transport`; one `ServiceGroup` with graceful shutdown on `SIGTERM` ([composition](references/composition.md)).
@@ -108,33 +108,34 @@ do {
 }
 ```
 
-- One `do` holds the work through its `return`, then one `catch` per case the caller acts on, then `unknown`. Each `catch` ends its own path: nothing is declared before the `do` for a `catch` to fill, and nothing follows it. A handler maps every case to a status, with no catch-all.
+- One `do` holds the work through its `return`, then one `catch` per case the caller acts on, then `unknown`. Each `catch` ends its own path: nothing is declared before the `do` for a `catch` to fill, and nothing follows it.
 - Build, then call: a value a call takes is a `let` named for what it is (`let statement = …`, then `connection.execute(statement, logger: logger)`), never a conversion, `try` or `await` in the arguments ([style](references/style.md#build-then-call)).
 - No private helper methods in use cases, workflows or activities, and no workarounds: no `Result` juggling, steering flags, `try?`, nested `do` in a `catch`, or force unwraps.
 - Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault` in every package ([Swift settings](references/packages.md#swift-settings)); `package` across a service's targets with `package import`; `Duration` and `FormatStyle` over legacy Foundation types.
-- Everything crossing a boundary is `Sendable`; no `@unchecked Sendable`, `nonisolated(unsafe)`, `Task {}` or `Task.detached`.
+- Everything crossing a boundary is `Sendable`, with no `Task {}` or `Task.detached`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows it.
 
 ## Gotchas
 
 - Module names are unique across the package graph: a service named `Authentication` or `Logging` collides with a dependency. Rename the service, not one of its targets.
-- `NonisolatedNonsendingByDefault` changes what an unannotated `async` function type means. Implement a requirement from a library built without it exactly as declared, `@concurrent` included: Hummingbird middleware's `next`, gRPC interceptors' `next`.
 - A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls wait until their deadline.
 - A process connected as the database owner bypasses row-level security, and an unset tenant setting reads as `''` on a reused connection, so policies wrap it in `NULLIF`.
+- Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep`, a captured `Logger` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
 - A plain `import Foundation`, or a scoped `import struct Foundation.Data`, in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
 
 ## Checklists
 
-Copy the checklist for the task into the response and check items off as they're done.
+Copy the task's checklist into the response and check items off as they're done.
 
 **Plan a backend**
 
 ```
 - [ ] The capabilities and the data each owns; a service per capability with its own data and rules (system.md#splitting-a-system-into-services)
 - [ ] Name each service; check its target names against every module in the graph
-- [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers, tables (tenant or not), workflows, short-lived state
+- [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, short-lived state
 - [ ] Per service: its targets, commands and database roles
 - [ ] <org>-core's products, <org>-protos' contracts, the gateway's routes by tier
+- [ ] Build order: <org>-core and <org>-protos, the token issuer, each service (owner before consumer), the gateway
 - [ ] Write the plan from system.md#the-plan; check it against the hard rules before any code
 ```
 
@@ -195,7 +196,8 @@ Copy the checklist for the task into the response and check items off as they're
 - [ ] Each adapter only converts and delegates; every error case is mapped
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
 - [ ] Swift settings, FoundationEssentials imports, package access, naming (conventions.md)
-- [ ] Report each finding with its file, the rule it breaks and the fix; change code only when asked
+- [ ] Report findings ranked blocking (tenant isolation, authorization, credentials, the build), major (the shapes), minor (naming, layout, logging), each citing a file and line or an empty grep, with the rule and the fix; then the user's decisions. Change code only when asked
+- [ ] swift build and swift test; report each result, or why it couldn't run
 ```
 
 ## References
@@ -205,18 +207,18 @@ Read the reference for the part at hand:
 | Reference | Read when |
 |---|---|
 | [references/system.md](references/system.md) | Splitting a backend into services, contracts, how services talk, data ownership, the shared packages, the plan |
-| [references/packages.md](references/packages.md) | Targets and dependency direction, what Core may link, `Package.swift`, Swift settings, traits and Foundation, layouts, boundary checks |
-| [references/stack.md](references/stack.md) | The swift-microservices libraries and the server stack, which target links each, and which link full Foundation |
+| [references/packages.md](references/packages.md) | Targets, what Core may link, `Package.swift`, Swift settings, traits and Foundation, layouts, boundary checks |
+| [references/stack.md](references/stack.md) | The libraries, which target links each, and which link full Foundation; choosing versions |
 | [references/use-cases.md](references/use-cases.md) | Models, errors, repositories, ports, use cases and their bodies, transactions, authorization, logging |
 | [references/persistence.md](references/persistence.md) | Postgres scopes and roles, row-level security, statements, migrations, other stores, Valkey |
 | [references/grpc.md](references/grpc.md) | Contracts, gRPC services and handlers, conversions, status codes, interceptors, clients for ports, transports |
 | [references/gateway.md](references/gateway.md) | Request contexts and tiers, the router, controllers, errors, upstream clients, the edge |
 | [references/workflows.md](references/workflows.md) | Starting workflows, workflows, determinism, activities, options, versions, the worker |
 | [references/composition.md](references/composition.md) | Commands, the composition root, configuration, logging, the ServiceGroup |
-| [references/security.md](references/security.md) | The trust model, mTLS and certificate reloading, user tokens, authorization layers, secrets |
+| [references/security.md](references/security.md) | The trust model, mTLS and certificate reloading, user tokens, authorization layers, secrets, webhooks |
 | [references/style.md](references/style.md) | Readability, errors, concurrency, imports and access control, Foundation, types, documentation |
 | [references/testing.md](references/testing.md) | Test targets per module, what each tests, mocks, the shared testing product |
-| [references/delivery.md](references/delivery.md) | CI/CD per package kind: CI workflows over swift-microservices/ci, test flags, Foundation linking, releases, deployment, the Containerfile, Dependabot |
+| [references/delivery.md](references/delivery.md) | CI/CD per package kind: CI workflows, tests, releases, deployment, the Containerfile, Dependabot |
 | [references/conventions.md](references/conventions.md) | Naming a package, target, type, file, key or folder |
 
 ## Related skills
