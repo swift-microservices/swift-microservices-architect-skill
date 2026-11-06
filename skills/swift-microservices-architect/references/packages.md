@@ -172,7 +172,7 @@ let package = Package(
 ```
 
 - The tools version is the toolchain the services build and deploy with; 6.2 is the floor for these settings.
-- `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's notes.
+- `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's README.
 - Every target lists each module it imports, product by product; CI's `--explicit-target-dependency-import-check error` fails a target that imports one it doesn't list ([delivery](delivery.md#tests)).
 - Each `from:` is a lower bound, set to the release whose API the code uses ([choosing versions](stack.md#choosing-versions)).
 - A provider target (`LoansResend`) and test targets follow the same form. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one. A warning in generated code fails the contracts package's CI, and its consumers never see it, since SwiftPM silences a dependency's warnings.
@@ -205,7 +205,7 @@ On Linux, full Foundation links `libFoundation`, `libFoundationInternationalizat
 - Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<org>-core`, `<org>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the versions from which the stack's libraries do are in [the stack](stack.md#full-foundation).
 - Other traits in the stack are Foundation-free and keep their defaults: valkey-swift's `ServiceLifecycleSupport` and `DistributedTracingSupport`, swift-temporal-sdk's `GRPCNIOTransport`, swift-http-types' `FoundationURL`.
 - A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
-- A dependency that still links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's notes. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does.
+- A dependency that still links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's README. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does, and CI checks it from then on ([delivery](delivery.md#a-services-ci-workflows)).
 - Before adding a dependency, list its traits with `swift package show-traits` and read its sources' Foundation imports. A library proves it in CI with the Foundation-linking check ([delivery](delivery.md#a-librarys-ci-workflows)).
 - A library's own feature that needs full Foundation goes behind a `FullFoundation` trait, the name hummingbird and swift-openapi-runtime use. It's off by default in a new library, so consumers opt in rather than out.
 - A library that moves to the conditional import releases it as a minor version, noting that a consumer relying on the `Foundation` it imported may need its own import.

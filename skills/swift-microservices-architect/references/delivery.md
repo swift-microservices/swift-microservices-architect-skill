@@ -28,8 +28,8 @@ Each repository's `.github/workflows/` holds these files, each `name:` as given:
 
 | File (`name:`) | Runs on | Public or system library | Service |
 |---|---|---|---|
-| `pull_request.yml` (PR) | Every pull request | Soundness, Tests, Foundation linking | Soundness, Tests, Build image |
-| `main.yml` (Main) | Every push to `main` | Tests, Foundation linking | Tests, then Publish image, then Staging |
+| `pull_request.yml` (PR) | Every pull request | Soundness, Tests, Foundation linking | Soundness, Tests, Build image; Foundation linking once its dependencies allow |
+| `main.yml` (Main) | Every push to `main`; weekly too for a library | Tests, Foundation linking | Tests, then Publish image, then Staging; Foundation linking once its dependencies allow |
 | `pull_request_label.yml` (PR label) | Every pull request and label change | Semantic version label check | — |
 | `release.yml` (Release) | By hand, on `main` | The next release from the merged labels | — |
 | `deploy.yml` (Deploy to production) | By hand, on `main` | — | Production |
@@ -54,7 +54,7 @@ Each repository's `.github/workflows/` holds these files, each `name:` as given:
 | Staging, Production | `swift-microservices/ci` `deploy.yml` |
 | Clean up | `swift-microservices/ci` `cleanup-images.yml` |
 
-- swiftlang's workflows come first. `swift-microservices/ci` holds only what they can't do, and a repository writes a job of its own only for what neither has. Its `tests.yml` takes `swift_package_test.yml`'s Linux inputs, plus `postgres_image`; `foundation-linking.yml` takes `excluded_products`, and `container_image` for a toolchain other than its default.
+- swiftlang's workflows come first. `swift-microservices/ci` holds only what they can't do, and a repository writes a job of its own only for what neither has. Its `tests.yml` takes `swift_package_test.yml`'s Linux inputs, plus `postgres_image`; `foundation-linking.yml` takes `excluded_products` and `executable_products`, and `container_image` for a toolchain other than its default.
 - Each `uses:` is pinned to its latest release's full commit, with the release in a comment: `@<commit>  # <release>`. Look the commit up with `git ls-remote --tags <url>`; Dependabot moves the pins.
 
 ## Tests
@@ -86,7 +86,7 @@ CI's test builds are the gate, and they pass its flags in `swift_flags`:
 
 ## A library's CI workflows
 
-`bookshelf-core`'s pull request workflow; `main.yml` runs the same `tests` and `foundation-linking` jobs on every push to `main`:
+`bookshelf-core`'s pull request workflow; `main.yml` runs the same `tests` and `foundation-linking` jobs on every push to `main` and on a weekly `schedule`:
 
 ```yaml
 name: PR
@@ -200,6 +200,7 @@ jobs:
 - `cleanup-images.yml` runs weekly and by hand, calling `cleanup-images.yml` with the image's package name.
 - An image is published once, as `:<commit-sha>`, and deployed by its digest. Each environment runs it as one Dokploy application per process: `loans` (serve) and `loans worker run` ([commands](composition.md#commands)). The application that runs `serve --migrate-database` is listed first.
 - A rollback runs the previous image on the current schema, which its migrations keep compatible ([migrations](persistence.md#migrations)).
+- A service adds a `foundation-linking` job to both CI workflows, with `executable_products: loans` and `PACKAGES_TOKEN`, as soon as every package it depends on is Foundation-free ([full Foundation](stack.md#full-foundation)); Main's `publish` needs it as it needs `tests`. Until then, its README lists the packages that still link full Foundation.
 - Secrets: `PACKAGES_TOKEN`, and `DOKPLOY_URL` with `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy the applications.
 
 ## The Containerfile
@@ -212,12 +213,12 @@ A service's `Containerfile`, at its root, builds the image `build-image.yml` che
 
 ## Dependabot
 
-`.github/dependabot.yml` checks weekly, each ecosystem's updates grouped into one pull request:
+`.github/dependabot.yml` checks weekly, groups each ecosystem's updates into one pull request, and sets `cooldown: { default-days: 7 }`, so a release is proposed only after a week in which a broken or compromised one is usually withdrawn:
 
 | Kind | Ecosystems | Label |
 |---|---|---|
 | Public or system library | `github-actions` | `semver/none` |
 | Service | `swift` and `github-actions` | None |
 
-- A library's dependencies are `from:` lower bounds raised by hand ([choosing versions](stack.md#choosing-versions)), so Dependabot moves only its CI workflows' pins.
+- A library ignores `Package.resolved`, so each CI run resolves its dependencies' newest releases within their `from:` ranges, and its weekly Main run catches a release that breaks it without a pull request. Its lower bounds are raised by hand ([choosing versions](stack.md#choosing-versions)), so Dependabot moves only its CI workflows' pins.
 - A service's `swift` updates move its `Package.resolved`. A private dependency needs a `registries` entry of type `git` for `https://github.com`, with `PACKAGES_TOKEN` also stored as a Dependabot secret.
