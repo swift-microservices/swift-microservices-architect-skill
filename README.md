@@ -40,7 +40,7 @@ bookshelf-loans
 ├── LoansPostgres   repositories, row-level security, migrations
 ├── LoansGRPC       the gRPC services, and clients for other services
 ├── LoansTemporal   workflows and activities
-├── LoansResend     the email provider behind Core's notice port
+├── LoansResend     the email provider behind Core's notice ports
 └── Loans           the executable: configuration, wiring, lifecycle
 ```
 
@@ -65,7 +65,7 @@ Copy `skills/swift-microservices-architect/` into `~/.claude/skills/` for all yo
 
 ## Usage
 
-Claude loads the skill when a task matches it, or when asked with `/swift-microservices-architect` (`/swift-microservices-architect:swift-microservices-architect` when installed as a plugin). For example:
+Claude loads the skill when a task matches it, or when asked with `/swift-microservices-architect`. For example:
 
 - "Plan a backend for a lending library with accounts, a book catalog and loans."
 - "Add an endpoint for returning a book."

@@ -45,7 +45,7 @@ let rows = try await connection.execute(statement, logger: logger)
 - Errors are mapped with `do` and one `catch` per case: `catch CatalogClientError.unavailable { throw .catalogUnavailable }`. The order and the final `catch` are in [the body of a use case](use-cases.md#the-body-of-a-use-case); a handler maps every case and has no final `catch` ([a handler](grpc.md#a-handler)).
 - The `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
 - Each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
-- Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` is spelled in full, since its type there is `any Error`: `throw BorrowBookUseCaseError.bookNotFound`.
+- Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` is spelled in full: `throw BorrowBookUseCaseError.bookNotFound`.
 - `String(reflecting: error)` goes into the log line of an unknown error, never into a response.
 - `CancellationError` propagates; nothing catches it to carry on.
 
