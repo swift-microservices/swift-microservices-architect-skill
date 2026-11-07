@@ -1,0 +1,20 @@
+{
+  "name": "swift-microservices-architect-skill",
+  "interface": {
+    "displayName": "Swift Microservices Architect"
+  },
+  "plugins": [
+    {
+      "name": "swift-microservices-architect",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

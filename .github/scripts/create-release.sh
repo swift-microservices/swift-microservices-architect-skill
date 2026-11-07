@@ -93,11 +93,13 @@ case $bump in
   patch) new_version="$major.$minor.$((patch + 1))" ;;
   none) echo 'No merged PRs require a release.'; exit 0 ;;
 esac
-# The version lives in three fields: the plugin's, the marketplace's and the marketplace's plugin entry's.
+# The version lives in four fields: the Claude Code plugin's, its marketplace's and that marketplace's
+# plugin entry's, and the Codex plugin's. The Codex marketplace's entry carries none.
 plugin=.claude-plugin/plugin.json
 marketplace=.claude-plugin/marketplace.json
-manifest_versions=$( { jq -er '.version' "$plugin"; jq -er '.version, .plugins[].version' "$marketplace"; } | sort -u)
-[[ $(wc -l <<< "$manifest_versions") -eq 1 ]] || fail "The three manifest versions must agree."
+codex_plugin=.codex-plugin/plugin.json
+manifest_versions=$( { jq -er '.version' "$plugin"; jq -er '.version, .plugins[].version' "$marketplace"; jq -er '.version' "$codex_plugin"; } | sort -u)
+[[ $(wc -l <<< "$manifest_versions") -eq 1 ]] || fail "The four manifest versions must agree."
 claude_version=$manifest_versions
 [[ $claude_version == "$current_version" || $claude_version == "$new_version" ]] \
   || fail "The manifests must match the latest release or the planned version."
@@ -132,8 +134,10 @@ if [[ -z $remote_tag ]]; then
   cat "$temp_dir/plugin.json" > "$plugin"
   jq --arg version "$new_version" '.version = $version | .plugins[].version = $version' "$marketplace" > "$temp_dir/marketplace.json"
   cat "$temp_dir/marketplace.json" > "$marketplace"
+  jq --arg version "$new_version" '.version = $version' "$codex_plugin" > "$temp_dir/codex-plugin.json"
+  cat "$temp_dir/codex-plugin.json" > "$codex_plugin"
   python3 .github/scripts/check_skill.py
-  git add -- "$plugin" "$marketplace"
+  git add -- "$plugin" "$marketplace" "$codex_plugin"
   if ! git diff --cached --quiet; then
     git_bot commit -m "Version $new_version"
   fi

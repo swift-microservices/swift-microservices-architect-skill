@@ -3,7 +3,7 @@
 [![Validate](https://github.com/swift-microservices/swift-microservices-architect-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/swift-microservices/swift-microservices-architect-skill/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-An [agent skill](https://agentskills.io) that teaches Claude to design, build and review Swift server backends: gRPC microservices behind a Hummingbird API gateway, with clear module boundaries, modern Swift, and the production essentials built in, from Postgres row-level security to durable Temporal workflows.
+An [agent skill](https://agentskills.io) that teaches Claude and Codex to design, build and review Swift server backends: gRPC microservices behind a Hummingbird API gateway, with clear module boundaries, modern Swift, and the production essentials built in, from Postgres row-level security to durable Temporal workflows.
 
 Ask for a plan, a new service, an endpoint, a background process or a review, and the agent answers with the same architecture, names and code style every time.
 
@@ -53,6 +53,13 @@ bookshelf-loans
 /plugin install swift-microservices-architect@swift-microservices-architect-skill
 ```
 
+**Codex**
+
+```bash
+codex plugin marketplace add swift-microservices/swift-microservices-architect-skill
+codex plugin add swift-microservices-architect@swift-microservices-architect-skill
+```
+
 **skills CLI**
 
 ```bash
@@ -61,11 +68,11 @@ npx skills add https://github.com/swift-microservices/swift-microservices-archit
 
 **Manually**
 
-Copy `skills/swift-microservices-architect/` into `~/.claude/skills/` for all your projects, or into a repository's `.claude/skills/` to share it with the team.
+Copy `skills/swift-microservices-architect/` into `~/.claude/skills/` for Claude Code or `~/.agents/skills/` for Codex, for all your projects. To share it with a team, copy it into a repository's `.claude/skills/` or `.agents/skills/` instead.
 
 ## Usage
 
-Claude loads the skill when a task matches it, or when asked with `/swift-microservices-architect`. For example:
+The agent loads the skill when a task matches it, or when asked: `/swift-microservices-architect` in Claude Code, `$swift-microservices-architect` in Codex. For example:
 
 - "Plan a backend for a lending library with accounts, a book catalog and loans."
 - "Add an endpoint for returning a book."
@@ -107,9 +114,12 @@ The skill decides the shapes; these skills cover the code inside them:
 ## Repository layout
 
 ```
-.claude-plugin/                 plugin and marketplace manifests
+.claude-plugin/                 Claude Code plugin and marketplace manifests
+.codex-plugin/                  Codex plugin manifest
+.agents/plugins/                Codex marketplace
 skills/swift-microservices-architect/
 ├── SKILL.md                    what every task needs: the shape, hard rules, style, gotchas, checklists
+├── agents/openai.yaml          the skill's name in Codex
 └── references/                 read when a task reaches their topic
     ├── system.md               services, contracts, shared packages, the plan
     ├── packages.md             targets, Package.swift, Swift settings, boundary checks

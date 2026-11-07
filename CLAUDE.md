@@ -1,6 +1,6 @@
 # swift-microservices-architect
 
-This repository is the `swift-microservices-architect` agent skill. Agents read `skills/swift-microservices-architect/SKILL.md` and its `references/`; people read `README.md`. It ships as a Claude Code plugin (`.claude-plugin/`) and through the skills CLI.
+This repository is the `swift-microservices-architect` agent skill. Agents read `skills/swift-microservices-architect/SKILL.md` and its `references/`; people read `README.md`. It ships as a Claude Code plugin (`.claude-plugin/`), a Codex plugin (`.codex-plugin/` and `.agents/plugins/`) and through the skills CLI.
 
 Every change to the skill ends with [the checks](#after-every-change), repeated until they pass.
 
@@ -12,7 +12,7 @@ Every change to the skill ends with [the checks](#after-every-change), repeated 
 
 ## Skill best practices
 
-These come from Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), [skills in Claude Code](https://code.claude.com/docs/en/skills), the [Agent Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) and the [Agent Skills specification](https://agentskills.io/specification), as this skill applies them. The guidance changes, so recheck the sources before changing the skill's structure or frontmatter.
+These come from Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), [skills in Claude Code](https://code.claude.com/docs/en/skills), the [Agent Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) and the [Agent Skills specification](https://agentskills.io/specification), as this skill applies them, with [Codex's skills](https://learn.chatgpt.com/docs/build-skills) for what Codex reads. The guidance changes, so recheck the sources before changing the skill's structure or frontmatter.
 
 **How Claude loads a skill**, in three stages, each with its own limit:
 
@@ -28,7 +28,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 **Structure**
 
-- The skill folder holds only what agents read: `SKILL.md` and `references/`. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
+- The skill folder holds only what agents read: `SKILL.md`, `references/` and `agents/openai.yaml`, Codex's display name for the skill. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
 - `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, code style, gotchas, checklists, references and related skills.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
@@ -72,7 +72,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 1. Decide whether it belongs: architecture, ownership, a shape or the style goes in; technique goes to the related skills; one system's detail stays out.
 2. Find every place the rule or name appears: `grep -rn "<term>" README.md .claude-plugin skills`.
-3. Edit the rule's home first, then its line in `SKILL.md`, then `conventions.md`, then `README.md` when what the skill covers changes. Keep the descriptions in `SKILL.md`, `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` identical.
+3. Edit the rule's home first, then its line in `SKILL.md`, then `conventions.md`, then `README.md` when what the skill covers changes. Keep the descriptions in `SKILL.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json` identical.
 4. Run [the checks](#after-every-change).
 
 A new reference file gets a lowercase topic name, a Contents list once it passes 100 lines, a row in the References table in `SKILL.md`, and a line in the layout in `README.md`.
@@ -84,7 +84,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - `SKILL.md`'s lines and estimated tokens, at 3.5 characters a token, and that its References table ends inside the first 5,000
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
    - every link and anchor
-   - that the three descriptions and the three versions in `SKILL.md` and the manifests agree
+   - that the descriptions and the four versions in `SKILL.md` and the Claude Code and Codex manifests agree, and that the Codex marketplace lists the plugin
    - that no Swift example builds a value inside an argument or declares a variable before a `do` for its catches to fill
    - `claude plugin validate .`, whose warnings about the missing icon and about `CLAUDE.md` are expected
 2. Review the diff for what no script checks:
@@ -112,5 +112,5 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
 
 - The Validate workflow runs `.github/scripts/check_skill.py` on every pull request and push to `main`, with Claude Code installed so `claude plugin validate` runs too.
 - Dependabot checks the workflows' pinned actions weekly and opens a pull request labeled `semver/none` for each update. The Claude Code version Validate installs is a shell command Dependabot doesn't read, so it's raised by hand.
-- A release is the Release workflow, run by hand on `main`. It takes the next version from the labels merged since the last release, writes it to the three version fields (`plugin.json`, and the marketplace and its plugin entry in `marketplace.json`), commits, tags and publishes the notes. A major release is cut by hand. Nothing else changes a version.
+- A release is the Release workflow, run by hand on `main`. It takes the next version from the labels merged since the last release, writes it to the four version fields (`.claude-plugin/plugin.json`, the marketplace and its plugin entry in `.claude-plugin/marketplace.json`, and `.codex-plugin/plugin.json`), commits, tags and publishes the notes. A major release is cut by hand. Nothing else changes a version.
 - Commit, push or open a pull request only when asked. A subject line names the guidance in the imperative, such as "Run tenant use cases on the service role", not the files touched.
