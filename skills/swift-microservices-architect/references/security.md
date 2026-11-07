@@ -19,7 +19,7 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens,
 | Gateway to a service's `XService` | gRPC over mTLS, with the caller's token | Both processes by certificate; the user by the token, verified again by the service |
 | A service or worker to another's `XInternalService` | gRPC over mTLS | Both processes by certificate; the request names the user it acts for |
 | A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate |
-| A process to Postgres | TLS when offered (`.prefer(.clientDefault)`), as one of the service's roles | The role, by its password |
+| A process to Postgres | TLS, required (`.require(…)`), against the environment's authority, as one of the service's roles | The server by certificate; the role by its password |
 | Inside the database | Row-level security | The tenant, by the setting bound to the transaction |
 
 The edge proxy and certificate issuance belong to the deployment; this skill fixes what each process presents and checks.
@@ -166,7 +166,7 @@ Each layer refuses what it can see; the use case decides.
 | Layer | Checks |
 |---|---|
 | The gateway's tier | A valid token where the route needs a caller; the role where it needs an administrator |
-| The handler | `requireUser()` or `requireAdministrator()`, before converting the request |
+| The handler | `requireUser()` where the RPC acts for a caller, before converting the request |
 | The use case | The rule: the role, the resource's ownership and state ([authorization](use-cases.md#authorization)) |
 | Row-level security | The tenant: a caller's transaction sees only the caller's rows ([row-level security](persistence.md#row-level-security)) |
 

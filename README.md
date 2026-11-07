@@ -1,74 +1,52 @@
 # Swift Microservices Architect
 
-An agent skill that designs and maintains Swift server backends: gRPC microservices behind a Hummingbird API gateway, each service one Swift package with a Core of typed-throws use cases and an adapter target per technology, composed and run by its executable.
+[![Validate](https://github.com/swift-microservices/swift-microservices-architect-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/swift-microservices/swift-microservices-architect-skill/actions/workflows/validate.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-This README is for people. Agents read [SKILL.md](skills/swift-microservices-architect/SKILL.md) and the files in [references/](skills/swift-microservices-architect/references/). Agents changing the skill follow [CLAUDE.md](CLAUDE.md).
+An [agent skill](https://agentskills.io) that teaches Claude to design, build and review Swift server backends: gRPC microservices behind a Hummingbird API gateway, with clear module boundaries, modern Swift, and the production essentials built in, from Postgres row-level security to durable Temporal workflows.
 
-## Why this architecture
+Ask for a plan, a new service, an endpoint, a background process or a review, and the agent answers with the same architecture, names and code style every time.
 
-- **Boundaries the compiler enforces.** Each layer of a service is an SPM target. Core can't import a driver, a transport or a generated contract, and adapters can't import each other, so "the use case must not know about Postgres" is a build error rather than a review comment.
-- **The service is its use cases.** Rules, authorization decisions and the meaning of every error live in typed-throws use cases. gRPC services, HTTP routes, Temporal activities and repositories only translate, so a transport or a store changes without touching the rules.
-- **Code that reads like the requirement.** One `do` holding the whole path, one `catch` per outcome, every value a call takes built first in a named `let`, no helper methods: a use case, a workflow or a handler reads top to bottom, the way Apple's WWDC sample code does.
-- **Every hop proves itself.** Mutual TLS between processes with certificates that reload without a restart, the caller's token verified by every service, and Postgres row-level security under every tenant query.
-- **One composition root per process.** swift-configuration reads everything once, defaults live in one `InMemoryProvider`, and swift-service-lifecycle runs every client, server and worker in one structured task with graceful shutdown.
-- **Durable work on Temporal.** Anything that waits, retries or spans services is a workflow started by a deterministic id, not a fire-and-forget task.
-- **Modern Swift throughout.** Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault`, `package` access, and `FoundationEssentials`, so services drop full Foundation as their dependencies do.
+## The architecture
 
-## What the skill covers
+```mermaid
+flowchart LR
+    Clients -- HTTPS --> Edge["Edge proxy"] -- HTTP --> Gateway["Gateway<br/>Hummingbird · OpenAPI"]
+    Gateway -- "gRPC over mTLS,<br/>with the caller's token" --> Services
+    subgraph Services
+        Identity
+        Catalog
+        Loans
+    end
+    Loans -- internal gRPC --> Identity & Catalog
+    Identity --> IdentityDB[(Postgres)] & Valkey[(Valkey)]
+    Catalog --> CatalogDB[(Postgres)]
+    Loans --> LoansDB[(Postgres)]
+    Loans --> Temporal
+```
 
-- Splitting a backend into services by data ownership, moving an area into its own service, naming them, and writing the plan: services, contracts, module maps, shared packages, gateway routes and the build order.
-- A service's package: `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`, `XHTTP` and the executable, their dependency direction, what Core may link, and `Package.swift` with its Swift settings, Swift Evolution proposals, and the package traits that keep full Foundation out, with each stack package's Foundation status.
-- The organization's shared packages: `<org>-core` for identity, tenant binding and transport configuration, and `<org>-protos` for contracts.
-- The swift-microservices libraries (`OperationContext`, `Authentication` with its JWT, gRPC and Hummingbird adapters, `Persistence` and `PersistencePostgres`) and the server stack around them.
-- The application layer: domain models, errors, repositories, ports, use cases with typed throws, scope protocols, transactions, authorization and logging.
-- Persistence: Postgres scopes per database role, row-level security bound from the caller's token, statements and state transitions, migrations, other stores, and Valkey for short-lived values and caches.
-- gRPC: contracts with paged lists, `XService` and `XInternalService`, handlers, conversions, status codes, interceptors, clients for ports and transports.
-- The gateway: Hummingbird request contexts in tiers, the router, controllers, provider webhooks, problem details, and upstream clients that forward the caller's token.
-- Temporal: starting workflows from use cases and webhooks, deterministic workflows, payloads, activities over use cases and ports, options, versioning and the worker.
-- Composition: commands, configuration readers and defaults, logging, and the `ServiceGroup` that runs and shuts down every component.
-- Security: the trust model, mTLS with certificate reloading, user tokens and signing-key rotation, authorization layers, secrets and webhooks.
-- Testing: a test target per module over mocks of its protocols, the shared mocks in `<org>-core`'s testing product, and what the org core's own tests prove.
-- CI/CD: the GitHub Actions CI workflows a public library, a system library and a service declare, calling only swift-microservices/ci; semver releases; an image per commit on GitHub Container Registry, built by the service's Containerfile and deployed through Dokploy to staging and then to production; and Dependabot.
-- Code style and naming conventions.
+- **A service per capability.** Each service owns its data and the rules over it. No service reads another's database; data crosses only through gRPC contracts.
+- **Boundaries the compiler enforces.** A service is one Swift package. Its Core target holds the models and use cases and imports no driver or transport; adapters for Postgres, gRPC, Temporal and Valkey sit around it; one executable wires them together. Each target declares what it imports, so most crossings fail the build, and the review checklist's boundary checks catch the rest.
+- **Code that reads like the requirement.** Use cases read top to bottom, the way Apple's sample code does: typed throws, one `catch` per outcome, no helper methods.
+- **Security on every hop.** Mutual TLS between processes, the caller's token verified again by every service, and row-level security under every tenant query.
+- **Durable work on Temporal.** Anything that waits, retries or spans services is a workflow, never a fire-and-forget task.
+- **Modern Swift.** Swift 6 language mode with strict concurrency, structured concurrency only, `package` access, and owned code importing `FoundationEssentials`, so a service drops full Foundation once its dependencies do.
 
-Out of scope for now: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
-
-Covered by other skills the agent loads alongside this one:
-- Swift Concurrency: [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill)
-- Swift Testing: [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill)
-- Argument labels, method names and documentation comments: a `swift-api-design-guidelines` skill
-
-## Layout
+The skill's examples follow Bookshelf, a small lending library. Its loans service is one package:
 
 ```
-swift-microservices-architect-skill/
-├── .claude-plugin/                  Claude Code plugin and marketplace manifests
-├── skills/swift-microservices-architect/
-│   ├── SKILL.md                     entry point: shape, rules, style, gotchas, checklists, which reference to read
-│   └── references/
-│       ├── system.md                services, contracts, how services talk, data ownership, shared packages, the plan
-│       ├── packages.md              targets, dependency direction, Package.swift, Swift settings, traits, layouts, boundary checks
-│       ├── stack.md                 the swift-microservices libraries, the server stack, each one's Foundation status
-│       ├── use-cases.md             models, errors, repositories, ports, use cases, transactions, authorization, logging
-│       ├── persistence.md           Postgres scopes and roles, row-level security, migrations, other stores, Valkey
-│       ├── grpc.md                  contracts, services, handlers, conversions, interceptors, clients, transports
-│       ├── gateway.md               request contexts, router, controllers, errors, upstream clients, the edge
-│       ├── workflows.md             Temporal workflows, activities, options, versions, the worker
-│       ├── composition.md           commands, composition roots, configuration, logging, lifecycle
-│       ├── security.md              trust model, mTLS, tokens, authorization, secrets, webhooks
-│       ├── testing.md               test targets per module, mocks, the shared testing product
-│       ├── delivery.md              CI/CD per package kind: CI workflows, tests, releases, deployment, Containerfile
-│       ├── style.md                 how the code reads
-│       └── conventions.md           naming, folders, files
-├── .github/                         CI: validation, the semver label check, releases, Dependabot, and scripts/check_skill.py, the checks to run after every change
-├── CLAUDE.md                        authoring rules and skill best practices for agents changing the skill
-├── README.md
-└── LICENSE
+bookshelf-loans
+├── LoansCore       models, use cases, repository and port protocols
+├── LoansPostgres   repositories, row-level security, migrations
+├── LoansGRPC       the gRPC services, and clients for other services
+├── LoansTemporal   workflows and activities
+├── LoansResend     the email provider behind Core's notice ports
+└── Loans           the executable: configuration, wiring, lifecycle
 ```
 
 ## Installation
 
-**Claude Code plugin**
+**Claude Code**
 
 ```
 /plugin marketplace add swift-microservices/swift-microservices-architect-skill
@@ -81,11 +59,85 @@ swift-microservices-architect-skill/
 npx skills add https://github.com/swift-microservices/swift-microservices-architect-skill --skill swift-microservices-architect
 ```
 
-**Manual**
+**Manually**
 
-Copy `skills/swift-microservices-architect/` to `~/.claude/skills/swift-microservices-architect/` (all your projects) or to `.claude/skills/swift-microservices-architect/` in a repository (shared with the team).
+Copy `skills/swift-microservices-architect/` into `~/.claude/skills/` for all your projects, or into a repository's `.claude/skills/` to share it with the team.
 
-Claude Code loads the skill when a task matches its description, or on request with `/swift-microservices-architect`.
+## Usage
+
+Claude loads the skill when a task matches it, or when asked with `/swift-microservices-architect`. For example:
+
+- "Plan a backend for a lending library with accounts, a book catalog and loans."
+- "Add an endpoint for returning a book."
+- "When a loan passes its due date, mark it overdue and email the member."
+- "Set up CI/CD for the loans service."
+- "Review this service's architecture and code style."
+
+To plan a backend, add a service, an operation or a durable process, set up CI/CD or review a backend, the agent follows the skill's checklist, and one that changes code ends with a build and a test run repeated until both pass.
+
+## What it covers
+
+| Area | Covers |
+|---|---|
+| System design | Splitting a backend into services, contracts, how services talk, the written plan |
+| Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<org>-core` and `<org>-protos` packages |
+| Application layer | Models, errors, repositories, ports and typed-throws use cases, transactions, authorization |
+| Persistence | Postgres roles and row-level security, statements, paging, migrations, Valkey |
+| gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
+| Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details |
+| Workflows | Temporal workflows and activities, determinism, retries, versioning, the worker |
+| Composition | Commands, configuration, logging, and graceful shutdown |
+| Security | mTLS with certificate reloading, JWTs and key rotation, secrets, webhook signatures |
+| Testing | A test target per module, over hand-written mocks |
+| Delivery | GitHub Actions CI, semantic-version releases, images on GitHub Container Registry, deploys through Dokploy |
+| Style | How the code reads, and how everything is named |
+
+It builds on [Hummingbird](https://github.com/hummingbird-project/hummingbird), [gRPC Swift 2](https://github.com/grpc/grpc-swift-2), the [Temporal Swift SDK](https://github.com/apple/swift-temporal-sdk), [PostgresNIO](https://github.com/vapor/postgres-nio), [valkey-swift](https://github.com/valkey-io/valkey-swift), [Swift Configuration](https://github.com/apple/swift-configuration), [Swift Service Lifecycle](https://github.com/swift-server/swift-service-lifecycle) and the [swift-microservices](https://github.com/swift-microservices) libraries.
+
+Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, client SDKs and frontends.
+
+### Works well with
+
+The skill decides the shapes; these skills cover the code inside them:
+
+- [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill): actors, task groups, `Sendable` diagnostics
+- [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
+- A `swift-api-design-guidelines` skill: argument labels, method names, documentation comments
+
+## Repository layout
+
+```
+.claude-plugin/                 plugin and marketplace manifests
+skills/swift-microservices-architect/
+├── SKILL.md                    what every task needs: the shape, hard rules, style, gotchas, checklists
+└── references/                 read when a task reaches their topic
+    ├── system.md               services, contracts, shared packages, the plan
+    ├── packages.md             targets, Package.swift, Swift settings, boundary checks
+    ├── stack.md                the libraries, and choosing their versions
+    ├── use-cases.md            models, errors, repositories, ports, use cases
+    ├── persistence.md          Postgres roles, row-level security, migrations, Valkey
+    ├── grpc.md                 contracts, handlers, conversions, clients, transports
+    ├── gateway.md              the Hummingbird gateway
+    ├── workflows.md            Temporal workflows, activities, the worker
+    ├── composition.md          commands, composition roots, configuration, lifecycle
+    ├── security.md             mTLS, tokens, authorization, secrets, webhooks
+    ├── style.md                how the code reads
+    ├── testing.md              test targets and mocks
+    ├── delivery.md             CI/CD for each kind of package
+    └── conventions.md          names, folders, files
+.github/                        validation, the semver label check, releases
+CLAUDE.md                       authoring rules for changing the skill
+```
+
+## Contributing
+
+Issues and pull requests are welcome. [CLAUDE.md](CLAUDE.md) holds the rules every change follows, whether an agent or a person writes it. Before pushing, run:
+
+```bash
+python3 .github/scripts/check_skill.py
+```
+
+Each pull request carries one semver label, which sets the next release's version.
 
 ## License
 

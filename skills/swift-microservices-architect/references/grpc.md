@@ -112,13 +112,13 @@ service LoanService {
 Each proto service is one struct in XGRPC, conforming to the generated `SimpleServiceProtocol` and holding a use case per RPC:
 
 ```swift
+import Authentication
+import BookshelfAuthentication
 package import GRPCCore
 package import LoansCore
 package import LoansProtos
-import Authentication
-import BookshelfAuthentication
 import OperationContext
-import SwiftProtobuf
+package import SwiftProtobuf
 
 /// Loans for people, through the gateway, grouped as the contract groups them.
 ///
@@ -151,7 +151,8 @@ package struct LoanService: Bookshelf_Loans_V1_LoanService.SimpleServiceProtocol
 
     // MARK: - Caller
 
-    /// The interceptor identifies a user without requiring one; the caller's own RPCs require one.
+    /// The interceptor identifies a user without requiring one; the caller's own and
+    /// administrators' RPCs require one.
     private func requireUser() throws -> UserIdentity {
         guard let user = OperationContext.current.user else {
             throw RPCError(code: .unauthenticated, message: "Authentication is required.")
@@ -159,20 +160,10 @@ package struct LoanService: Bookshelf_Loans_V1_LoanService.SimpleServiceProtocol
 
         return user.identity
     }
-
-    /// An early gate for administrators' RPCs; each use case checks the role again.
-    private func requireAdministrator() throws -> UserIdentity {
-        let subject = try requireUser()
-        guard subject.role == .admin else {
-            throw RPCError(code: .permissionDenied, message: "Administrator access is required.")
-        }
-
-        return subject
-    }
 }
 ```
 
-- `SimpleServiceProtocol` gives each RPC a plain request and response; `ServiceProtocol` is for streaming or for reading request metadata in a handler.
+- `SimpleServiceProtocol` gives each handler its messages, streaming RPCs included; `ServiceProtocol` is only for a handler that reads request metadata or sets response metadata.
 - `XService` and `XInternalService` are separate structs ([an internal service](#an-internal-service)).
 - The service holds use cases only: no repositories, ports, databases or rules.
 
@@ -205,7 +196,7 @@ package func borrowBook(
 }
 ```
 
-1. Require the caller the RPC's group needs (`requireUser()`, `requireAdministrator()`, or nothing).
+1. Require a caller for the caller's own and administrators' RPCs (`requireUser()`); anyone's require nothing.
 2. Convert the request before the `do`: a malformed request is refused as `invalidArgument` by the conversion.
 3. The `do` holds the use case call and the response's conversion; one `catch` per case of the use case's error, in the order the enum declares them.
 4. No catch-all, and no logging: the use case logged what happened. Because the handler `throws`, the compiler doesn't flag a case left out; a case added to an error is added to every handler that maps it, and one that slips through reaches the client as `unknown`.
@@ -338,10 +329,6 @@ The server's interceptors apply to the person-facing descriptors only, as [the c
 A port to another service is a struct in XGRPC's `Clients/`, generic over the transport, wrapping the generated client of the other service's internal contract:
 
 ```swift
-package import GRPCCore
-package import LoansCore
-import CatalogProtos
-
 /// `CatalogClient` over Catalog's internal contract, as this process, proved by its certificate.
 package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
     private let client: Bookshelf_Catalog_V1_BookInternalService.Client<Transport>

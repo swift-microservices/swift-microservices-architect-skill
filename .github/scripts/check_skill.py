@@ -24,7 +24,7 @@ REFERENCES = SKILL / "references"
 
 # Limits from the Agent Skills specification and Claude Code's skill loading.
 MAX_NAME = 64
-MAX_DESCRIPTION = 1024
+MAX_DESCRIPTION = 800  # below the specification's 1,024: the listing is paid on every turn
 MAX_SKILL_LINES = 500
 MAX_SKILL_TOKENS = 5000  # recommended for the SKILL.md body; also what compaction keeps
 CHARS_PER_TOKEN = 3.5  # a conservative estimate for English prose with code
@@ -99,8 +99,8 @@ def check_frontmatter(skill_text: str) -> str:
         else:
             fail(f"frontmatter: keep each field on one line: {line[:60]}")
 
-    if set(fields) != {"name", "description"}:
-        fail(f"frontmatter: holds only name and description, found {sorted(fields)}")
+    if set(fields) != {"name", "description", "license"}:
+        fail(f"frontmatter: holds only name, description and license, found {sorted(fields)}")
 
     name = fields.get("name", "")
     if len(name) > MAX_NAME or not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name):
@@ -125,6 +125,10 @@ def check_frontmatter(skill_text: str) -> str:
         result = subprocess.run(["ruby", "-e", script, str(SKILL / "SKILL.md")], capture_output=True, text=True)
         if result.returncode != 0:
             fail(f"frontmatter: not valid YAML: {result.stderr.strip()[:200]}")
+
+    plugin = json.loads(read(ROOT / ".claude-plugin" / "plugin.json"))
+    if fields.get("license") != plugin.get("license"):
+        fail(f"frontmatter: license {fields.get('license')!r} must match plugin.json's {plugin.get('license')!r}")
 
     return description
 

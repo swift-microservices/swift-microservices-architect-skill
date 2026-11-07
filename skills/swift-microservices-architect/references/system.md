@@ -21,7 +21,7 @@ Draw a boundary by data and change:
 - **Separate services** when each part has its own data, its own rules and its own reason to change: the catalog changes with how books are described, loans with lending policy.
 - **Separate models** when a noun means something different on each side. To Catalog a book is a description with copies; to Loans it's an id and a title for a notice, modeled as `Book` in LoansCore's `Ports/`.
 
-Then check what the split costs. Across a boundary cross only ids and the few fields the consumer needs, through internal RPCs; a step that must also happen on the other side runs as a workflow. A split that needs a shared table, a distributed transaction or an RPC on every request of the other side is one service.
+Then check what the split costs. Across a boundary cross only ids and the few fields the consumer needs, through internal RPCs; a step that must also happen on the other side runs as a workflow. Keep the parts in one service when splitting them would need a shared table, a distributed transaction, or a call to the other side on every request.
 
 Avoid:
 - A service per entity or table (`Books`, `Copies`, `Members`): every operation crosses the network.
@@ -42,7 +42,7 @@ A step that was atomic across the two becomes a workflow. Moving or dropping dat
 
 ## Contracts
 
-Each service publishes one proto package, `<org>.<x>.v1`, with up to two proto services:
+Each service publishes one proto package, `<org>.<x>.v1`, with one `XService` and at most one `XInternalService`:
 
 | Proto service | Called by | Admitted by |
 |---|---|---|
@@ -71,8 +71,8 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 
 ## Data ownership and storage
 
-- Each service owns its storage. Where it lives is a deployment decision: a database per service on one shared Postgres instance, an instance per service, or a managed store for a small service. The module map doesn't change with it: storage is an adapter target behind Core's repository protocols ([other stores](persistence.md#other-stores)).
-- On Postgres: a database per service (`bookshelf_loans`) with an owner and a role per purpose ([database roles](persistence.md#database-roles)); a table whose rows belong to a user is a tenant table under [row-level security](persistence.md#row-level-security).
+- Each service owns its Postgres database (`bookshelf_loans`), with an owner and a role per purpose ([database roles](persistence.md#database-roles)); whether databases share an instance is the deployment's choice, and the module map doesn't change with it.
+- A table whose rows belong to a user is a tenant table under [row-level security](persistence.md#row-level-security).
 - Short-lived values with an expiry live in [Valkey](persistence.md#valkey).
 
 ## The shared packages
@@ -83,14 +83,14 @@ Besides the swift-microservices libraries ([stack](stack.md)), every service and
 
 | Product | Holds | Linked by |
 |---|---|---|
-| `<Org>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, XHTTP, executables |
-| `<Org>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `UserSettingsMiddleware`, `PostgresClient.Configuration(config:role:)` | Executables with Postgres |
+| `<Org>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, executables |
+| `<Org>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:)` | Executables with Postgres |
 | `<Org>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys | Executables |
 | `<Org>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
 
 It holds none of these: a service's models, repositories, scopes or migrations; contracts; deployment defaults such as mount paths, ports and role names, which stay in each executable's `InMemoryProvider` defaults; generic abstractions, which belong to the swift-microservices libraries; a process identity or service token, since certificates prove processes.
 
-**`<org>-protos`** holds one target per contract (`IdentityProtos`, `CatalogProtos`, `LoansProtos`), generated at build time, so a consumer links only the contracts it calls. A small system may keep the `XProtos` targets in `<org>-core` as separate products; a separate package lets contracts version and release on their own.
+**`<org>-protos`** holds one target per contract (`IdentityProtos`, `CatalogProtos`, `LoansProtos`), generated at build time, so a consumer links only the contracts it calls. A package of its own lets contracts release apart from `<org>-core`.
 
 Both packages: [the organization's core package](packages.md#the-organizations-core-package), [the contracts package](packages.md#the-contracts-package).
 

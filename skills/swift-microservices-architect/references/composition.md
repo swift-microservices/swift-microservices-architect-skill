@@ -31,7 +31,7 @@ struct Loans: AsyncParsableCommand {
 ```
 
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
-- `serve --migrate-database` applies pending migrations as the owner, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
+- `serve --migrate-database` applies pending migrations and sets the roles' passwords as the owner, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
 - A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
 - An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived subcommand of the executable, never an administrators' RPC.
 - Each command's `run()` is a composition root: the only code that reads configuration, constructs concrete types and runs them. Nothing below it reads configuration, builds a client or starts a task.
@@ -115,8 +115,7 @@ struct Serve: AsyncParsableCommand {
         let temporalClient = try TemporalClient(
             target: .dns(host: temporalHost, port: temporalPort),
             transportSecurity: temporalSecurity,
-            configuration: temporalClientConfiguration,
-            logger: logger
+            configuration: temporalClientConfiguration
         )
 
         // MARK: - Composition
@@ -126,7 +125,7 @@ struct Serve: AsyncParsableCommand {
         let database = PostgresDatabase<PostgresLoansScope>(client: postgresClient, logger: logger)
         let internalDatabase = PostgresDatabase<PostgresLoansInternalScope>(client: internalPostgresClient, logger: logger)
         let catalogClient = GRPCCatalogClient(client: catalogGRPCClient)
-        let taskQueue = try temporalConfig.requiredString(forKey: "taskQueue")
+        let taskQueue = try temporalConfig.requiredString(forKey: "worker.taskqueue")
         let loanWorkflowClient = TemporalLoanWorkflowClient(client: temporalClient, taskQueue: taskQueue)
         let loansConfig = config.scoped(to: "loans")
         let policy = try LoanPolicy(config: loansConfig)
@@ -145,7 +144,7 @@ struct Serve: AsyncParsableCommand {
             policy: policy,
             logger: logger
         )
-        let returnBookUseCase = ReturnBookUseCase(database: database, loanWorkflowClient: loanWorkflowClient, logger: logger)
+        let returnBookUseCase = ReturnBookUseCase(database: database, logger: logger)
         let listLoansUseCase = ListLoansUseCase(database: database, logger: logger)
         let listAllLoansUseCase = ListAllLoansUseCase(database: internalDatabase, logger: logger)
         let loanService = LoanService(
@@ -192,7 +191,9 @@ struct Serve: AsyncParsableCommand {
             gracefulShutdownSignals: [.sigterm, .sigint],
             logger: logger
         )
-        try await serviceGroup.run()
+        try await withLogger(logger) { _ in
+            try await serviceGroup.run()
+        }
     }
 }
 ```
@@ -222,6 +223,7 @@ extension InMemoryProvider {
             "tls.trustRootsPath": "/run/tls/ca.pem",
             "jwt.publicKeysPath": "/run/secrets/jwt-public",
             "postgres.db": "bookshelf_loans",
+            "postgres.tls.trustRootsPath": "/run/tls/ca.pem",
             "postgres.service.user": "loans_service",
             "postgres.internal.user": "loans_internal",
             "postgres.worker.user": "loans_worker",
@@ -229,7 +231,8 @@ extension InMemoryProvider {
             "temporal.tls.privateKeyPath": "/run/temporal-tls/key.pem",
             "temporal.tls.trustRootsPath": "/run/temporal-tls/ca.pem",
             "temporal.port": 7233,
-            "temporal.taskQueue": "loans",
+            "temporal.client.namespace": "bookshelf",
+            "temporal.worker.namespace": "bookshelf",
             "temporal.worker.taskqueue": "loans",
             "loans.maximumActiveLoans": 5,
             "loans.loanPeriodDays": 21,
@@ -238,7 +241,7 @@ extension InMemoryProvider {
 }
 ```
 
-- Defaults hold mount paths, ports, the database's name, role names, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
+- Defaults hold mount paths, ports, the database's name, role names, the Temporal namespace, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
 - A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes first: `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)`. Required keys and validation live in the reader, not in the root.
 - A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
 - Readers every executable shares are `<Org>Transport`'s and `<Org>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)`, with the key names that library chose.
@@ -251,16 +254,15 @@ extension InMemoryProvider {
 
 - `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Org>Authentication` ([user tokens](security.md#user-tokens)).
 - The level comes from `logLevel`, defaulting to `info`; the label is as [naming](conventions.md#naming) gives it.
-- The root's `logger` is passed to every client, database, use case and server it builds. Nothing creates a logger of its own.
-- A log shipper's handler joins the stream handler in a `MultiplexLogHandler`, and its processor runs first in the `ServiceGroup`.
+- The root's `logger` is passed to every client, database, use case and server that takes one, and bound around the group's run with `withLogger(logger)` for the libraries that log through `Logger.current`, such as swift-temporal-sdk. Nothing creates a logger of its own.
 
 ## Lifecycle
 
-One `ServiceGroup` runs every long-lived component (pools, servers, certificate reloaders, workers, clients) as a child task of the command's task. On `SIGTERM`, which container platforms send before `SIGKILL`, it shuts them down in reverse order, each draining before the next; when one throws or returns, it cancels the rest and the process exits non-zero, rather than answering requests with its database client gone. So a root lists its components and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
+One `ServiceGroup` runs every long-lived component as a child task of the command and, on `SIGTERM`, shuts them down in reverse order; when one throws or returns, it cancels the rest and the process exits non-zero. So a root lists its components and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
 
 - Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `TemporalClient`, `TemporalWorker`.
-- Order is dependency order: log processors, database clients, certificate reloaders, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
-- `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. `try await serviceGroup.run()` is the root's last line.
+- Order is dependency order: database clients, certificate reloaders, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
+- `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. Running the group is the root's last line.
 - A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
 - A long-running component of the service's own is a `Service` whose `run()` returns on graceful shutdown: its loop iterates `sequence.cancelOnGracefulShutdown()`, or wraps its work in `withGracefulShutdownHandler`.
 
@@ -296,8 +298,7 @@ let worker = try TemporalWorker(
     target: .dns(host: temporalHost, port: temporalPort),
     transportSecurity: temporalSecurity,
     activityContainers: loanActivities,
-    workflows: [LoanWorkflow.self],
-    logger: logger
+    workflows: [LoanWorkflow.self]
 )
 
 // MARK: - Lifecycle
@@ -316,23 +317,22 @@ let jwtConfig = config.scoped(to: "jwt")
 let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
 let propagation = BearerPropagationInterceptor<UserIdentity>()
 …  // each upstream's transport, as in a service's Serve
-let loans = GRPCClient(
+let loansGRPCClient = GRPCClient(
     transport: loansTransport,
     interceptorPipeline: [.apply(propagation, to: .services([Bookshelf_Loans_V1_LoanService.descriptor]))]
 )
-…  // one client per upstream service
+…  // identityGRPCClient and catalogGRPCClient the same way
 
 // MARK: - Composition
-let identityClient = Bookshelf_Identity_V1_IdentityService.Client(wrapping: identity)
-let bookClient = Bookshelf_Catalog_V1_BookService.Client(wrapping: catalog)
-let loanClient = Bookshelf_Loans_V1_LoanService.Client(wrapping: loans)
-let dependencies = BookshelfAPI.Dependencies(
+let identityClient = Bookshelf_Identity_V1_IdentityService.Client(wrapping: identityGRPCClient)
+let bookClient = Bookshelf_Catalog_V1_BookService.Client(wrapping: catalogGRPCClient)
+let loanClient = Bookshelf_Loans_V1_LoanService.Client(wrapping: loansGRPCClient)
+let api = BookshelfAPI(
     authenticator: authenticator,
-    identity: identityClient,
-    books: bookClient,
-    loans: loanClient
+    identityClient: identityClient,
+    bookClient: bookClient,
+    loanClient: loanClient
 )
-let api = BookshelfAPI(dependencies: dependencies)
 
 // MARK: - Router
 let cors = CORSMiddleware<BasicRequestContext>(allowOrigin: .originBased, allowHeaders: [.contentType, .authorization], allowMethods: [.get, .post, .put, .delete])

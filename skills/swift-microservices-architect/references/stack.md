@@ -15,13 +15,12 @@ Small libraries that give every service the same shape for identity, request-sco
 | Package | Product | Provides | Linked by |
 |---|---|---|---|
 | [swift-operation-context](https://github.com/swift-microservices/swift-operation-context) | `OperationContext` | `OperationContext`, a task-local container of typed values for one operation (`OperationContext.current`, `withContext(_:operation:)`), keyed by `OperationContextKey` | XGRPC, `<Org>Authentication`, `<Org>Persistence` |
-| [swift-authentication](https://github.com/swift-microservices/swift-authentication) | `Authentication` | `Authenticator<Credential, Identity>`, `CredentialIssuer<Identity, Credential>`, `Principal<Identity, Credential>` (the proved identity and the credential that proved it), `PrincipalKey` | XGRPC, XHTTP, `<Org>Authentication`, the gateway, a Core that issues credentials |
+| [swift-authentication](https://github.com/swift-microservices/swift-authentication) | `Authentication` | `Authenticator<Credential, Identity>`, `CredentialIssuer<Identity, Credential>`, `Principal<Identity, Credential>` (the proved identity and the credential that proved it), `PrincipalKey` | XGRPC, `<Org>Authentication`, the gateway, a Core that issues credentials |
 | [swift-authentication-jwt](https://github.com/swift-microservices/swift-authentication-jwt) | `AuthenticationJWT` | `JWTAuthenticator<Payload>` and `JWTIssuer<Payload>` over a `JWTKeyCollection` | `<Org>Authentication`, `<Org>Transport`, executables |
 | [swift-authentication-grpc](https://github.com/swift-microservices/swift-authentication-grpc) | `AuthenticationGRPC` | `BearerAuthenticationInterceptor` (binds the principal a bearer token proves), `BearerPropagationInterceptor` (presents it on outgoing calls), `Metadata.bearer` | Executables |
-| [swift-authentication-hummingbird](https://github.com/swift-microservices/swift-authentication-hummingbird) | `AuthenticationHummingbird` | `BearerAuthenticationMiddleware<Context>`, which sets the context's identity and binds the principal in `OperationContext` | The gateway, XHTTP |
+| [swift-authentication-hummingbird](https://github.com/swift-microservices/swift-authentication-hummingbird) | `AuthenticationHummingbird` | `BearerAuthenticationMiddleware<Context>`, which sets the context's identity and binds the principal in `OperationContext` | The gateway |
 | [swift-persistence](https://github.com/swift-microservices/swift-persistence) | `Persistence` | `Database<Scope>` and `withTransaction(_:)`: the transaction boundary and the scope of repositories a unit of work may touch | XCore, `<Org>Testing` |
 | [swift-persistence-postgres](https://github.com/swift-microservices/swift-persistence-postgres) | `PersistencePostgres` | `PostgresDatabase<Scope>`, `PostgresScope`, `PostgresSettings` (transaction-local `set_config`, read from `OperationContext`), `PostgresClient.withClient` | XPostgres, `<Org>Persistence`, executables |
-| [swift-openapi-token-authentication](https://github.com/swift-microservices/swift-openapi-token-authentication) | `OpenAPITokenAuthentication` | Client-side sessions and token refresh for generated OpenAPI clients | Client SDKs, out of this skill's scope |
 
 On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `OperationContext`, the handler passes its identity to the use case ([user tokens](security.md#user-tokens)), and `UserSettingsInterceptor` binds the tenant for every transaction ([binding the tenant](persistence.md#binding-the-tenant)).
 
@@ -29,13 +28,13 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 
 | Package | Products | Used for | Linked by |
 |---|---|---|---|
-| [hummingbird](https://github.com/hummingbird-project/hummingbird) | `Hummingbird` | The HTTP server: router, request contexts, middleware, `Application` | The gateway, XHTTP, `<Org>Persistence` |
+| [hummingbird](https://github.com/hummingbird-project/hummingbird) | `Hummingbird` | The HTTP server: router, request contexts, middleware, `Application` | The gateway |
 | [hummingbird-auth](https://github.com/hummingbird-project/hummingbird-auth) | `HummingbirdAuth`, `HummingbirdBcrypt` | `AuthRequestContext`, `IsAuthenticatedMiddleware`; bcrypt | The gateway; a password-hashing adapter |
 | [swift-openapi-generator](https://github.com/apple/swift-openapi-generator), [swift-openapi-runtime](https://github.com/apple/swift-openapi-runtime) | `OpenAPIGenerator` plugin, `OpenAPIRuntime` | The gateway's types from `openapi.yaml` | The gateway |
 | [grpc-swift-2](https://github.com/grpc/grpc-swift-2) | `GRPCCore` | Servers, clients, interceptors, `RPCError`, `ServiceConfig` | XGRPC, executables, `<Org>Persistence`, the gateway |
 | [grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | `GRPCNIOTransportHTTP2` | HTTP/2 transports with TLS and mTLS | Executables, `<Org>Transport` |
 | [grpc-swift-protobuf](https://github.com/grpc/grpc-swift-protobuf) | `GRPCProtobuf`, `GRPCProtobufGenerator` plugin | Protobuf serialization and code generation | `<org>-protos` |
-| [grpc-swift-extras](https://github.com/grpc/grpc-swift-extras) | `GRPCServiceLifecycle`, `GRPCOTelTracingInterceptors` | `GRPCServer` and `GRPCClient` as lifecycle services; tracing | Executables |
+| [grpc-swift-extras](https://github.com/grpc/grpc-swift-extras) | `GRPCServiceLifecycle` | `GRPCServer` and `GRPCClient` as lifecycle services | Executables |
 | [swift-protobuf](https://github.com/apple/swift-protobuf) | `SwiftProtobuf` | Messages, well-known types (`Google_Protobuf_Timestamp`, `Google_Protobuf_Empty`) | `<org>-protos`, XGRPC, the gateway |
 | [swift-temporal-sdk](https://github.com/apple/swift-temporal-sdk) | `Temporal` | Workflows, activities, `TemporalClient`, `TemporalWorker` | XTemporal, executables |
 | [valkey-swift](https://github.com/valkey-io/valkey-swift) | `Valkey` | `ValkeyClient`, commands, pipelines, transactions | XValkey, executables |
@@ -54,14 +53,12 @@ Hummingbird is the only HTTP framework, and AsyncHTTPClient the only HTTP client
 
 ## Full Foundation
 
-Whether each package makes a Linux binary link full Foundation, with the traits [traits and Foundation](packages.md#traits-and-foundation) declares:
+These link full Foundation on Linux whatever their traits, so the products that depend on them are listed in `foundation_linking_check_excluded_products` ([Foundation linking](delivery.md#foundation-linking)):
+- postgres-nio, and so postgres-migrations and swift-persistence-postgres: every service with XPostgres
+- swift-openapi-generator's generated files, which `public import Foundation`: the gateway
+- swift-temporal-sdk through 1.5.0, whose scoped `import struct Foundation.Data` imports link it: every service with XTemporal
 
-| Status | Packages |
-|---|---|
-| Foundation-free | swift-nio (except `NIOFoundationCompat`), swift-nio-ssl, swift-nio-extras (except `NIOCertificateHelpers`), swift-log, swift-metrics, swift-distributed-tracing, swift-service-lifecycle, swift-argument-parser, swift-async-algorithms, swift-crypto, swift-certificates, swift-asn1, grpc-swift-nio-transport, valkey-swift, hummingbird-auth, jwt-kit, async-http-client from 1.32.1, and the swift-microservices libraries except swift-persistence-postgres |
-| Foundation-free from a version; earlier ones turn swift-protobuf's default traits back on | grpc-swift-2 2.4.2, grpc-swift-protobuf 2.4.1, grpc-swift-extras 2.2.2 |
-| Foundation-free with traits off | hummingbird, swift-openapi-runtime, swift-configuration, swift-protobuf |
-| Links full Foundation | postgres-nio, and so postgres-migrations and swift-persistence-postgres: a service with XPostgres links it. swift-openapi-generator's generated files, which `public import Foundation`, so the gateway links it. swift-temporal-sdk through 1.5.0, which imports `FoundationEssentials` where it can but keeps scoped `import struct Foundation.Data` imports that link full Foundation |
+Every other package in the stack is Foundation-free with the traits [traits and Foundation](packages.md#traits-and-foundation) declares, and CI's check finds one that isn't.
 
 ## Choosing versions
 
@@ -69,4 +66,4 @@ Whether each package makes a Linux binary link full Foundation, with the traits 
 - A library from 1.0 is `from:`, a lower bound up to the next major, so resolution picks up fixes and additions; raise it when the code needs a newer API, or to the version from which a package stops linking full Foundation ([full Foundation](#full-foundation)).
 - A library below 1.0, such as the swift-microservices libraries, is `.upToNextMinor(from:)`, since its next minor may change its API. Moving to that minor is a change of its own, made by hand.
 - A service's package commits `Package.resolved`; a library's ignores it.
-- The gateway builds on Swift 6.4 or later with swift-openapi-generator `from: "1.14.3"`. From those, the generator marks each import in its generated files with `@diagnose(UnusedImportAccess, as: ignored)`, so an import a file doesn't use doesn't warn; on an older toolchain the attribute is compiled out and the warnings fail CI's test build ([delivery](delivery.md#tests)).
+- The gateway requires swift-openapi-generator `from: "1.14.3"`, whose generated imports don't warn.
