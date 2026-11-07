@@ -88,7 +88,7 @@ jobs:
     uses: swift-microservices/ci/.github/workflows/library.yml@<commit>  # <release>
     with:
       api_breakage_check_enabled: true
-      foundation_linking_check_excluded_products: "BookshelfPersistence"
+      foundation_linking_check_excluded_products: '["BookshelfPersistence"]'
 ```
 
 - `api_breakage_check_enabled` is `true` from 1.0, so a breaking change shows on its pull request, and `false` below 1.0, where a minor release may break the API.
@@ -112,7 +112,7 @@ jobs:
       executable_product: loans
       image_repository: ghcr.io/bookshelf/bookshelf-loans
       postgres_image: postgres:<major>-alpine
-      foundation_linking_check_excluded_products: loans
+      foundation_linking_check_excluded_products: '["loans"]'
     secrets:
       PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
 
