@@ -30,10 +30,9 @@ Core declares the port; XTemporal implements it:
 ```swift
 /// How use cases hand a loan to its durable process.
 ///
-/// Each method returns once Temporal has accepted it, never when the process finishes.
+/// Returns once Temporal has accepted the start, never when the process finishes.
 package protocol LoanWorkflowClient: Sendable {
-    func startLoan(_ loan: Loan) async throws
-    func markReturned(loanID: UUID) async throws
+    func start(_ loan: Loan) async throws
 }
 ```
 
@@ -49,7 +48,7 @@ package struct TemporalLoanWorkflowClient: LoanWorkflowClient {
 
     /// A start for a loan whose run is in flight joins it, and one whose run failed starts it
     /// again; one whose run completed is refused, since its work is done.
-    package func startLoan(_ loan: Loan) async throws {
+    package func start(_ loan: Loan) async throws {
         do {
             let workflowID = LoanWorkflow.id(loanID: loan.id)
             let options = WorkflowOptions(
@@ -64,12 +63,6 @@ package struct TemporalLoanWorkflowClient: LoanWorkflowClient {
             return
         }
     }
-
-    package func markReturned(loanID: UUID) async throws {
-        let workflowID = LoanWorkflow.id(loanID: loanID)
-        let handle = client.workflowHandle(type: LoanWorkflow.self, id: workflowID)
-        try await handle.signal(signalType: LoanWorkflow.MarkReturned.self)
-    }
 }
 ```
 
@@ -78,18 +71,14 @@ package struct TemporalLoanWorkflowClient: LoanWorkflowClient {
   - `.allowDuplicateFailedOnly` starts a failed run's work again on a new trigger, such as a retried request. `WorkflowAlreadyStartedError` then means the run completed, and the start returns.
   - `.rejectDuplicate` keeps a failed run from running again without a person. The error then propagates, since catching it would report unfinished work as done.
 - The use case starts the workflow after its transaction commits; [transactions](use-cases.md#transactions) say how a lost start is recovered.
-- A start doesn't wait for the result. A use case that needs a workflow's state reads it with a query (`handle.query(queryType:)`), and one that delivers an event sends a signal.
+- A start doesn't wait for the result. A use case that needs a workflow's state reads it with a query (`handle.query(queryType:)`). A signal reaches only a run in flight and fails once the run has closed, so a fact that outlives the run, such as a return, stays in the database, where the activity that acts on it reads it (`markOverdue`).
 
-A workflow a provider's [webhook](security.md#webhooks) starts:
-- Takes the event as a trigger, not data. Events arrive more than once and out of order, so the input holds ids, and the first activity reads the live object from the provider.
-- Has an id that names the event, under `.allowDuplicateFailedOnly`, so a redelivery joins the run in flight, or runs again after a failure.
-- Makes an effect that is idempotent per entity, so the runs of two events about one entity converge.
-- Sets `executionTimeOut`, with activities whose `scheduleToCloseTimeout`s fit inside it, so a stuck run fails and the provider's next delivery starts it again.
+A workflow a provider's [webhook](security.md#webhooks) starts takes ids, not the event's body, since events arrive more than once and out of order, and its id names the event. Started with the same two policies, a redelivery joins the run in flight, or runs again after a failure.
 
 ## A workflow
 
 ```swift
-/// A loan from borrowing to return. A book still out on its due date makes the loan overdue,
+/// A loan from borrowing to its due date: a book still out then makes the loan overdue,
 /// and the member is sent a notice.
 @Workflow
 package struct LoanWorkflow {
@@ -104,14 +93,9 @@ package struct LoanWorkflow {
         }
     }
 
-    private var isReturned = false
-
-    package mutating func run(context: WorkflowContext<Self>, input: Input) async throws {
+    package func run(context: WorkflowContext<Self>, input: Input) async throws {
         let timeUntilDue = input.dueDate.timeIntervalSince(context.now)
         try await context.sleep(for: .seconds(timeUntilDue))
-        guard !isReturned else {
-            return
-        }
 
         let markOverdueInput = LoanActivities.MarkOverdueInput(loanID: input.loanID)
         let isMarkedOverdue = try await context.executeActivity(
@@ -130,11 +114,6 @@ package struct LoanWorkflow {
             input: noticeInput
         )
     }
-
-    @WorkflowSignal
-    package mutating func markReturned(input: Void) {
-        isReturned = true
-    }
 }
 
 extension LoanWorkflow {
@@ -148,8 +127,8 @@ extension LoanWorkflow {
 - `run(context:input:)` reads as the process: wait, check, act, one activity per step. It's `mutating` when it or a handler changes the workflow's state.
 - A workflow takes a nested `Input` and returns a nested `Output` (or nothing), with explicit initializers, so fields can be added later.
 - Every payload is `Codable, Sendable`, and so is every type it holds: a workflow's input and output, a signal's, query's or update's, and an activity's. The SDK requires only `Sendable` and checks `Codable` when it converts the value, so a missing conformance compiles, then fails on every attempt. A Core enum a payload needs is mirrored as a nested enum.
-- State that handlers change is the workflow's private stored properties. A signal is a `@WorkflowSignal mutating func`; a query a `@WorkflowQuery func … throws` that can't mutate; an update, which changes state and answers, a `@WorkflowUpdate`. The macros generate the types callers name: `LoanWorkflow.MarkReturned`.
-- Waiting: `context.sleep(for:)` for time; `context.condition { $0.isReturned }` for state a handler sets; both together with the condition inside `context.timeout(for:)`, catching `CanceledError` as the timeout.
+- State that handlers change is the workflow's private stored properties. A signal is a `@WorkflowSignal mutating func`; a query a `@WorkflowQuery func` taking `input:` and returning a value, which can't mutate; an update, which changes state and answers, a `@WorkflowUpdate`. The macros generate the types callers name, the method's name capitalized.
+- Waiting: `context.sleep(for:)` for time; `context.condition { … }` for state a handler sets; both together with the condition inside `context.timeout(for:)`, catching `CanceledError` as the timeout.
 - A step that is itself a process is a child workflow, `context.executeChildWorkflow(_:options:input:)`, with a deterministic id.
 - An outcome the process continues from is an activity's return value, not an error: `markOverdue` returns whether it marked the loan, and the workflow branches on it. Errors are failures, and a failure ends the run; undoing an earlier step's effect is another activity, run before the run ends.
 - Comments give the business reason for a step or an order, never what the next line does.
@@ -239,7 +218,7 @@ package struct LoanActivities {
 - It maps a permanent failure, a case no retry can change, to `ApplicationError(message:type:isNonRetryable: true)`, catching that case explicitly. Every other error propagates, and Temporal retries it.
 - It's safe to run twice: writes are conditional or keyed, and external effects carry an idempotency key derived from the workflow's subject (`loans-overdue-notice-<loan id>`).
 - An activity that runs long calls `ActivityExecutionContext.current?.heartbeat()` regularly, and its options set `heartbeatTimeout`: without one, neither cancellation nor a lost worker reaches it before `startToCloseTimeout`.
-- Activities are registered by name, the method's name capitalized (`MarkOverdue`). Two containers with a method of the same name register the same activity: name one with `@Activity(name:)`.
+- Activities are registered by name, the method's name capitalized (`MarkOverdue`).
 
 ## Activity options
 
@@ -268,11 +247,11 @@ extension ActivityOptions {
 
 - A workflow's inputs, outputs and activity results are stored in its history. They hold ids and small values, never personal data, secrets or tokens; an activity reads those when it runs.
 - A recorded history must still decode: add `Codable` fields as optionals, and never rename or remove a field, or an enum case, that a running workflow's history holds.
-- A `Date` crosses Temporal's JSON payloads in whole seconds, since the payload converter encodes ISO 8601 without fractions. A date that comes back is never compared for equality or used as a key.
 - Changing the commands a workflow issues, by adding, removing or reordering activities, timers or child workflows, breaks replay of runs started under the old code. Branch on `context.patch("<change>")` until those runs finish, then `context.deprecatePatch`; or give the new process a new workflow type.
 
 ## The worker
 
 `x worker run` builds the worker in [its own root](composition.md#the-workers-root):
 - It connects to Postgres as the worker role, so only use cases whose scopes the worker scope adopts can run in it.
-- Each service has one task queue, named for it (`loans`), used by the serve process's starts (`temporal.taskQueue`) and the worker's polling (`temporal.worker.taskqueue`, the SDK's key), set to the same default.
+- Each service has one task queue, named for it (`loans`), under the SDK's key `temporal.worker.taskqueue`, which the serve process also reads for its starts.
+- The SDK's readers take the namespace under `temporal.client.namespace` for starts and `temporal.worker.namespace` for polling, which the defaults set together (`bookshelf`). They also require `temporal.client.instrumentation.serverhostname` and `temporal.worker.client.instrumentation.serverhostname` (the Temporal host), `temporal.worker.buildid` (the image's commit) and `temporal.worker.client.identity`, which the deployment sets.

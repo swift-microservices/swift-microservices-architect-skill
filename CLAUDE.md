@@ -6,7 +6,7 @@ Every change to the skill ends with [the checks](#after-every-change), repeated 
 
 ## What the skill is for
 
-- It decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together: Core's models, errors, repositories, ports and use cases; the Postgres, gRPC, Temporal, Valkey, provider and HTTP adapters; the gateway; the composition roots; the shared `<org>-core` and `<org>-protos` packages; how each package is tested, released and deployed; and how the code reads and is named.
+- It decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together: Core's models, errors, repositories, ports and use cases; the Postgres, gRPC, Temporal, Valkey and provider adapters; the gateway; the composition roots; the shared `<org>-core` and `<org>-protos` packages; how each package is tested, released and deployed; and how the code reads and is named.
 - It states shapes and rules. The code inside a shape that isn't architecture (actor design, task group technique, test code) belongs to the skills under Related skills in `SKILL.md`.
 - Out of scope until decided: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
 
@@ -22,9 +22,9 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 **Frontmatter**
 
-- Only `name` and `description`, in YAML that parses. claude.ai and the API accept only the specification's keys and reject any other, such as Claude Code's `when_to_use` or `paths`.
+- Only `name`, `description` and `license`, in YAML that parses. claude.ai and the API accept only the specification's keys and reject any other, such as Claude Code's `when_to_use` or `paths`.
 - `name` is the folder's name: at most 64 characters of lowercase letters, digits and single hyphens, neither first nor last, without `anthropic` or `claude`.
-- `description` is at most 1,024 characters, in the third person, with no angle brackets or XML tags. It says what the skill does, its key use first, then when to use it in the words users type, and ends by claiming the tasks where the user doesn't name the architecture.
+- `description` is at most 800 characters, under the specification's 1,024, since the listing is paid on every turn. It's in the third person, with no angle brackets or XML tags. It says what the skill does, its key use first, then when to use it in the words users type, and ends by claiming the tasks where the user doesn't name the architecture.
 
 **Structure**
 
@@ -39,13 +39,13 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - Only what Claude doesn't already know: a placement, an ownership rule, a shape, a style rule, a gotcha, or a reason that guides judgment. Cut explanations of Swift, SPM, Postgres or a library's basics.
 - One home per rule. A rule lives in one reference; `SKILL.md` carries at most one line for it (a hard rule, an ownership row, a style point, a gotcha or a checklist item); other references link to it instead of restating it. `conventions.md` holds only names. A rule stated twice drifts apart and costs tokens twice.
 - One home per example, too. Code shown in one reference is linked from the others: the composition root holds the transports, the gateway's root its upstream clients.
-- `SKILL.md`'s gotchas are mistakes any task can make; a mistake only one shape invites is stated once, in that shape's reference.
+- `SKILL.md`'s gotchas are mistakes that compile and then fail only at run time or silently, such as a component left out of the `ServiceGroup` or a nondeterministic workflow; a mistake the build catches is stated once, in its shape's reference.
 - One term per concept, no time-sensitive statements, concrete examples, and one default rather than a menu of options.
 - A checklist is what the agent copies into its response for a task. One that changes code ends in a build and a test run it repeats until both pass; a review runs both and reports the results. `SKILL.md` calls them checklists, so "workflow" means only a Temporal workflow or a CI workflow.
 
 ## What a change must respect
 
-- State the rule, then a short reason when the reason guides judgment in cases the rule doesn't cover.
+- State the rule, then a short reason when the reason guides judgment in cases the rule doesn't cover, never one that narrates how a library or tool works.
 - Examples come from Bookshelf, the lending library in `SKILL.md`'s table, and each idea is shown where it fits best:
   - a service with every target, a tenant table, a workflow and calls to other services: Loans
   - a service with no tenant table and an internal contract another service calls: Catalog
@@ -59,11 +59,12 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
   Reuse these, and add an example only when none of them can show a new idea. Never bring in names, services, endpoints or details from the systems the skill is used on; write the rule they illustrate instead.
 - Code shows a shape the skill prescribes: a use case's files and its body, a handler, a scope, a workflow's `run`, a composition root's sections, a reader. It isn't an implementation to copy: no helper functions, no test code, no internals of a library, and a method body appears only where the body is the shape. Elide the rest with `…`.
+- Examples stay simple and pleasant to read, for people as much as agents. An example handles what most production backends meet; a rare edge case that would make it harder to read than the idea it teaches gets a line of prose in its reference, or nothing. Prefer cutting a rule to adding code for it.
 - The stack is fixed: Hummingbird for HTTP, grpc-swift-2 and its siblings for RPC, swift-temporal-sdk, valkey-swift, PostgresNIO with the swift-microservices libraries, swift-configuration, swift-service-lifecycle, swift-argument-parser; for CI/CD, GitHub Actions CI workflows that call only swift-microservices/ci, which builds on swiftlang/github-workflows and Apple's workflows, with images on GitHub Container Registry deployed through Dokploy. No other HTTP framework is named, and no invented infrastructure (DI containers, buses, generic repositories) is added.
 - CI/CD guidance states what a repository declares: its files, the inputs it passes, its secrets and settings. What swift-microservices/ci does inside its CI pipelines is that repository's documentation, not the skill's.
 - The code style is fixed, and every example follows it: one `do` holding the whole path, one `catch` per case, typed throws on use cases, build then call (a value a call takes is a named `let`), no helper methods in use cases, workflows or activities, Swift 6 mode with the four upcoming features, `package` access, the conditional `FoundationEssentials` import. A change never weakens it.
 - Describe the current design only, with no dates, old names, renames, migrations of the skill or history. A library's version appears only in `Package.swift` lower bounds and `stack.md`.
-- One term per concept, as `conventions.md` names it: service, capability, area, use case, repository, command, port, scope, database role, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, CI pipeline (`library.yml`, `service.yml`), image.
+- One term per concept, as `conventions.md` names it: service, capability, area, use case, repository, command, port, scope, database role, tenant database, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, CI pipeline (`library.yml`, `service.yml`), image.
 - A new rule mustn't contradict an existing one. When it replaces one, change every place the old rule appears.
 - Voice: plain declarative sentences in the present tense, lists over paragraphs, no "you", no all-caps emphasis, no hedging.
 
@@ -79,7 +80,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
 ## After every change
 
 1. `python3 .github/scripts/check_skill.py` passes. It checks:
-   - the frontmatter's keys, `name` and `description`, against the limits above
+   - the frontmatter's keys, `name`, `description` and `license`, against the limits above, with `license` matching `plugin.json`'s
    - `SKILL.md`'s lines and estimated tokens, at 3.5 characters a token, and that its References table ends inside the first 5,000
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
    - every link and anchor

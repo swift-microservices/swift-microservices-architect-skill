@@ -34,7 +34,7 @@ The org core's products are what every service trusts, so their tests prove:
 | Test target | Proves |
 |---|---|
 | `<Org>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip; refusal of an expired token and of a `sub` that isn't a UUID; the `.user` metadata provider |
-| `<Org>PersistenceTests` | Both branches of `UserSettingsInterceptor` and `UserSettingsMiddleware`: a bound user's setting, and nothing when none is bound |
+| `<Org>PersistenceTests` | Both branches of `UserSettingsInterceptor`: a bound user's setting, and nothing when none is bound |
 
 ```
 Tests/

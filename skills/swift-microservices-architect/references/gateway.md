@@ -27,8 +27,8 @@ The public HTTP API: a Hummingbird application that verifies the caller, chooses
 bookshelf-gateway/Sources/
 ├── GatewayHTTP/
 │   ├── openapi.yaml, openapi-generator-config.yaml
-│   ├── BookshelfAPI.swift          the router builder and its dependencies
-│   ├── Contexts/                   IdentityRequestContext.swift, AdminRequestContext.swift
+│   ├── BookshelfAPI.swift          the router builder
+│   ├── Contexts/                   IdentityRequestContext.swift, AdministratorRequestContext.swift
 │   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift, ResendWebhookController.swift
 │   ├── Middlewares/                ErrorMiddleware/: ErrorMiddleware.swift, Problem.swift, HTTPResponse.Status+RPCError.swift
 │   └── Schemas/                    Requests/, Responses/, Shared/: Type+RPC.swift conversions
@@ -58,8 +58,7 @@ nameOverrides:
 - `openapi.yaml` is the contract clients code against: it changes before the routes do, and a route answers exactly the statuses it documents.
 - It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references. The generator maps `format: uuid` to `String`; the overrides make the schema `UUID`, so conversions take and give ids as `UUID`s.
 - `servers` ends in `/v1`, and paths are written without it.
-- Every operation has an `operationId` and a `security` entry for its tier: `[]` for no caller, `[{}, {bearerAuth: []}]` for a caller if there is one, `[{bearerAuth: []}]` for a caller required or an administrator ([request contexts](#request-contexts-and-tiers)).
-- Not every generated file uses each of its imports; the gateway's toolchain and generator versions keep them from warning ([choosing versions](stack.md#choosing-versions)).
+- Every operation has an `operationId` and a `security` entry for its tier: `[]` for no caller, `[{bearerAuth: []}]` for a caller or an administrator ([request contexts](#request-contexts-and-tiers)).
 
 ## Request contexts and tiers
 
@@ -68,9 +67,8 @@ Each group of routes runs in the context that states what it guarantees:
 | Tier | Context | Guarantees |
 |---|---|---|
 | No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, public reads, signed webhooks |
-| A caller, if there is one | `IdentityRequestContext`, behind `BearerAuthenticationMiddleware` | A token present was valid; `identity` is optional |
-| A caller, required | `IdentityRequestContext`, behind `IsAuthenticatedMiddleware` | `identity` is set |
-| Administrators | `AdminRequestContext`, converted at the verb | A non-optional administrator `identity` |
+| A caller | `IdentityRequestContext`, behind `BearerAuthenticationMiddleware` and `IsAuthenticatedMiddleware` | `identity` is set |
+| Administrators | `AdministratorRequestContext`, converted at the verb | A non-optional administrator `identity` |
 
 ```swift
 package struct IdentityRequestContext: ChildRequestContext, AuthRequestContext {
@@ -86,7 +84,7 @@ package struct IdentityRequestContext: ChildRequestContext, AuthRequestContext {
 }
 
 /// A caller checked to be an administrator: reaching a handler through this context is the proof.
-package struct AdminRequestContext: ChildRequestContext {
+package struct AdministratorRequestContext: ChildRequestContext {
     package var coreContext: CoreRequestContextStorage
     package let identity: UserIdentity
 
@@ -105,7 +103,7 @@ package struct AdminRequestContext: ChildRequestContext {
 }
 ```
 
-- A child context's throwing initializer is the check: a handler that takes `AdminRequestContext` never re-tests the role.
+- A child context's throwing initializer is the check: a handler that takes `AdministratorRequestContext` never re-tests the role.
 - Absent and insufficient answer differently: `401` when no one identified, `403` when the caller can't do this whatever token they hold.
 - The administrator check happens at the verb, not behind an `/admin` path prefix, so a resource's path is shared by its audiences. `/admin/…` is only for an administrator's view of a collection that callers also list (`/admin/loans`).
 - A route whose bearer token isn't an access token, such as the refresh token a refresh request presents, stays in the first tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the first tier too, since there is no caller yet.
@@ -115,17 +113,20 @@ package struct AdminRequestContext: ChildRequestContext {
 ```swift
 /// The whole HTTP surface, built from the clients it needs and nothing else.
 package struct BookshelfAPI: Sendable {
-    private let dependencies: Dependencies
+    private let authenticator: any Authenticator<String, UserIdentity>
+    private let identityClient: any Bookshelf_Identity_V1_IdentityService.ClientProtocol
+    private let bookClient: any Bookshelf_Catalog_V1_BookService.ClientProtocol
+    private let loanClient: any Bookshelf_Loans_V1_LoanService.ClientProtocol
 
-    package init(dependencies: Dependencies) {
-        self.dependencies = dependencies
+    package init(…) {
+        …
     }
 
     package func addRoutes(to group: RouterGroup<BasicRequestContext>) {
-        let accountController = AccountController(client: dependencies.identity)
-        let bookController = BookController(client: dependencies.books)
-        let loanController = LoanController(client: dependencies.loans)
-        let resendWebhookController = ResendWebhookController(client: dependencies.loans)
+        let accountController = AccountController(client: identityClient)
+        let bookController = BookController(client: bookClient)
+        let loanController = LoanController(client: loanClient)
+        let resendWebhookController = ResendWebhookController(client: loanClient)
 
         // MARK: - No caller
 
@@ -133,17 +134,12 @@ package struct BookshelfAPI: Sendable {
         bookController.addPublicRoutes(to: group.group("books"))
         resendWebhookController.addPublicRoutes(to: group.group("webhooks/resend"))
 
-        // MARK: - A caller, if there is one
+        // MARK: - A caller
 
-        let bearerAuthentication = BearerAuthenticationMiddleware<IdentityRequestContext>(authenticator: dependencies.authenticator)
-        let identified = group
+        let bearerAuthentication = BearerAuthenticationMiddleware<IdentityRequestContext>(authenticator: authenticator)
+        let authenticated = group
             .group(context: IdentityRequestContext.self)
             .add(middleware: bearerAuthentication)
-
-        // MARK: - A caller, required
-
-        let authenticated = identified
-            .group()
             .add(middleware: IsAuthenticatedMiddleware())
 
         accountController.addAuthenticatedRoutes(to: authenticated.group("account"))
@@ -152,24 +148,9 @@ package struct BookshelfAPI: Sendable {
         loanController.addAdministratorRoutes(to: authenticated.group("admin/loans"))
     }
 }
-
-extension BookshelfAPI {
-    /// One generated client per upstream proto service, and the authenticator for the tiers.
-    package struct Dependencies: Sendable {
-        package let authenticator: any Authenticator<String, UserIdentity>
-        package let identity: any Bookshelf_Identity_V1_IdentityService.ClientProtocol
-        package let books: any Bookshelf_Catalog_V1_BookService.ClientProtocol
-        package let loans: any Bookshelf_Loans_V1_LoanService.ClientProtocol
-
-        package init(…) {
-            …
-        }
-    }
-}
 ```
 
-- `add(middleware:)` changes the group it's called on, for every route added after it. Each tier is its own group (`identified.group()`), so a tier's middleware never reaches a sibling tier's routes.
-- The router builder takes its clients and the authenticator as dependencies; the executable builds them, which keeps the whole surface buildable over stub clients.
+The router builder takes its clients and the authenticator in its initializer; the executable builds them, which keeps the whole surface buildable over stub clients.
 
 ## Controllers
 
@@ -195,7 +176,7 @@ package struct LoanController: Sendable {
     /// Wired at `admin/loans`.
     package func addAdministratorRoutes(to group: RouterGroup<IdentityRequestContext>) {
         group
-            .group(context: AdminRequestContext.self)
+            .group(context: AdministratorRequestContext.self)
             .get(use: listAllLoans)
     }
 
@@ -307,13 +288,14 @@ package struct ErrorMiddleware<Context: RequestContext>: RouterMiddleware {
             throw Problem(status: error.status, detail: error.body)
         } catch let error as any HTTPResponseError {
             throw Problem(status: error.status)
-        } catch let error as RPCError where HTTPResponse.Status(error.code).kind == .clientError {
-            let status = HTTPResponse.Status(error.code)
-            throw Problem(status: status, detail: error.message)
         } catch let error as RPCError {
-            context.logger.error("Upstream call failed", metadata: ["error": "\(String(reflecting: error))"])
             let status = HTTPResponse.Status(error.code)
-            throw Problem(status: status)
+            guard status.kind == .clientError else {
+                context.logger.error("Upstream call failed", metadata: ["error": "\(String(reflecting: error))"])
+                throw Problem(status: status)
+            }
+
+            throw Problem(status: status, detail: error.message)
         } catch {
             context.logger.error("Request failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
             throw Problem(status: .internalServerError)
@@ -372,8 +354,7 @@ package struct Problem: HTTPResponseError {
 The executable builds one `GRPCClient` per upstream service over mTLS, its transport built like any client's ([transports](grpc.md#transports)), with `BearerPropagationInterceptor` applied to the descriptors the gateway calls ([the gateway's root](composition.md#the-gateways-root)).
 
 - Propagation presents the caller's original token, as `BearerAuthenticationMiddleware` bound it, when a route identified a caller; a public route's call goes upstream anonymously.
-- A service with several proto services behind one process gets one client, with every descriptor the gateway calls in its propagation list.
-- `BookshelfAPI.Dependencies` holds each as the generated client protocol: `Bookshelf_Loans_V1_LoanService.Client(wrapping: loans)`.
+- `BookshelfAPI` holds each as the generated client protocol: `Bookshelf_Loans_V1_LoanService.Client(wrapping: loansGRPCClient)`.
 
 ## The edge
 

@@ -24,7 +24,6 @@ The targets inside a service's package, how they depend on each other, its `Pack
 | `XTemporal` | Workflows, activity containers, the Temporal client for Core's workflow port | `XCore`, `Temporal`, and `Logging` where a workflow logs |
 | `XValkey` | Repositories over Valkey | `XCore`, `Valkey` |
 | `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK |
-| `XHTTP` | HTTP the service serves itself, only for a caller that can't go through the gateway, named in the plan with the reason; a provider's webhook goes through the gateway | `XCore`, `Hummingbird`, `Authentication`, `AuthenticationHummingbird`, `<Org>Authentication` |
 | `X` | The executable: commands, configuration defaults and readers, the migration list, composition roots | Every target above, `<Org>Transport`, `<Org>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser` |
 
 A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC` and `Catalog`.
@@ -41,7 +40,7 @@ Core links a library that saves every service re-declaring a concept, when the l
 - doesn't pull full Foundation into the target;
 - is stable enough for its types to appear in use case signatures.
 
-`Persistence`, `<Org>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), `Crypto` for hashing a token, and a focused standards library whose types the rules are written in (a WebAuthn ceremony's) qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Temporal`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
+`Persistence`, `<Org>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Temporal`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
 
 ## Package.swift template
 
@@ -172,44 +171,31 @@ let package = Package(
 )
 ```
 
-- The tools version is the newest Swift release: the toolchain the services build and deploy with, which the system libraries share. A public library's is instead the oldest Swift its users build with. 6.2 is the floor for these settings, and the gateway has a higher one ([choosing versions](stack.md#choosing-versions)).
+- The tools version is the newest Swift release: the toolchain the services build and deploy with, which the system libraries share. A public library's is instead the oldest Swift its users build with. 6.2 is the floor for these settings.
 - `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's README.
 - Every target lists each module it imports, product by product; CI's `--explicit-target-dependency-import-check error` fails a target that imports one it doesn't list ([delivery](delivery.md#tests)).
 - Each requirement follows [choosing versions](stack.md#choosing-versions).
-- A provider target (`LoansResend`) and test targets follow the same form. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one. A warning in generated code fails the contracts package's CI, and its consumers never see it, since SwiftPM silences a dependency's warnings.
+- A provider target (`LoansResend`) and test targets follow the same form, and the executable lists the provider target. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one.
 
 ## Swift settings
 
-Every target in every package, services and libraries, builds with the same settings:
-
-| Setting | Proposal |
-|---|---|
-| `swiftLanguageModes: [.v6]` | Swift 6 language mode, with complete concurrency checking |
-| `ExistentialAny` | [SE-0335](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0335-existential-any.md) |
-| `MemberImportVisibility` | [SE-0444](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0444-member-import-visibility.md) |
-| `InternalImportsByDefault` | [SE-0409](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0409-access-level-on-imports.md) |
-| `NonisolatedNonsendingByDefault` | [SE-0461](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0461-async-function-isolation.md) |
-
-The code also relies on `package` access ([SE-0386](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0386-package-access-modifier.md)), typed throws ([SE-0413](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0413-typed-throws.md)) and package traits ([SE-0450](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0450-swiftpm-package-traits.md)). A server package never sets `.defaultIsolation(MainActor.self)` ([SE-0466](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0466-control-default-actor-isolation.md)). How the code uses each: [style](style.md).
+Every target in every package, services and libraries, builds in Swift 6 mode with the template's `swiftSettings`. The code relies on `package` access, typed throws and package traits ([style](style.md)). A server package never sets `.defaultIsolation(MainActor.self)`.
 
 ## Traits and Foundation
 
-On Linux, full Foundation links `libFoundation`, `libFoundationInternationalization` and ICU's data, which alone outweighs a service's own code several times over. `FoundationEssentials` has the types a service uses (`Data`, `Date`, `URL`, `UUID`, `JSONEncoder` and `JSONDecoder`, `Date.ISO8601FormatStyle`, `Calendar`, `TimeZone`, `FileManager`) without them. A target links full Foundation through owned code, a dependency's own imports, or a dependency's default traits. Owned code takes the conditional import ([Foundation](style.md#foundation)); dependencies are declared here.
+On Linux, full Foundation brings `FoundationInternationalization` and ICU's data into the binary; `FoundationEssentials` has the types a service uses without them. A target links full Foundation through owned code, a dependency's own imports, or a dependency's default traits. Owned code takes the conditional import ([Foundation](style.md#foundation)); dependencies are declared here.
 
-| Package | Traits that link full Foundation (`*` default) | Declare | Turning them off loses |
-|---|---|---|---|
-| hummingbird | `FullFoundation`* | `traits: ["ConfigurationSupport"]` where its configuration reader is used (the gateway), `traits: []` elsewhere | `DateEncodingStrategy.formatted(_:)` and `DateDecodingStrategy.formatted(_:)` over a `DateFormatter` in URL-encoded forms; `.iso8601` stays |
-| swift-openapi-runtime | `FullFoundation`* | `traits: []` | `ISO8601DateTranscoder(options:)`, and `NSNull` and `NSNumber` in `OpenAPIValueContainer`; `.iso8601` stays |
-| swift-configuration | `JSON`*, `YAML`, `PropertyList` | `traits: []`, plus `Reloading` or `CommandLineArguments` when used | The JSON, YAML and property list file providers |
-| swift-protobuf | `BinaryDelimitedStreams`* | `traits: []`, plus `FieldMaskUtilities` when a contract uses field masks | Length-delimited message streams |
+| Package | Traits that link full Foundation (`*` default) | Declare |
+|---|---|---|
+| hummingbird | `FullFoundation`* | `traits: ["ConfigurationSupport"]` where its configuration reader is used (the gateway), `traits: []` elsewhere |
+| swift-openapi-runtime | `FullFoundation`* | `traits: []` |
+| swift-configuration | `JSON`*, `YAML`, `PropertyList` | `traits: []`, plus `Reloading` or `CommandLineArguments` when used |
+| swift-protobuf | `BinaryDelimitedStreams`* | `traits: []`, plus `FieldMaskUtilities` when a contract uses field masks |
 
-- Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<org>-core`, `<org>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the versions from which the stack's libraries do are in [the stack](stack.md#full-foundation).
-- Other traits in the stack are Foundation-free and keep their defaults: valkey-swift's `ServiceLifecycleSupport` and `DistributedTracingSupport`, swift-temporal-sdk's `GRPCNIOTransport`, swift-http-types' `FoundationURL`.
+- Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<org>-core`, `<org>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the template's lower bounds are releases that do.
 - A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
 - A dependency that still links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's README. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does, and CI checks it from then on ([Foundation linking](delivery.md#foundation-linking)).
 - Before adding a dependency, list its traits with `swift package show-traits` and read its sources' Foundation imports. A library proves it in CI with the Foundation-linking check ([Foundation linking](delivery.md#foundation-linking)).
-- A library's own feature that needs full Foundation goes behind a `FullFoundation` trait, the name hummingbird and swift-openapi-runtime use. It's off by default in a new library, so consumers opt in rather than out.
-- A library that moves to the conditional import releases it as a minor version, noting that a consumer relying on the `Foundation` it imported may need its own import.
 
 ## Folder layout
 
@@ -220,7 +206,7 @@ bookshelf-loans/
     ├── LoansCore/
     │   ├── Loans/
     │   │   ├── Loan.swift, LoanStatus.swift, LoanPolicy.swift
-    │   │   ├── Repository/         LoanRepository.swift, LoanRepositoryError.swift, Commands/CreateLoanCommand.swift
+    │   │   ├── Repository/         LoanRepository.swift, Commands/CreateLoanCommand.swift
     │   │   ├── UseCases/           BorrowBook/, ReturnBook/, ListLoans/, ListAllLoans/, MarkLoanOverdue/, ReceiveNoticeEvent/
     │   │   └── Workflow/           LoanWorkflowClient.swift
     │   ├── Paging/                 Page.swift, KeyedPage.swift
@@ -259,7 +245,7 @@ bookshelf-core/
 └── Sources/
     ├── BookshelfAuthentication/    UserIdentity.swift, UserRole.swift, OperationContext+User.swift, JWT+EdDSA.swift
     ├── BookshelfPersistence/       PostgresSettings+User.swift, UserSettingsInterceptor.swift,
-    │                               UserSettingsMiddleware.swift, PostgresClient.Configuration+ConfigReader.swift
+    │                               PostgresClient.Configuration+ConfigReader.swift
     ├── BookshelfTransport/         TimedCertificateReloader.Configuration+ConfigReader.swift,
     │                               HTTP2ServerTransport.Posix.TransportSecurity+ConfigReader.swift,
     │                               HTTP2ClientTransport.Posix.TransportSecurity+ConfigReader.swift,
@@ -271,7 +257,7 @@ bookshelf-core/
 ```
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
-- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, grpc-swift-2 for the interceptor, Hummingbird for the middleware (`traits: []`) and swift-configuration; only executables link it, and each already links its transport. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
+- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, grpc-swift-2 for the interceptor and swift-configuration; only executables link it. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
 - Its API is `public`, with `public import` for every module whose types it exposes.
 - It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<org>-protos`, is released and tagged first; each service and the gateway then raise their requirement.
 
@@ -339,7 +325,7 @@ SPM enforces what each target declares, but not what a declaration should be. Ru
 - Generated contract types stay in XGRPC and the executable: `grep -rlE 'Bookshelf_[A-Za-z]+_V[0-9]+_' Sources | grep -vE '^Sources/(LoansGRPC|Loans)/'`
 - Only the executable reads configuration: `grep -rlE '^(package )?import Configuration$' Sources | grep -v '^Sources/Loans/'`
 - Every Foundation import is the conditional one; this lists files importing Foundation without it: `grep -rlE '^(package |public )?import Foundation$' Sources | xargs -r grep -L 'canImport(FoundationEssentials)'`
-- No unstructured tasks: `grep -rnE 'Task(\.detached)? *\{' Sources`
+- No unstructured tasks: `grep -rnE '\bTask(\.detached)? *[({]' Sources`
 - Unchecked concurrency only where [concurrency](style.md#concurrency) allows it; this lists each, and every one is in an adapter target with its reason on the line above: `grep -rnE -B1 '@unchecked Sendable|nonisolated\(unsafe\)|@preconcurrency' Sources`
 - Every use case protocol has typed throws: `grep -rL 'throws(' Sources/*Core/*/UseCases/*/*UseCaseProtocol.swift`
 - No package defaults to the main actor: `grep -n 'defaultIsolation' Package.swift`

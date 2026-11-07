@@ -38,7 +38,7 @@ Each repository's `.github/workflows/` holds these, each file's `name:` in paren
 - `ci.yml` cancels a superseded run on pull requests only, since a run on `main` ships its commit.
 - Soundness checks every file's license header against `.license_header_template`, which holds the compact SPDX header with `@@` for the comment marker and `YEARS` for the year. `.licenseignore` lists `LICENSE` and `Package.swift`, whose tools-version line must come first.
 - A library's pull request carries exactly one label: `⚠️ semver/major`, `🆕 semver/minor`, `🔨 semver/patch` or `semver/none`. Below 1.0, a breaking change is minor and an addition patch; a doc-comment fix is patch; a change to the README, tests or CI is none.
-- Release tags the next version without a `v` and writes its notes grouped by `.github/release.yml`; the first release and every major one are tagged by hand. A tag never moves, since SwiftPM records each tag's commit and a moved tag fails every consumer's resolve: a bad release is fixed forward with a new version.
+- Release tags the next version without a `v` and writes its notes grouped by `.github/release.yml`; the first release and every major one are tagged by hand. A tag never moves: a bad release is fixed forward with a new version.
 - Secrets: `PACKAGES_TOKEN`, passed only by a package with private dependencies, which is all that marks them: a fine-grained token owned by the organization, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy its applications.
 
 ## Tests

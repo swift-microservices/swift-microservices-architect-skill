@@ -1,11 +1,12 @@
 ---
 name: swift-microservices-architect
-description: Architects Swift server backends as gRPC microservices behind a Hummingbird API gateway, each service one Swift package with a Core target of domain models, repository protocols and typed-throws use cases, adapter targets for Postgres, gRPC, Temporal and Valkey, and an executable composition root on swift-configuration and swift-service-lifecycle, secured with mTLS, JWTs and Postgres row-level security through the swift-microservices libraries. Use when planning a backend or splitting it into services, designing a module map or Package.swift, writing use cases, repositories, gRPC services, Hummingbird routes and request contexts, Temporal workflows or a composition root, naming Swift server types and targets, adopting strict concurrency or FoundationEssentials, setting up a package's CI/CD on GitHub Actions, or reviewing a Swift backend's architecture or code style, even when the user doesn't name the architecture.
+description: Architects Swift server backends as gRPC microservices behind a Hummingbird gateway, with one Swift package per service, a Core of typed-throws use cases, an adapter target per technology (Postgres with row-level security, gRPC, Temporal, Valkey) and an executable composition root. Use when planning a Swift backend or splitting it into services, drawing module boundaries or writing Package.swift, adding a service, endpoint, use case, repository, migration, multi-tenant table or durable Temporal workflow, wiring configuration, graceful shutdown, mTLS or JWT auth, naming server types and targets, setting up a package's CI/CD on GitHub Actions, or reviewing a Swift server's architecture or code style, even when the user doesn't name the architecture.
+license: MIT
 ---
 
 # Swift Microservices Architect
 
-A backend built another way keeps its structure and conventions until the user asks to change them; a change there takes a shape from this skill only where it has none.
+In a backend built another way, keep its structure and conventions unless the user asks to change them, and take a shape from this skill only for what the backend lacks.
 
 `X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Org>` and `<org>` for the organization. The examples are Bookshelf, a small lending library:
 
@@ -39,7 +40,6 @@ Every service and the gateway depend on `<org>-core`, `<org>-protos` and the swi
 ├── XTemporal     workflows, activity containers, the Temporal client for Core's workflow port
 ├── XValkey       repositories for short-lived values
 ├── X<Provider>   a third-party API behind a Core port (LoansResend)
-├── XHTTP         HTTP the service serves itself, only when a caller can't use the gateway
 └── X             executable: commands, configuration defaults, migrations, composition roots
 ```
 
@@ -47,7 +47,7 @@ A service has only the targets it needs, and each imports only what [its row](re
 - XCore imports no driver, transport, contract, workflow engine, configuration or lifecycle module ([what Core may link](references/packages.md#what-core-may-link)).
 - Adapter targets never import each other; the executable hands one to another through Core's protocols.
 - Generated contract types never leave XGRPC, the gateway's HTTP target and executables.
-- Only an executable reads configuration, constructs clients and runs services.
+- Only an executable reads configuration, builds clients and runs the `ServiceGroup`.
 - No service reads another's database; data crosses services only through contracts.
 
 ## Who owns what
@@ -59,8 +59,8 @@ A service has only the targets it needs, and each imports only what [its row](re
 | Protobuf ↔ domain, HTTP ↔ protobuf | XGRPC's `Protobuf/` conversions; the gateway's `Schemas/` |
 | Messages between processes; the public API | `<org>-protos`; the gateway's `openapi.yaml` |
 | Who the caller is | The gateway verifies and forwards the token; each service verifies it again |
-| Which process may call an internal RPC | mTLS trust at the listener |
-| Tenant isolation | Row-level security; `<Org>Persistence` binds the caller to each transaction |
+| Which processes may call an internal RPC | mTLS at the listener: every process the environment's authority signs |
+| Tenant isolation | Row-level security; `<Org>Persistence` binds the caller to each transaction, and each audience's use cases run as [their database role](references/persistence.md#database-roles) |
 | Durable, delayed or multi-service work | A Temporal workflow in XTemporal |
 | What every service needs identically | `<org>-core`: identity, tenant binding, transport readers |
 
@@ -73,9 +73,9 @@ do {
     …  // the work, in the order the requirement states it
 } catch let error as BorrowBookUseCaseError {
     throw error
-} catch LoanRepositoryError.idempotencyConflict {
-    logger.warning("Borrowing refused: idempotency key reused for another book")
-    throw .idempotencyConflict
+} catch CatalogClientError.unavailable {
+    logger.warning("Borrowing failed: the catalog is unavailable")
+    throw .catalogUnavailable
 } catch {
     logger.error("Borrowing failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
     throw .unknown
@@ -90,17 +90,15 @@ do {
 
 ## Gotchas
 
-- Module names are unique across the package graph: a service named `Authentication` or `Logging` collides with a dependency. Rename the service, not one of its targets.
-- `NonisolatedNonsendingByDefault` changes what an unannotated `async` function type means, so a library's requirement is implemented exactly as declared, `@concurrent` included: the `next` of Hummingbird middleware and gRPC interceptors.
 - A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls wait until their deadline.
-- A process connected as the database owner bypasses row-level security, and an unset tenant setting reads as `''` on a reused connection, so policies wrap it in `NULLIF`.
+- A process connected as the database owner bypasses row-level security, so every process connects as its roles and only `serve --migrate-database` as the owner.
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
-- Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep`, a captured `Logger` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
+- Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
 - A plain or scoped `import Foundation` in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
 
 ## Checklists
 
-Copy the task's checklist into the response and check items off as they're done.
+Copy the task's checklist into the response and check items off as they're done; each `.md` file it names is in `references/`.
 
 **Plan a backend**
 

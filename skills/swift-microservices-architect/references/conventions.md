@@ -7,7 +7,7 @@
 
 ## Naming
 
-`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); in a type's name, `X` is what the type is named for, the operation, resource or process the table gives (`BorrowBookUseCase`, `LoanRepository`); `<Org>` and `<org>` are the organization's (`Bookshelf`, `bookshelf`). Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/): they read as English at the point of use, name things by role, and keep an initialism in one case (`userID`, `GetLoanByIDUseCase`, `baseURL`, `XGRPC`).
+`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); in a type's name, `X` is what the type is named for, the operation, resource or process the table gives (`BorrowBookUseCase`, `LoanRepository`); `<Org>` and `<org>` are the organization's (`Bookshelf`, `bookshelf`). Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/): they read as English at the point of use, name things by role, and keep an initialism in one case (`userID`, `ActiveLoansByUserIDStatement`, `baseURL`, `XGRPC`).
 
 | Kind | Name | Example |
 |---|---|---|
@@ -16,7 +16,7 @@
 | Shared packages | `<org>-core`, `<org>-protos` | `bookshelf-core` |
 | Package kind | Public library, system library or service; CI workflow files and jobs as [delivery](delivery.md#ci-workflows) names them | `bookshelf-core` is a system library |
 | Service image | `ghcr.io/<org>/<org>-<x>` | `ghcr.io/bookshelf/bookshelf-loans` |
-| Service targets | `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`, `XHTTP`; the executable `X`; tests `XCoreTests`, `XGRPCTests`, `XTemporalTests` | `LoansTemporal`, `LoansResend` |
+| Service targets | `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansTemporal`, `LoansResend`, `LoansCoreTests` |
 | Executable product and command | `x`; subcommands `serve`, `worker run` | `loans serve --migrate-database` |
 | Org core products | `<Org>Authentication`, `<Org>Persistence`, `<Org>Transport`, `<Org>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |
 | Contract target, proto package and file | `XProtos`; `<org>.<x>.v1`; `<org>/<x>/v1/<x>.proto` | `LoansProtos`, `bookshelf.loans.v1` |
@@ -32,12 +32,12 @@
 | Repository | `XRepository`; its implementation the store's name + the protocol's | `LoanRepository`, `PostgresLoanRepository`, `ValkeyResetCodeRepository` |
 | Repository reads and writes | Noun phrases for what reads return; verbs for writes | `loan(id:)`, `activeLoans(userID:)`; `create(_:)`, `markReturned(id:)` |
 | Write command | The write's verb and noun + `Command` | `CreateLoanCommand` |
-| Errors | `XRepositoryError`, `<Service>ClientError`, `XUseCaseError`; cases name outcomes | `LoanRepositoryError.idempotencyConflict`, `.bookNotFound` |
+| Errors | `XRepositoryError`, `<Service>ClientError`, `XUseCaseError`; cases name outcomes | `CatalogClientError.unavailable`, `.bookNotFound` |
 | Port to another service | `<Service>Client`; implementation `GRPC<Service>Client` | `CatalogClient`, `GRPCCatalogClient` |
-| Port to a capability | A role noun; implementation the provider's name + the role | `NoticeSender`, `ResendNoticeSender`; `PasswordHasher`, `BcryptPasswordHasher` |
+| Port to a provider | A role noun; implementation the provider's name + the role | `NoticeSender`, `ResendNoticeSender`; `PasswordHasher`, `BcryptPasswordHasher` |
 | Workflow port and implementation | `<Process>WorkflowClient`, `Temporal<Process>WorkflowClient` | `LoanWorkflowClient`, `TemporalLoanWorkflowClient` |
 | Workflow, activity container | `<Process>Workflow`, `<Process>Activities`; activities are verbs, inputs `<Activity>Input` | `LoanWorkflow`, `LoanActivities.markOverdue(input:)`, `MarkOverdueInput` |
-| Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `markReturned(input:)`, `currentState(input:)` |
+| Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `currentState(input:)` |
 | Workflow id, task queue | `<x>-<workflow>-<id>`; `x` | `loans-loan-0193…`; `loans` |
 | Named activity options | The kind of step, never where it's used | `ActivityOptions.database`, `.notification` |
 | Postgres scopes | `Postgres<X>Scope`, `Postgres<X>InternalScope`, `Postgres<X>WorkerScope` | `PostgresLoansScope` |
@@ -49,7 +49,7 @@
 | Indexes unique while active | `<table>_active_<columns>_key` | `loans_active_user_id_book_id_key` |
 | Tenant setting | `app.caller_user_id` | |
 | gRPC service types | The proto service's name | `LoanService`, `BookInternalService` |
-| Gateway | Targets `GatewayHTTP`, `Gateway`; router builder `<Org>API`; `XController` per resource; `IdentityRequestContext`, `AdminRequestContext` | `BookshelfAPI`, `LoanController` |
+| Gateway | Targets `GatewayHTTP`, `Gateway`; router builder `<Org>API`; `XController` per resource; `IdentityRequestContext`, `AdministratorRequestContext` | `BookshelfAPI`, `LoanController` |
 | Configuration keys | Dotted scopes with lowerCamelCase leaves; a duration names its unit | `grpc.server.port`, `postgres.service.password`, `tls.refreshIntervalSeconds` |
 | Logger label | `<org>-<x>`, `<org>-<x>-worker` | `bookshelf-loans-worker` |
 | Log metadata keys | lowerCamelCase | `loanID`, `userID`, `error` |
@@ -65,13 +65,13 @@
 | XPostgres | `Scopes/`, `Repositories/<Area>/`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/`, `Migrations/Role/` |
 | XGRPC | A folder per area with its proto services and `Protobuf/`; `Clients/` with `Clients/Protobuf/` |
 | XTemporal | A folder per process with its workflow, activities and Temporal client; `ActivityOptions+X.swift` |
-| XValkey, X<Provider>, XHTTP | Flat, one file per type |
+| XValkey, X<Provider> | Flat, one file per type |
 | X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift`, `Worker/Worker.swift`, `Worker/Run.swift` |
 | Test target | `Mocks/`, then a file per tested type: `BorrowBookUseCaseTests.swift` |
 | GatewayHTTP | `openapi.yaml`, `openapi-generator-config.yaml`, `<Org>API.swift`, `Contexts/`, `Controllers/`, `Middlewares/`, `Schemas/Requests/`, `Schemas/Responses/`, `Schemas/Shared/` |
 
 ## Files
 
-- One type per file, named for the type. A type's small nested types stay in its file: a workflow's `Input`, an activity container's inputs, a router builder's `Dependencies`.
+- One type per file, named for the type. A type's small nested types stay in its file: a workflow's `Input`, an activity container's inputs.
 - An extension that adds a concern to a type is `Type+Concern.swift`.
 - A use case's five files sit together in `UseCases/<Name>/`.
