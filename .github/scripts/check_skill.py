@@ -212,9 +212,23 @@ def check_manifests(description: str) -> None:
     if entry.get("description") != description:
         fail("marketplace.json: the plugin entry's description must match SKILL.md's")
 
-    versions = {plugin.get("version"), marketplace.get("version"), entry.get("version")}
+    codex_plugin = json.loads(read(ROOT / ".codex-plugin" / "plugin.json"))
+    codex_marketplace = json.loads(read(ROOT / ".agents" / "plugins" / "marketplace.json"))
+    codex_entry = next((item for item in codex_marketplace.get("plugins", []) if item.get("name") == SKILL.name), None)
+    if codex_plugin.get("name") != SKILL.name:
+        fail(f".codex-plugin/plugin.json: its name must be {SKILL.name!r}")
+    if codex_plugin.get("description") != description:
+        fail(".codex-plugin/plugin.json: its description must match SKILL.md's")
+    if codex_plugin.get("license") != plugin.get("license"):
+        fail(".codex-plugin/plugin.json: its license must match .claude-plugin/plugin.json's")
+    if codex_entry is None:
+        fail(f".agents/plugins/marketplace.json: no plugin entry named {SKILL.name}")
+    elif codex_entry.get("source") != {"source": "local", "path": "./"}:
+        fail(".agents/plugins/marketplace.json: the plugin entry's source must be the repository root")
+
+    versions = {plugin.get("version"), marketplace.get("version"), entry.get("version"), codex_plugin.get("version")}
     if len(versions) != 1:
-        fail(f"manifests: the three versions must agree, found {sorted(map(str, versions))}")
+        fail(f"manifests: the four versions must agree, found {sorted(map(str, versions))}")
 
 
 # MARK: - Swift examples
