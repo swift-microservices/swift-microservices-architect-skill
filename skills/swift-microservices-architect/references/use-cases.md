@@ -73,6 +73,7 @@ package enum BorrowBookUseCaseError: Error, Equatable {
 
 ```swift
 package protocol LoanRepository: Sendable {
+    func lockLoans(userID: UUID) async throws
     func create(_ command: CreateLoanCommand) async throws -> Loan
     func loan(id: UUID) async throws -> Loan?
     func loan(userID: UUID, idempotencyKey: String) async throws -> Loan?
@@ -244,6 +245,9 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
             }
 
             let loan = try await database.withTransaction { scope in
+                // One borrow per member at a time, so a retry in flight and the limit see each other's loans.
+                try await scope.loanRepository.lockLoans(userID: subject.userID)
+
                 // A retry returns the loan its first attempt created, before the limit counts it.
                 let existingLoan = try await scope.loanRepository.loan(userID: subject.userID, idempotencyKey: input.idempotencyKey)
                 if let existingLoan {
@@ -298,8 +302,8 @@ The body reads in the order the requirement states it: refuse what needs no data
 ## Transactions
 
 - A transaction holds a pooled connection until it ends, so it contains only database work. Remote calls go before it (the catalog lookup) or after it commits (the workflow start).
-- A decision on what the transaction reads happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
-- A check on a read, such as the loan limit, is a soft rule: two concurrent requests can both pass it. A rule that must always hold is a constraint the repository maps to a case, such as a unique index.
+- A decision that must be atomic with its write happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
+- A rule over a count, such as the loan limit, first locks what it counts (`lockLoans(userID:)`), since `SELECT … FOR UPDATE` locks only rows that already exist; the lock ends with the transaction. A rule a constraint can state, such as a unique index, is that constraint, mapped to a case.
 - A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)); the use case maps its `nil` to its case (`alreadyReturned`).
 - Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
