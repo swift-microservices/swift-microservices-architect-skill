@@ -16,9 +16,9 @@
 | Shared packages | `<org>-core`, `<org>-protos` | `bookshelf-core` |
 | Package kind | Public library, system library or service; CI workflow files and jobs as [delivery](delivery.md#ci-workflows) names them | `bookshelf-core` is a system library |
 | Service image | `ghcr.io/<org>/<org>-<x>` | `ghcr.io/bookshelf/bookshelf-loans` |
-| Service targets | `XCore`, `XPostgres`, `XGRPC`, `XTemporal`, `XValkey`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansTemporal`, `LoansResend`, `LoansCoreTests` |
+| Service targets | `XCore`, `XPostgres`, `XGRPC`, `XValkey`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansGRPC`, `LoansResend`, `LoansCoreTests` |
 | Executable product and command | `x`; subcommands `serve`, `worker run` | `loans serve --migrate-database` |
-| Org core products | `<Org>Authentication`, `<Org>Persistence`, `<Org>Transport`, `<Org>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |
+| `<org>-core` products | `<Org>Authentication`, `<Org>Persistence`, `<Org>Transport`, `<Org>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |
 | Contract target, proto package and file | `XProtos`; `<org>.<x>.v1`; `<org>/<x>/v1/<x>.proto` | `LoansProtos`, `bookshelf.loans.v1` |
 | Proto services | `<Resource>Service` and `<Resource>InternalService`; the service's name when its RPCs aren't about one resource | `LoanService`, `BookInternalService`, `IdentityService` |
 | RPCs | Standard verbs, or a domain verb and noun; an administrators' list of everyone's is `ListAll…` | `GetBook`, `ListLoans`, `ListAllLoans`, `BorrowBook` |
@@ -28,6 +28,7 @@
 | Another service's data, as this service knows it | A noun in this service's words, in `Ports/` | `Book`, `Member` |
 | Tunable rules | `XPolicy` | `LoanPolicy` |
 | Use case | Its RPC's verb and noun + `UseCase`; with `…UseCaseProtocol`, `…UseCaseInput`, `…UseCaseError`, `…UseCaseScope` | `BorrowBookUseCase`, `BorrowBookUseCaseError` |
+| System use case | Its step's verb and noun + `UseCase`; the same effect for administrators `…ByAdministratorUseCase` | `MarkLoanOverdueUseCase`, `MarkLoanOverdueByAdministratorUseCase` |
 | A property holding a use case | The use case's type in lowerCamelCase | `borrowBookUseCase` |
 | Repository | `XRepository`; its implementation the store's name + the protocol's | `LoanRepository`, `PostgresLoanRepository`, `ValkeyResetCodeRepository` |
 | Repository reads and writes | Noun phrases for what reads return; verbs for writes | `loan(id:)`, `activeLoans(userID:)`; `create(_:)`, `markReturned(id:)` |
@@ -35,8 +36,8 @@
 | Errors | `XRepositoryError`, `<Service>ClientError`, `XUseCaseError`; cases name outcomes | `CatalogClientError.unavailable`, `.bookNotFound` |
 | Port to another service | `<Service>Client`; implementation `GRPC<Service>Client` | `CatalogClient`, `GRPCCatalogClient` |
 | Port to a provider | A role noun; implementation the provider's name + the role | `NoticeSender`, `ResendNoticeSender`; `PasswordHasher`, `BcryptPasswordHasher` |
-| Workflow port and implementation | `<Process>WorkflowClient`, `Temporal<Process>WorkflowClient` | `LoanWorkflowClient`, `TemporalLoanWorkflowClient` |
-| Workflow, activity container | `<Process>Workflow`, `<Process>Activities`; activities are verbs, inputs `<Activity>Input` | `LoanWorkflow`, `LoanActivities.markOverdue(input:)`, `MarkOverdueInput` |
+| Workflow, activity container | `<Process>Workflow`, `<Process>Activities`; a container an activity several workflows share is named for its step, `<Step>Activities`; activities are verbs, inputs `<Activity>Input` | `LoanWorkflow`, `LoanActivities.markOverdue(input:)`, `MarkOverdueInput` |
+| A use case's Temporal properties | `temporalClient`, `taskQueue` | `private let temporalClient: TemporalClient` |
 | Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `currentState(input:)` |
 | Workflow id, task queue | `<x>-<workflow>-<id>`; `x` | `loans-loan-0193…`; `loans` |
 | Named activity options | The kind of step, never where it's used | `ActivityOptions.database`, `.notification` |
@@ -61,10 +62,9 @@
 
 | Target | Folders |
 |---|---|
-| XCore | A folder per area (`Loans/`) with its models and policy, `Repository/` (and `Repository/Commands/`), `UseCases/<Name>/`, `Workflow/`; `Ports/` for what the service needs from other systems, with the models they return; `Paging/` for the page types |
+| XCore | A folder per area (`Loans/`) with its models and policy, `Repository/` (and `Repository/Commands/`), `UseCases/<Name>/`; `Workflows/<WorkflowName>/` with the workflow, its activity container and `ActivityOptions+X.swift`, and a shared container directly in `Workflows/`; `Ports/` for what the service needs from other systems, with the models they return; `Paging/` for the page types |
 | XPostgres | `Scopes/`, `Repositories/<Area>/`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/`, `Migrations/Role/` |
 | XGRPC | A folder per area with its proto services and `Protobuf/`; `Clients/` with `Clients/Protobuf/` |
-| XTemporal | A folder per process with its workflow, activities and Temporal client; `ActivityOptions+X.swift` |
 | XValkey, X<Provider> | Flat, one file per type |
 | X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift`, `Worker/Worker.swift`, `Worker/Run.swift` |
 | Test target | `Mocks/`, then a file per tested type: `BorrowBookUseCaseTests.swift` |

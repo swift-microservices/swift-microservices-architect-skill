@@ -1,6 +1,6 @@
 # Packages
 
-The targets inside a service's package, how they depend on each other, its `Package.swift`, and the organization's shared packages. SPM and CI enforce each boundary: a target imports only the modules its declaration lists.
+The targets inside a service's package, how they depend on each other, its `Package.swift`, and the organization's shared packages. The build fails an import the target can't reach; [the boundary script](#checking-the-boundaries) and review hold the rest.
 
 ## Contents
 - The targets of a service
@@ -18,18 +18,17 @@ The targets inside a service's package, how they depend on each other, its `Pack
 
 | Target | Holds | Imports |
 |---|---|---|
-| `XCore` | Domain models, errors, repository protocols and commands, ports, use cases | `Persistence`, `<Org>Authentication`, `Logging`, and what else [Core may link](#what-core-may-link) |
+| `XCore` | Domain models, errors, repository protocols and commands, ports, use cases, workflows and activity containers | `Persistence`, `<Org>Authentication`, `Logging`, `Temporal` in a service with workflows, and what else [Core may link](#what-core-may-link) |
 | `XPostgres` | A scope per database role, repositories, prepared statements, row decoding, migrations | `XCore`, `PersistencePostgres`, `PostgresNIO`, `PostgresMigrations`, `AsyncAlgorithms`, `Logging` |
 | `XGRPC` | The service's proto services, `Protobuf/` conversions, gRPC clients for Core's ports | `XCore`, its own and its callees' `XProtos`, `GRPCCore`, `SwiftProtobuf`, `Authentication`, `OperationContext`, `<Org>Authentication` |
-| `XTemporal` | Workflows, activity containers, the Temporal client for Core's workflow port | `XCore`, `Temporal`, and `Logging` where a workflow logs |
 | `XValkey` | Repositories over Valkey | `XCore`, `Valkey` |
 | `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK |
 | `X` | The executable: commands, configuration defaults and readers, the migration list, composition roots | Every target above, `<Org>Transport`, `<Org>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser` |
 
 A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC` and `Catalog`.
 
-- Adapter targets never import each other. They meet in the executable, which hands one to another through Core's protocols: `GRPCCatalogClient` from XGRPC goes into `BorrowBookUseCase`, which XTemporal's activities never see.
-- Generated contract types stay in XGRPC and the executable (descriptors for interceptors, `Client(wrapping:)`); Postgres types stay in XPostgres and the executable; Temporal types in XTemporal and the executable.
+- Adapter targets never import each other. They meet in the executable, which hands one to another through Core's protocols: `GRPCCatalogClient` from XGRPC goes into `BorrowBookUseCase` and `LoanActivities`, which see only `any CatalogClient`.
+- Generated contract types stay in XGRPC and the executable (descriptors for interceptors, `Client(wrapping:)`); Postgres types stay in XPostgres and the executable; Temporal types in [Core's Temporal files](#what-core-may-link) and the executable.
 - Nothing outside the package links a service, so a service has one product, its executable, and its cross-target API is `package` ([access control](style.md#access-control-and-imports)).
 
 ## What Core may link
@@ -40,7 +39,14 @@ Core links a library that saves every service re-declaring a concept, when the l
 - doesn't pull full Foundation into the target;
 - is stable enough for its types to appear in use case signatures.
 
-`Persistence`, `<Org>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Temporal`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
+`Persistence`, `<Org>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
+
+`Temporal` is the one deliberate exception to these criteria: Core commits to it, as it does to the standard library. A workflow is the application's orchestration, and Temporal's determinism rules and macros make a wrapper cost more than it saves. It stays in its own corner of Core, file by file, since a module's types are visible only in files that import it:
+- `import Temporal` appears only in `XCore/Workflows/**` and in the use cases that start, signal, query or update a workflow, in `XUseCase.swift` alone of their five files.
+- A file whose `package` API names Temporal's types, including what a Temporal macro on a `package` type expands to, uses `package import Temporal`; the rest use the default internal import.
+- Models, domain errors, repository protocols, ports and every other use case never import it, and neither does an adapter target.
+- Only the executable constructs `TemporalClient` and `TemporalWorker`, reads their configuration and adds them to the `ServiceGroup`.
+- Building Core links the SDK's prebuilt sdk-core binary, so the build machine must be able to fetch it.
 
 ## Package.swift template
 
@@ -80,7 +86,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-configuration.git", from: "1.5.0", traits: []),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.17.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.35.2"),
-        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.32.0", traits: []),
+        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.36.0", traits: []),
         .package(url: "https://github.com/apple/swift-temporal-sdk.git", from: "1.5.0"),
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
         .package(url: "https://github.com/grpc/grpc-swift-extras.git", from: "2.2.2"),
@@ -96,6 +102,7 @@ let package = Package(
                 .product(name: "BookshelfAuthentication", package: "bookshelf-core"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Persistence", package: "swift-persistence"),
+                .product(name: "Temporal", package: "swift-temporal-sdk"),
             ],
             swiftSettings: swiftSettings
         ),
@@ -126,22 +133,12 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
-        .target(
-            name: "LoansTemporal",
-            dependencies: [
-                "LoansCore",
-                .product(name: "Logging", package: "swift-log"),
-                .product(name: "Temporal", package: "swift-temporal-sdk"),
-            ],
-            swiftSettings: swiftSettings
-        ),
         .executableTarget(
             name: "Loans",
             dependencies: [
                 "LoansCore",
                 "LoansGRPC",
                 "LoansPostgres",
-                "LoansTemporal",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "AuthenticationGRPC", package: "swift-authentication-grpc"),
                 .product(name: "AuthenticationJWT", package: "swift-authentication-jwt"),
@@ -173,7 +170,7 @@ let package = Package(
 
 - The tools version is the newest Swift release: the toolchain the services build and deploy with, which the system libraries share. A public library's is instead the oldest Swift its users build with. 6.2 is the floor for these settings.
 - `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's README.
-- Every target lists each module it imports, product by product; CI's `--explicit-target-dependency-import-check error` fails a target that imports one it doesn't list ([delivery](delivery.md#tests)).
+- Every target lists each module it imports, product by product. CI's `--explicit-target-dependency-import-check error` fails only an import the target can't reach ([delivery](delivery.md#tests)), so listing a module reached through another dependency, such as `GRPCCore` through `LoansCore`, is kept by review.
 - Each requirement follows [choosing versions](stack.md#choosing-versions).
 - A provider target (`LoansResend`) and test targets follow the same form, and the executable lists the provider target. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one.
 
@@ -207,8 +204,9 @@ bookshelf-loans/
     │   ├── Loans/
     │   │   ├── Loan.swift, LoanStatus.swift, LoanPolicy.swift
     │   │   ├── Repository/         LoanRepository.swift, Commands/CreateLoanCommand.swift
-    │   │   ├── UseCases/           BorrowBook/, ReturnBook/, ListLoans/, ListAllLoans/, MarkLoanOverdue/, ReceiveNoticeEvent/
-    │   │   └── Workflow/           LoanWorkflowClient.swift
+    │   │   └── UseCases/           BorrowBook/, ReturnBook/, ListLoans/, ListAllLoans/, MarkLoanOverdue/, ReceiveNoticeEvent/
+    │   ├── Workflows/
+    │   │   └── LoanWorkflow/       LoanWorkflow.swift, LoanActivities.swift, ActivityOptions+Loans.swift
     │   ├── Paging/                 Page.swift, KeyedPage.swift
     │   └── Ports/                  Book.swift, CatalogClient.swift, CatalogClientError.swift,
     │                               Member.swift, IdentityClient.swift, OverdueNotice.swift, NoticeSender.swift,
@@ -223,9 +221,6 @@ bookshelf-loans/
     ├── LoansGRPC/
     │   ├── Loans/                  LoanService.swift, Protobuf/BorrowBookUseCaseInput+Protobuf.swift, Protobuf/Loan+Protobuf.swift
     │   └── Clients/                GRPCCatalogClient.swift, GRPCIdentityClient.swift, Protobuf/Book+Protobuf.swift
-    ├── LoansTemporal/
-    │   ├── Loan/                   LoanWorkflow.swift, LoanActivities.swift, TemporalLoanWorkflowClient.swift
-    │   └── ActivityOptions+Loans.swift
     ├── LoansResend/                ResendNoticeSender.swift, ResendNoticeEventVerifier.swift
     └── Loans/
         ├── Loans.swift             the @main command
@@ -318,14 +313,20 @@ with `grpc-swift-proto-generator-config.json`:
 
 ## Checking the boundaries
 
-SPM enforces what each target declares, but not what a declaration should be. Run these from a service's root, here Loans in Bookshelf; each finds nothing unless noted:
+SPM checks that a target can reach what it imports, but not what a declaration should be. This skill's `scripts/check_boundaries.sh <X> <Org>` checks the rest, run from a service's root (`check_boundaries.sh Loans Bookshelf`). It prints each violation under its rule and exits non-zero if there is any:
 
-- Core imports no adapter technology: `grep -rlE '^(package |public )?import (GRPC[A-Za-z]*|Hummingbird[A-Za-z]*|PostgresNIO|PersistencePostgres|Temporal|Valkey|Configuration|ServiceLifecycle|SwiftProtobuf|AsyncHTTPClient)$' Sources/*Core`
-- Adapters import no sibling adapter. This lists the service's own modules each target imports; an adapter lists only `LoansCore`, and XGRPC its contracts too: `for t in Sources/*/; do echo "$t: $(grep -rhoE '^(package |public )?import Loans[A-Za-z]+' "$t" | sort -u | tr '\n' ' ')"; done`
-- Generated contract types stay in XGRPC and the executable: `grep -rlE 'Bookshelf_[A-Za-z]+_V[0-9]+_' Sources | grep -vE '^Sources/(LoansGRPC|Loans)/'`
-- Only the executable reads configuration: `grep -rlE '^(package )?import Configuration$' Sources | grep -v '^Sources/Loans/'`
-- Every Foundation import is the conditional one; this lists files importing Foundation without it: `grep -rlE '^(package |public )?import Foundation$' Sources | xargs -r grep -L 'canImport(FoundationEssentials)'`
-- No unstructured tasks: `grep -rnE '\bTask(\.detached)? *[({]' Sources`
-- Unchecked concurrency only where [concurrency](style.md#concurrency) allows it; this lists each, and every one is in an adapter target with its reason on the line above: `grep -rnE -B1 '@unchecked Sendable|nonisolated\(unsafe\)|@preconcurrency' Sources`
-- Every use case protocol has typed throws: `grep -rL 'throws(' Sources/*Core/*/UseCases/*/*UseCaseProtocol.swift`
-- No package defaults to the main actor: `grep -n 'defaultIsolation' Package.swift`
+- Core imports no adapter technology or contract.
+- Temporal stays out of the adapter targets.
+- Inside Core, only `Workflows/` and use case implementations import Temporal, and a use case that imports it names `TemporalClient`.
+- Only the executable builds a Temporal client or worker.
+- An activity container stores only use case and port protocols and a `Logger`.
+- Activities call system use cases only, so nothing in `Workflows/` names a caller.
+- Adapters import no sibling adapter, and only XGRPC imports the service's contract.
+- Generated contract types stay in XGRPC and the executable.
+- Only the executable reads configuration.
+- Every Foundation import is the conditional one.
+- There are no unstructured tasks.
+- Every use case protocol has typed throws.
+- No package defaults to the main actor.
+
+It also lists each use of unchecked concurrency for review, without failing: every one is in an adapter target with its reason on the line above, as [concurrency](style.md#concurrency) allows.

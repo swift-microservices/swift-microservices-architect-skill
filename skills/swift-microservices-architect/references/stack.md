@@ -31,13 +31,14 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 | [hummingbird](https://github.com/hummingbird-project/hummingbird) | `Hummingbird` | The HTTP server: router, request contexts, middleware, `Application` | The gateway |
 | [hummingbird-auth](https://github.com/hummingbird-project/hummingbird-auth) | `HummingbirdAuth`, `HummingbirdBcrypt` | `AuthRequestContext`, `IsAuthenticatedMiddleware`; bcrypt | The gateway; a password-hashing adapter |
 | [swift-openapi-generator](https://github.com/apple/swift-openapi-generator), [swift-openapi-runtime](https://github.com/apple/swift-openapi-runtime) | `OpenAPIGenerator` plugin, `OpenAPIRuntime` | The gateway's types from `openapi.yaml` | The gateway |
-| [grpc-swift-2](https://github.com/grpc/grpc-swift-2) | `GRPCCore` | Servers, clients, interceptors, `RPCError`, `ServiceConfig` | XGRPC, executables, `<Org>Persistence`, the gateway |
+| [grpc-swift-2](https://github.com/grpc/grpc-swift-2) | `GRPCCore` | Servers, clients, interceptors, `RPCError`, `ServiceConfig` | XGRPC, executables, `<Org>Persistence`, `<Org>Transport`, the gateway |
 | [grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | `GRPCNIOTransportHTTP2` | HTTP/2 transports with TLS and mTLS | Executables, `<Org>Transport` |
 | [grpc-swift-protobuf](https://github.com/grpc/grpc-swift-protobuf) | `GRPCProtobuf`, `GRPCProtobufGenerator` plugin | Protobuf serialization and code generation | `<org>-protos` |
 | [grpc-swift-extras](https://github.com/grpc/grpc-swift-extras) | `GRPCServiceLifecycle` | `GRPCServer` and `GRPCClient` as lifecycle services | Executables |
 | [swift-protobuf](https://github.com/apple/swift-protobuf) | `SwiftProtobuf` | Messages, well-known types (`Google_Protobuf_Timestamp`, `Google_Protobuf_Empty`) | `<org>-protos`, XGRPC, the gateway |
-| [swift-temporal-sdk](https://github.com/apple/swift-temporal-sdk) | `Temporal` | Workflows, activities, `TemporalClient`, `TemporalWorker` | XTemporal, executables |
+| [swift-temporal-sdk](https://github.com/apple/swift-temporal-sdk) | `Temporal`, `TemporalTestKit` | Workflows, activities, `TemporalClient`, `TemporalWorker`; the test servers | XCore in a service with workflows, executables, and no adapter target; `Temporal` and `TemporalTestKit` in `XCoreTests` |
 | [valkey-swift](https://github.com/valkey-io/valkey-swift) | `Valkey` | `ValkeyClient`, commands, pipelines, transactions | XValkey, executables |
+| [swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | `NIOSSL` | `TLSConfiguration` for the Valkey client | Executables with XValkey |
 | postgres-nio | `PostgresNIO` | `PostgresClient` pools, prepared statements, row decoding | XPostgres, executables |
 | [postgres-migrations](https://github.com/hummingbird-project/postgres-migrations) | `PostgresMigrations` | `DatabaseMigration`, `DatabaseMigrations` | XPostgres, executables |
 | [swift-configuration](https://github.com/apple/swift-configuration) | `Configuration` | `ConfigReader`, providers, scoped readers, secrets | Executables, `<Org>Transport`, `<Org>Persistence` |
@@ -56,7 +57,7 @@ Hummingbird is the only HTTP framework, and AsyncHTTPClient the only HTTP client
 These link full Foundation on Linux whatever their traits, so the products that depend on them are listed in `foundation_linking_check_excluded_products` ([Foundation linking](delivery.md#foundation-linking)):
 - postgres-nio, and so postgres-migrations and swift-persistence-postgres: every service with XPostgres
 - swift-openapi-generator's generated files, which `public import Foundation`: the gateway
-- swift-temporal-sdk through 1.5.0, whose scoped `import struct Foundation.Data` imports link it: every service with XTemporal
+- swift-temporal-sdk through 1.5.0, whose scoped `import struct Foundation.Data` imports link it: every service with workflows
 
 Every other package in the stack is Foundation-free with the traits [traits and Foundation](packages.md#traits-and-foundation) declares, and CI's check finds one that isn't.
 

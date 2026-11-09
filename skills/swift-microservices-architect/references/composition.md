@@ -126,7 +126,6 @@ struct Serve: AsyncParsableCommand {
         let internalDatabase = PostgresDatabase<PostgresLoansInternalScope>(client: internalPostgresClient, logger: logger)
         let catalogClient = GRPCCatalogClient(client: catalogGRPCClient)
         let taskQueue = try temporalConfig.requiredString(forKey: "worker.taskqueue")
-        let loanWorkflowClient = TemporalLoanWorkflowClient(client: temporalClient, taskQueue: taskQueue)
         let loansConfig = config.scoped(to: "loans")
         let policy = try LoanPolicy(config: loansConfig)
         let resendConfig = config.scoped(to: "resend")
@@ -140,7 +139,8 @@ struct Serve: AsyncParsableCommand {
         let borrowBookUseCase = BorrowBookUseCase(
             database: database,
             catalogClient: catalogClient,
-            loanWorkflowClient: loanWorkflowClient,
+            temporalClient: temporalClient,
+            taskQueue: taskQueue,
             policy: policy,
             logger: logger
         )
@@ -201,6 +201,7 @@ struct Serve: AsyncParsableCommand {
 - **Configuration, Logging, Infrastructure, Composition, the server, Lifecycle**: every root has these sections, in this order.
 - Infrastructure builds what talks to the outside: database clients per role, certificate reloaders, the authenticator, upstream clients, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
+- The use cases that start workflows take what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
 - Each use case is a `let` named like the property that holds it, on the database its audience requires; the service then takes the names. Every value in a root is built this way ([build, then call](style.md#build-then-call)).
 
 ## Configuration
@@ -244,7 +245,7 @@ extension InMemoryProvider {
 - Defaults hold mount paths, ports, the database's name, role names, the Temporal namespace, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
 - A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes first: `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)`. Required keys and validation live in the reader, not in the root.
 - A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
-- Readers every executable shares are `<Org>Transport`'s and `<Org>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)`, with the key names that library chose.
+- Readers every executable shares are `<Org>Transport`'s and `<Org>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)` ([with TLS set on it](persistence.md#valkey)), with the key names that library chose.
 - Keys are named as [naming](conventions.md#naming) gives them, and environment names derive from them: `postgres.service.password` is `POSTGRES_SERVICE_PASSWORD`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
 - A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
 - Secrets and key material follow [secrets](security.md#secrets).
@@ -258,7 +259,7 @@ extension InMemoryProvider {
 
 ## Lifecycle
 
-One `ServiceGroup` runs every long-lived component as a child task of the command and, on `SIGTERM`, shuts them down in reverse order; when one throws or returns, it cancels the rest and the process exits non-zero. So a root lists its components and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
+A root lists its long-lived components in one `ServiceGroup` and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
 
 - Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `TemporalClient`, `TemporalWorker`.
 - Order is dependency order: database clients, certificate reloaders, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
@@ -305,7 +306,8 @@ let worker = try TemporalWorker(
 // workerPostgresClient, certificateReloader, temporalCertificateReloader, identityGRPCClient, catalogGRPCClient, worker
 ```
 
-The worker builds no server and no authenticator: it serves no RPCs, and the users it acts for are named in workflow inputs.
+- The root builds each activity container from system use cases and port implementations, here XGRPC's and the provider target's, so no adapter target imports another, and registers the workflows. `activityContainers:` takes each container as its own argument.
+- The worker builds no server and no authenticator: it serves no RPCs, and the users it acts for are named in workflow inputs.
 
 ## The gateway's root
 

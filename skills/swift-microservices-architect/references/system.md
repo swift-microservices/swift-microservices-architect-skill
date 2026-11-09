@@ -63,7 +63,7 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 |---|---|
 | An answer now from the owner of the data | Unary gRPC to its `XInternalService`, over mTLS, as the calling process |
 | A person's request | The gateway, which forwards the caller's token to the owning service's `XService` ([gateway](gateway.md)) |
-| Work that must happen eventually, waits for time or a signal, retries, or touches several services | A Temporal workflow, started through a Core port ([workflows](workflows.md)) |
+| Work that must happen eventually, waits for time or a signal, retries, or touches several services | A Temporal workflow in Core, started by a use case ([workflows](workflows.md)) |
 
 - Durable work is a workflow, not a message on a queue: Temporal holds the retries, the timers and the history.
 - Calls between services form no cycle. Break one by moving ownership, extracting a third capability, or making one direction a workflow.
@@ -79,7 +79,7 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 
 Besides the swift-microservices libraries ([stack](stack.md)), every service and the gateway depend on two packages of the organization's own.
 
-**`<org>-core`**, the organization layer, holds what every service would otherwise write identically:
+**`<org>-core`** holds what every service would otherwise write identically:
 
 | Product | Holds | Linked by |
 |---|---|---|

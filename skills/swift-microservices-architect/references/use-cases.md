@@ -1,6 +1,6 @@
 # The application layer
 
-XCore is the service: what it knows (domain models), what it decides (use cases), and what it needs from outside (repositories and ports), with no knowledge of how any of them is reached.
+XCore is the service: what it knows (domain models), what it decides (use cases), how it plays out over time ([workflows](workflows.md)), and what it needs from outside (repositories and ports), with no knowledge of how any of them is reached.
 
 ## Contents
 - Domain models
@@ -9,11 +9,12 @@ XCore is the service: what it knows (domain models), what it decides (use cases)
 - Ports
 - A use case
 - The body of a use case
+- System use cases
 - Transactions
 - Authorization
 - Logging
 
-Its folders, an area per resource and `Ports/`, are in [the folder layout](packages.md#folder-layout).
+Its folders, an area per resource, `Workflows/` and `Ports/`, are in [the folder layout](packages.md#folder-layout).
 
 ## Domain models
 
@@ -111,9 +112,7 @@ package struct Page<Item: Sendable>: Sendable {
     package let pageSize: Int
     package let totalCount: Int
 
-    package var totalPages: Int {
-        (totalCount + pageSize - 1) / pageSize
-    }
+    package var totalPages: Int { … }
 
     …
 }
@@ -130,7 +129,7 @@ package struct KeyedPage<Item: Sendable>: Sendable {
 
 ## Ports
 
-A port is what Core needs from outside the service's database: another service, a provider, the workflow engine, or a store outside the transaction.
+A port is what Core needs from outside the service's database: another service, a provider, or a store outside the transaction. Temporal is no port: [Core uses it directly](packages.md#what-core-may-link).
 
 ```swift
 /// What Loans needs from Catalog: a book by id, in Loans' terms.
@@ -148,7 +147,6 @@ package enum CatalogClientError: Error, Equatable {
 |---|---|---|
 | Another service | `CatalogClient` | XGRPC |
 | A provider | `NoticeSender`, `PasswordHasher`, `NoticeEventVerifier` | `X<Provider>` |
-| The workflow engine | `LoanWorkflowClient` | XTemporal |
 | A store outside the database | `ResetCodeRepository` | XValkey |
 
 Ports and their implementations are named as [naming](conventions.md#naming) gives them.
@@ -191,9 +189,9 @@ with the error above and the implementation below.
 - It returns a domain model, an array of them, a page of them, or nothing. A result that combines values is a domain type named for what it is (`Session`), never `XUseCaseOutput`.
 - The input is a plain value of what the request carries. Wire validity, such as an id that isn't a UUID, is the conversion's to refuse ([conversions](grpc.md#conversions)); business validity is the use case's, as an error case.
 - The implementation is generic over its database, `XUseCase<DatabaseType>` where `DatabaseType: Database` and `DatabaseType.Scope: XUseCaseScope`. It holds its ports as `any Port`, a `Logger`, and a policy when its rules are tunable.
+- One that starts a workflow also holds what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
 - Its scope protocol lists only what it uses. The scopes of the database roles it may run on adopt the protocol, so composing it on any other database doesn't compile ([database roles](persistence.md#database-roles)).
 - An adapter holds it as `any XUseCaseProtocol` in a property named for the type (`borrowBookUseCase`) and calls it like a function: `try await borrowBookUseCase(subject: subject, input: input)`.
-- A use case never calls another use case.
 
 ## The body of a use case
 
@@ -201,6 +199,7 @@ with the error above and the implementation below.
 package import BookshelfAuthentication
 package import Logging
 package import Persistence
+package import Temporal
 
 #if canImport(FoundationEssentials)
 import FoundationEssentials
@@ -216,14 +215,16 @@ package struct BorrowBookUseCase<DatabaseType>: BorrowBookUseCaseProtocol
 where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
     private let database: DatabaseType
     private let catalogClient: any CatalogClient
-    private let loanWorkflowClient: any LoanWorkflowClient
+    private let temporalClient: TemporalClient
+    private let taskQueue: String
     private let policy: LoanPolicy
     private let logger: Logger
 
     package init(
         database: DatabaseType,
         catalogClient: any CatalogClient,
-        loanWorkflowClient: any LoanWorkflowClient,
+        temporalClient: TemporalClient,
+        taskQueue: String,
         policy: LoanPolicy,
         logger: Logger
     ) {
@@ -275,9 +276,23 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                 return try await scope.loanRepository.create(command)
             }
 
-            try await loanWorkflowClient.start(loan)
-            logger.info("Book borrowed", metadata: ["loanID": "\(loan.id)"])
-            return loan
+            let workflowID = LoanWorkflow.id(loanID: loan.id)
+            let workflowOptions = WorkflowOptions(
+                id: workflowID,
+                taskQueue: taskQueue,
+                idReusePolicy: .allowDuplicateFailedOnly,
+                idConflictPolicy: .useExisting
+            )
+            let workflowInput = LoanWorkflow.Input(loanID: loan.id, userID: loan.userID, bookID: loan.bookID, dueDate: loan.dueDate)
+
+            do {
+                _ = try await temporalClient.startWorkflow(type: LoanWorkflow.self, options: workflowOptions, input: workflowInput)
+                logger.info("Book borrowed", metadata: ["loanID": "\(loan.id)"])
+                return loan
+            } catch is WorkflowAlreadyStartedError {
+                // A retry after the loan's run completed: its work is done.
+                return loan
+            }
         } catch let error as BorrowBookUseCaseError {
             throw error
         } catch CatalogClientError.unavailable {
@@ -297,7 +312,29 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 }
 ```
 
-The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; and a final `catch` that logs an error with `String(reflecting: error)` and throws `.unknown`. The rest follows [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging).
+The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; and a final `catch` that logs an error with `String(reflecting: error)` and throws `.unknown`. The rest follows [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
+
+## System use cases
+
+A use case's actor is a person, through an RPC, or the system: time, or a workflow's step, through an activity. Use cases never call other use cases synchronously. One run triggering another later through a workflow isn't a use case calling a use case: they are separate runs with separate transactions.
+
+```swift
+package protocol MarkLoanOverdueUseCaseProtocol: Sendable {
+    /// Marks a loan past its due date overdue, unless it was returned first.
+    func callAsFunction(input: MarkLoanOverdueUseCaseInput) async throws(MarkLoanOverdueUseCaseError) -> Loan
+}
+
+package struct MarkLoanOverdueUseCaseInput: Sendable {
+    package let loanID: UUID
+
+    …
+}
+```
+
+- A system use case takes no `subject`. Its input names what it acts on.
+- Activities call system use cases only, never user-facing ones. A use case that checks the caller (`ReturnBook`) is never invoked from an activity with an invented identity.
+- When a person and the system both need the same effect, each audience has its own use case: `MarkLoanOverdueUseCase` for the worker, and `MarkLoanOverdueByAdministratorUseCase`, which takes `subject` and checks the role. They share the domain rule, on a model or a policy, and the repository's conditional write (`markOverdue(id:)`), and neither calls the other.
+- The worker scope adopts the system use cases' scope protocols, so wiring one on the tenant database fails to compile ([database roles](persistence.md#database-roles)).
 
 ## Transactions
 
@@ -314,6 +351,7 @@ The body reads in the order the requirement states it: refuse what needs no data
 - **The caller's own.** The use case acts on `subject.userID`, never on a user id from its input, and runs on the tenant database, where row-level security confines it as well ([row-level security](persistence.md#row-level-security)).
 - **Administrators.** The use case checks the role before anything else, then runs on the internal database in a service with tenant tables. The gateway's `AdministratorRequestContext` refuses earlier; the use case's check is the rule.
 - **Internal callers.** The use case takes the user it acts for in its input; mTLS admitted the calling process.
+- **The system.** A [system use case](#system-use-cases) acts for no caller and runs on the worker's database.
 
 ```swift
 package func callAsFunction(
@@ -341,5 +379,5 @@ package func callAsFunction(
 - Each use case logs through the `Logger` it's built with; the metadata provider adds the caller's `userID` to every line of a request ([user tokens](security.md#user-tokens)).
 - Levels: `info` for a completed change, `warning` for a refusal, `error` for `unknown`. A successful read logs nothing.
 - Messages are short sentences: `Book borrowed`, `Borrowing refused: no such book`, `Borrowing failed: unknown error`.
-- Metadata keys are lowerCamelCase ids (`loanID`, `bookID`), and `error` holds `String(reflecting: error)`.
+- `error` holds `String(reflecting: error)`.
 - Never logged: tokens, passwords, secrets and their digests, email addresses, names, request bodies.

@@ -20,13 +20,14 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens,
 | A service or worker to another's `XInternalService` | gRPC over mTLS | Both processes by certificate; the request names the user it acts for |
 | A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate |
 | A process to Postgres | TLS, required (`.require(…)`), against the environment's authority, as one of the service's roles | The server by certificate; the role by its password |
+| A process to Valkey | TLS, required, against the environment's authority, with a username and password (`authentication.*`) | The server by certificate; the process by its password |
 | Inside the database | Row-level security | The tenant, by the setting bound to the transaction |
 
 The edge proxy and certificate issuance belong to the deployment; this skill fixes what each process presents and checks.
 
 ## Mutual TLS
 
-Every connection between processes is mutual TLS against a private certificate authority per environment. Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial.
+Every gRPC connection and every connection to Temporal is mutual TLS against a private certificate authority per environment. Postgres and Valkey connections are TLS against that authority, with a password proving the process. Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial.
 
 `<Org>Transport` holds the readers every executable uses:
 
@@ -46,20 +47,6 @@ extension HTTP2ServerTransport.Posix.TransportSecurity {
         return try .mTLS(certificateReloader: certificateReloader) {
             $0.trustRoots = .certificates([.file(path: trustRootsPath, format: .pem)])
             $0.clientCertificateVerification = .noHostnameVerification
-        }
-    }
-}
-
-extension HTTP2ClientTransport.Posix.TransportSecurity {
-    /// Verifies the server's certificate and that it names the dialed host.
-    ///
-    /// ## Configuration keys
-    /// - `trustRootsPath` (string, required): the PEM bundle of the authority that signs peers.
-    public static func mTLS(config: ConfigReader, certificateReloader: any CertificateReloader) throws -> Self {
-        let trustRootsPath = try config.requiredString(forKey: "trustRootsPath")
-        return try .mTLS(certificateReloader: certificateReloader) {
-            $0.trustRoots = .certificates([.file(path: trustRootsPath, format: .pem)])
-            $0.serverCertificateVerification = .fullVerification
         }
     }
 }
@@ -86,7 +73,7 @@ extension TimedCertificateReloader.Configuration {
 }
 ```
 
-- The server requires a client certificate signed by the trust roots and doesn't match it against a hostname; the client verifies the server's chain and hostname in full.
+- The server requires a client certificate signed by the trust roots and doesn't match it against a hostname; the client verifies the server's chain and hostname in full. The client's reader, on `HTTP2ClientTransport.Posix.TransportSecurity`, differs in one line: `$0.serverCertificateVerification = .fullVerification`.
 - `TimedCertificateReloader` from swift-nio-extras is the `CertificateReloader` that `.mTLS(certificateReloader:)` takes. `makeReloaderValidatingSources(configuration:)` loads the pair before any transport is built, so missing, malformed or mismatched files fail startup.
 - The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair, and servers bound connection age so every connection handshakes again ([transports](grpc.md#transports)); a failed reload keeps the last good pair and logs a warning.
 - One reloader per certificate pair: the service pair under `tls` for gRPC, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services'.
@@ -97,7 +84,7 @@ extension TimedCertificateReloader.Configuration {
 
 One issuer signs every access token. Identity alone holds the EdDSA private key and issues tokens with `JWTIssuer<UserIdentity>`; every other process holds the public key and verifies with `JWTAuthenticator<UserIdentity>`.
 
-The token's payload is the org core's `UserIdentity`:
+The token's payload is `<org>-core`'s `UserIdentity`:
 
 ```swift
 public struct UserIdentity: JWTPayload, Equatable, Sendable {

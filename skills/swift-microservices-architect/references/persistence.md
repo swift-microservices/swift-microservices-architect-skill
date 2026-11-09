@@ -14,15 +14,7 @@ The Postgres adapter, database roles and row-level security, migrations, and Val
 
 ## The Postgres target
 
-XPostgres implements Core's repositories over swift-persistence-postgres and PostgresNIO:
-
-| Folder | Holds | Access |
-|---|---|---|
-| `Scopes/` | `Postgres<X>Scope` per database role | `package` |
-| `Repositories/<Area>/` | `Postgres<Name>Repository` | internal: only scopes build them |
-| `Statements/<Area>/` | A `PostgresPreparedStatement` per query, and `Model+PostgresRow.swift` | internal |
-| `Extensions/` | `Enum+PostgresCodable.swift` for Core enums stored as text | `package` |
-| `Migrations/<Area>/`, `Migrations/Role/` | A `DatabaseMigration` per change | `package` |
+XPostgres implements Core's repositories over swift-persistence-postgres and PostgresNIO. Folders are as [folders](conventions.md#folders) gives them. Scopes, `Extensions/` and migrations are `package`; repositories and statements are internal, since only scopes build them.
 
 ## Database roles
 
@@ -33,7 +25,7 @@ Each service's database has an owner and a role per purpose. A process connects 
 | Owner | `serve --migrate-database`, for migrations only | Everything; bypasses row-level security | none |
 | `<x>_service` | `serve`, for anyone's and the caller's own RPCs | Tenant tables narrowed to the bound caller; untenanted tables whole | `Postgres<X>Scope` |
 | `<x>_internal` | `serve`, for administrators' and internal RPCs, and anyone's that reach tenant rows with no caller bound, such as a webhook | Every row, through its own policy | `Postgres<X>InternalScope` |
-| `<x>_worker` | `worker run`, for activities | Every row, through its own policy | `Postgres<X>WorkerScope` |
+| `<x>_worker` | `worker run`, for [system use cases](use-cases.md#system-use-cases) | Every row, through its own policy | `Postgres<X>WorkerScope` |
 
 A service declares only the roles it uses: Catalog has no tenant table and runs everything as `catalog_service`. A use case runs on its role's `PostgresDatabase`: the tenant database (`<x>_service`), the internal database or the worker's database.
 
@@ -42,7 +34,7 @@ The internal and worker roles see every row, so a query on them that acts for on
 ```swift
 package import LoansCore
 package import Logging
-import PersistencePostgres
+package import PersistencePostgres
 package import PostgresNIO
 
 /// A unit of work as `loans_service`, whose policy narrows `loans` to the bound caller's rows.
@@ -81,10 +73,10 @@ CREATE POLICY worker_all ON loans TO "loans_worker" USING (true);
 
 ## Binding the tenant
 
-The swift-microservices libraries and the org core carry the caller from the token to the transaction:
+The swift-microservices libraries and `<org>-core` carry the caller from the token to the transaction:
 
 1. `BearerAuthenticationInterceptor` binds the token's `Principal<UserIdentity, String>` in `OperationContext`.
-2. `UserSettingsInterceptor` from `<Org>Persistence`, applied after it to the same descriptors, binds `OperationContext.postgresSettings = .user(identity)`, which is `["app.caller_user_id": "<lowercased user id>"]`.
+2. `UserSettingsInterceptor` from `<Org>Persistence`, applied after it to the same descriptors, binds `OperationContext.postgresSettings = .user(identity)`, which is `["app.caller_user_id": "<lowercased user id>"]`; with no user bound it binds nothing.
 3. `PostgresDatabase.withTransaction` reads the settings from `OperationContext` as each transaction begins, applies them over its constant settings with `set_config(name, value, true)`, and only then builds the scope.
 4. The setting is transaction-local: it ends with the transaction, by commit or rollback, so a pooled connection never carries one caller's setting into the next caller's transaction.
 
@@ -100,15 +92,7 @@ public struct UserSettingsInterceptor: ServerInterceptor {
             _ context: ServerContext
         ) async throws -> StreamingServerResponse<Output>
     ) async throws -> StreamingServerResponse<Output> {
-        var operationContext = OperationContext.current
-        guard let user = operationContext.user else {
-            return try await next(request, context)
-        }
-
-        operationContext.postgresSettings = .user(user.identity)
-        return try await OperationContext.withContext(operationContext) {
-            try await next(request, context)
-        }
+        …
     }
 }
 ```
@@ -162,7 +146,7 @@ struct CreateLoanStatement: PostgresPreparedStatement {
 - A unique violation the use case acts on is mapped by constraint name: `catch let error as PSQLError where error.serverInfo?[.sqlState] == "23505"`, then a `switch` on `error.serverInfo?[.constraintName]` that throws the repository's case or rethrows.
 - A value unique only while its row is active, such as a member's one active loan of a book, is a partial unique index over the active states: `CREATE UNIQUE INDEX loans_active_user_id_book_id_key ON loans (user_id, book_id) WHERE status <> 'returned'`. Its violation is mapped by name like any other; a check, then an insert, never stands in for it.
 - A state transition is one statement whose `WHERE` names the states the row may leave: `UPDATE loans SET status = 'returned' WHERE id = $1 AND status <> 'returned' RETURNING …`. No row back means the row isn't in a state it may leave, such as a loan another transaction returned first, and the repository returns `nil` (`markReturned(id:) -> Loan?`). The method or command names only the destination; a read, a decision in Swift and an unconditional write never stand in for it.
-- A Core enum stored as text conforms to `PostgresNonThrowingEncodable` and `PostgresDecodable` through its raw value, in `Extensions/`.
+- A Core enum stored as text conforms to `PostgresNonThrowingEncodable` and `PostgresDecodable` in `Extensions/`, with an `encode(into:context:)` that forwards to its `rawValue`, which can't throw; the type, format and decoding come from the raw value.
 - Ids default in the database (`uuidv7()` on Postgres 18 and later), as do creation and update dates; commands carry neither.
 
 ## Paged statements
@@ -179,21 +163,7 @@ struct LoansByUserIDStatement: PostgresPreparedStatement {
         LIMIT $2 OFFSET ($3 - 1) * $2
         """
 
-    let userID: UUID
-    let page: Int
-    let pageSize: Int
-
-    func makeBindings() throws -> PostgresBindings {
-        var bindings = PostgresBindings()
-        bindings.append(userID)
-        bindings.append(pageSize)
-        bindings.append(page)
-        return bindings
-    }
-
-    func decodeRow(_ row: PostgresRow) throws -> Loan {
-        try Loan(row: row)
-    }
+    …
 }
 ```
 
@@ -249,6 +219,12 @@ Identity keeps password reset codes there:
 package import IdentityCore
 package import Valkey
 
+#if canImport(FoundationEssentials)
+package import FoundationEssentials
+#else
+package import Foundation
+#endif
+
 /// A reset code from the moment it's sent until it's redeemed or expires.
 package struct ValkeyResetCodeRepository<Client: ValkeyClientProtocol>: ResetCodeRepository {
     private let client: Client
@@ -269,10 +245,10 @@ package struct ValkeyResetCodeRepository<Client: ValkeyClientProtocol>: ResetCod
 ```
 
 - The repository is generic over `ValkeyClientProtocol`, takes the client in its initializer, and lives in XValkey; the use case holds it as a port.
-- Keys are `<x>:<purpose>:<id>` (`identity:reset-code:…`), so services sharing an instance never collide.
+- Keys are as [naming](conventions.md#naming) gives them, so services sharing an instance never collide.
 - Every write sets its expiry, passed by the use case from its policy, never configured in the store.
 - A read that must happen once is atomic: `GETDEL`, not a read followed by a delete. Several commands that must apply together go in a transaction (`client.transaction(…)`); several independent ones in a pipeline (`client.execute(…)`).
 - A rate limit is `INCR` and `EXPIRE … NX` in one transaction, so the first increment opens the window and no counter outlives it.
 - A cache is never the source of truth and never holds a decision. Its expiry is the use case's staleness budget, and its read answers `nil` on a miss and on a Valkey error, which the repository logs as a warning, so the use case reads the database and carries on.
 - A value for one user is keyed by that user too, since Valkey has no row-level security.
-- The executable reads `ValkeyClientConfiguration(configReader:)` into a `let`, builds one `ValkeyClient(.hostname(host, port: port), configuration: valkeyConfiguration, logger: logger)` from it, and runs it in the `ServiceGroup` ([composition](composition.md#the-composition-root)).
+- The executable reads `ValkeyClientConfiguration(configReader:)` into a `var`, which leaves TLS off and connects unauthenticated unless both `authentication.username` and `authentication.password` are set. It sets `valkeyConfiguration.tls = try .enable(tlsConfiguration, tlsServerName: host)` from a NIOSSL `TLSConfiguration` with the environment's trust roots, builds one `ValkeyClient(.hostname(host, port: port), configuration: valkeyConfiguration, logger: logger)` from it, and runs it in the `ServiceGroup` ([composition](composition.md#the-composition-root)).
