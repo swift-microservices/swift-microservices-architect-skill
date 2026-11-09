@@ -296,6 +296,7 @@ extension Bookshelf_Loans_V1_BorrowBookRequest {
 ```
 
 - An id passes through as the string it is: a response takes the service's lowercase id unchanged, and a request parses a body's id with `UUID(uuidString:)`, answering `400` for one that isn't a UUID, and sends it lowercased. A path's id is read with `context.parameters.require("id", as: UUID.self)`.
+- A file that imports `SwiftProtobuf` spells the standard library's decoder `any Swift.Decoder`, since SwiftProtobuf declares a `Decoder` protocol too.
 - A response conversion throws on a malformed upstream value, such as an unspecified enum, answering `500` rather than dropping or inventing a field.
 - A body field the client omits reaches the service as the proto default; the service's conversion decides what an empty value means.
 - A paged route reads `pageSize` and `pageToken` or `page` from the query, answers the items with `pageInfo` or `nextPageToken`, and passes each through unchanged; the service applies [the paging rules](grpc.md#lists-and-pages).

@@ -123,16 +123,38 @@ public struct UserIdentity: JWTPayload, Equatable, Sendable {
         case expirationDate = "exp"
     }
 
+    /// Writes `sub` lowercase, as every id on the wire is; `UUID`'s own encoding is uppercase.
+    public func encode(to encoder: any Encoder) throws {
+        let subject = userID.uuidString.lowercased()
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(subject, forKey: .userID)
+        try container.encode(role, forKey: .role)
+        try container.encode(issuer, forKey: .issuer)
+        try container.encode(issueDate, forKey: .issueDate)
+        try container.encode(expirationDate, forKey: .expirationDate)
+    }
+
     public func verify(using algorithm: some JWTAlgorithm) throws {
         try ExpirationClaim(value: expirationDate).verifyNotExpired()
     }
 }
 
 /// A role as the token names it, open so a role added later decodes everywhere.
+///
+/// The standard library codes a `RawRepresentable` string as its raw value, so `Codable` needs no code.
 public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByStringLiteral, Sendable {
     public static let user: UserRole = "user"
     public static let admin: UserRole = "admin"
-    …
+
+    public let rawValue: String
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    public init(stringLiteral value: String) {
+        self.rawValue = value
+    }
 }
 ```
 

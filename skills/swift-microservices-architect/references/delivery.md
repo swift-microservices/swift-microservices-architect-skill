@@ -94,7 +94,7 @@ jobs:
 - `api_breakage_check_enabled` is `true` from 1.0, so a breaking change shows on its pull request, and `false` below 1.0, where a minor release may break the API.
 - A public library builds on every toolchain its users may have: `linux_swift_versions` from its tools version up through the newest release, then `nightly-main` and the next release's nightly; `linux_host_archs: '["x86_64", "aarch64"]'`; `enable_linux_static_sdk_build: true`.
 - A library with DocC catalogs lists their targets in `docs_check_targets`, and Soundness fails on any DocC warning in them.
-- `<project>-protos`, which has no tests, passes `linux_build_command: swift build -c release`.
+- `<project>-protos` has no tests and only builds: its `ci.yml` passes `linux_build_command: swift build -c release`, and `swift build` stands in for `swift test`, which fails on a package with no tests.
 
 ## A service's CI workflows
 

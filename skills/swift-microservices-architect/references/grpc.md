@@ -100,7 +100,7 @@ service LoanService {
 
 - The file and package are named as [naming](conventions.md#naming) gives them. Generated types take the package as a prefix: `Bookshelf_Loans_V1_Loan`, `Bookshelf_Loans_V1_LoanService`.
 - Comments in the contract say who calls each group of RPCs and what a request may name.
-- Fields are snake_case. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
+- Fields are snake_case. swift-protobuf generates `book_id` as `bookID` but `book_ids` as `bookIds`, and code spells each as generated. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
 - Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`. Only a closed set is a proto enum; an open set, such as `UserRole`, is its raw `string`.
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
 - A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).

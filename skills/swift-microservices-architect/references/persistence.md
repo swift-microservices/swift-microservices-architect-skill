@@ -51,6 +51,7 @@ package struct PostgresLoansScope: PostgresScope, BorrowBookUseCaseScope, Return
 
 - A scope adopts exactly the scope protocols of the use cases that may run as its role. `PostgresLoansInternalScope` adopts `ListAllLoansUseCaseScope` and `ReceiveNoticeEventUseCaseScope`; `PostgresLoansWorkerScope` adopts `MarkLoanOverdueUseCaseScope`. Composing `ListAllLoansUseCase` on the tenant database then fails to compile, so which role a use case runs as is checked by the compiler.
 - Several scopes hold the same repository types; each is built on its own role's connection.
+- PostgresNIO declares a protocol named `PostgresDatabase` too, so a type annotation in a file that imports both modules, such as a test's, spells `PersistencePostgres.PostgresDatabase<PostgresLoansScope>`.
 
 ## Row-level security
 
@@ -89,10 +90,11 @@ public struct UserSettingsInterceptor: ServerInterceptor {
     public func intercept<Input: Sendable, Output: Sendable>(
         request: StreamingServerRequest<Input>,
         context: ServerContext,
-        next: @concurrent @Sendable (
-            _ request: StreamingServerRequest<Input>,
-            _ context: ServerContext
-        ) async throws -> StreamingServerResponse<Output>
+        next:
+            @concurrent @Sendable (
+                _ request: StreamingServerRequest<Input>,
+                _ context: ServerContext
+            ) async throws -> StreamingServerResponse<Output>
     ) async throws -> StreamingServerResponse<Output> {
         …
     }
@@ -142,6 +144,7 @@ struct CreateLoanStatement: PostgresPreparedStatement {
 ```
 
 - Every query is a prepared statement with bindings; SQL is never built by interpolating values.
+- A statement that returns no rows declares `typealias Row = Void` and an empty `decodeRow(_:)`, and the repository runs it with `_ = try await connection.execute(statement, logger: logger)`, since an unused result is a warning, which fails CI.
 - A statement lists its columns, in the order `Model+PostgresRow.swift` decodes them as one tuple (`row.decode((UUID, UUID, …).self)`).
 - An idempotency key is unique with its user, `UNIQUE (user_id, idempotency_key)`, and its insert is plain: under the member's lock, the use case finds a retry by its key first ([transactions](use-cases.md#transactions)).
 - A lock on what a use case counts is a transaction-scoped advisory lock on the id it counts by: `lockLoans(userID:)` runs `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`.
