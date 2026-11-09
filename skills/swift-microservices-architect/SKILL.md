@@ -183,8 +183,8 @@ Read each reference when its row applies:
 
 | Reference | Read when |
 |---|---|
-| [system.md](references/system.md) | Planning a backend, adding or splitting a service, deciding how services talk |
-| [packages.md](references/packages.md) | Creating a package, changing a target's imports or dependencies, deciding what Core may link, checking boundaries |
+| [system.md](references/system.md) | Planning a backend, adding or splitting a service, deciding how services talk or where data lives |
+| [packages.md](references/packages.md) | Creating a package, changing a target's imports or dependencies, deciding what Core may link, running the boundary or style checks |
 | [stack.md](references/stack.md) | Choosing a library or a version, or checking whether one links full Foundation |
 | [use-cases.md](references/use-cases.md) | Writing a model, error, repository, port or use case, including a system use case, or deciding a transaction or authorization |
 | [persistence.md](references/persistence.md) | Writing a scope, statement, migration, policy, tenant table, Valkey repository or Valkey client |
@@ -192,7 +192,7 @@ Read each reference when its row applies:
 | [gateway.md](references/gateway.md) | Adding a route, request context, controller, webhook route or error mapping |
 | [workflows.md](references/workflows.md) | Writing or starting a workflow, activity container or worker |
 | [composition.md](references/composition.md) | Wiring a command, composition root, configuration, logging or the ServiceGroup |
-| [security.md](references/security.md) | Touching TLS or mTLS, tokens, secrets, authorization layers or webhook verification |
+| [security.md](references/security.md) | Touching TLS or mTLS, database logins, tokens, secrets, authorization layers or webhook verification |
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |
 | [delivery.md](references/delivery.md) | Setting up CI, releases, deployment, the Containerfile or Dependabot |
