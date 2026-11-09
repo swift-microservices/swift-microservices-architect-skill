@@ -313,7 +313,7 @@ with `grpc-swift-proto-generator-config.json`:
 
 ## Checking the boundaries
 
-SPM checks that a target can reach what it imports, but not what a declaration should be. This skill's `scripts/check_boundaries.sh <X> <Project>` checks the rest, run from a service's root (`check_boundaries.sh Loans Bookshelf`). It prints each violation under its rule and exits non-zero if there is any:
+SPM checks that a target can reach what it imports, but not what a declaration should be. This skill's `scripts/check_boundaries.sh <X> <Project>` checks the rest, run from a service's root (`check_boundaries.sh Loans Bookshelf`) or the gateway's (`check_boundaries.sh Gateway Bookshelf`). It prints each violation under its rule and exits non-zero if there is any:
 
 - Core imports no adapter technology or contract.
 - Temporal stays out of the adapter targets.
@@ -322,7 +322,7 @@ SPM checks that a target can reach what it imports, but not what a declaration s
 - An activity container stores only use case and port protocols and a `Logger`.
 - Activities call system use cases only, so nothing in `Workflows/` names a caller.
 - Adapters import no sibling adapter, and only XGRPC imports the service's contract.
-- Generated contract types stay in XGRPC and the executable.
+- Generated contract types stay in XGRPC, the gateway's `GatewayHTTP` and the executable.
 - Only the executable reads configuration.
 - Every Foundation import is the conditional one.
 - There are no unstructured tasks.
@@ -330,3 +330,12 @@ SPM checks that a target can reach what it imports, but not what a declaration s
 - No package defaults to the main actor.
 
 It also lists each use of unchecked concurrency for review, without failing: every one is in an adapter target with its reason on the line above, as [concurrency](style.md#concurrency) allows.
+
+`scripts/check_style.sh`, run from any package's root with no arguments, checks the style rules a script can see, and fails the same way:
+
+- No `try` or `await` inside a call's arguments, across wrapped lines ([build, then call](style.md#build-then-call)).
+- A use case's `logger.error` line reads `<Activity> failed: unknown error` ([logging](use-cases.md#logging)).
+- One top-level type per file ([files](conventions.md#files)).
+- Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, and a role's `user` and `password` ([configuration](composition.md#configuration)).
+
+It also lists each Core repository method with two parameters or more and no command or page size for review: a read passes, and a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)).

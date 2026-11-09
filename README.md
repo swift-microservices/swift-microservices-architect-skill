@@ -10,7 +10,7 @@ Ask for a plan, a new service, an endpoint, a background process or a review, an
 ## The architecture
 
 - **A service per capability.** Each service owns its data and the rules over it. No service reads another's database; data crosses only through gRPC contracts.
-- **Boundaries the compiler enforces.** A service is one Swift package. Its Core target holds the models, use cases and Temporal workflows and imports no driver or transport; adapters for Postgres, gRPC and Valkey sit around it; one executable wires them together. Each target declares what it imports, so most crossings fail the build, and the review checklist's boundary checks catch the rest.
+- **Boundaries the compiler enforces.** A service is one Swift package. Its Core target holds the models, use cases and Temporal workflows and imports no driver or transport; adapters for Postgres, gRPC and Valkey sit around it; one executable wires them together. Each target declares what it imports, so most crossings fail the build, and the skill's boundary and style scripts catch the rest.
 - **Code that reads like the requirement.** Use cases read top to bottom, the way Apple's sample code does: typed throws, one `catch` per outcome, no helper methods.
 - **Security on every hop.** Mutual TLS on gRPC, Temporal and Postgres, TLS to Valkey, the caller's token verified again by every service, and row-level security under every tenant query.
 - **Durable work on Temporal.** Anything that waits, retries or spans services is a workflow in Core, written directly against the Temporal SDK, never a fire-and-forget task.
@@ -104,7 +104,8 @@ The skill decides the shapes; these skills cover the code inside them:
 skills/swift-microservices-architect/
 ├── SKILL.md                    what every task needs: the shape, hard rules, style, gotchas, checklists
 ├── agents/openai.yaml          the skill's name in Codex
-├── scripts/check_boundaries.sh the boundary checks for a service
+├── scripts/check_boundaries.sh the boundary checks for a service or the gateway
+├── scripts/check_style.sh      the style checks for any package
 └── references/                 read when a task reaches their topic
     ├── system.md               services, contracts, shared packages, the plan
     ├── packages.md             targets, Package.swift, Swift settings, boundary checks

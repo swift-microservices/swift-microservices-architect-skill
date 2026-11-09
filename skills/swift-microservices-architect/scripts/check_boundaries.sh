@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 #
-# Checks what SPM can't about a service's boundaries. Run it from the service's root:
+# Checks what SPM can't about a service's boundaries. Run it from the service's root, or
+# from the gateway's with Gateway as <X>:
 #
 #     check_boundaries.sh <X> <Project>
 #     check_boundaries.sh Loans Bookshelf
+#     check_boundaries.sh Gateway Bookshelf
 #
 # Prints each violation under the rule it breaks, and exits 1 if there is any.
 
@@ -86,8 +88,8 @@ own_module_imports() {
 
 report "Adapters import no sibling adapter, and only ${grpc} imports the contract" "$(own_module_imports)"
 
-report "Generated contract types stay in ${grpc} and the executable" "$(
-    grep -rlE "${project}_[A-Za-z]+_V[0-9]+_" Sources 2>/dev/null | grep -vE "^Sources/(${grpc}|${service})/"
+report "Generated contract types stay in XGRPC, the gateway's HTTP target and the executable" "$(
+    grep -rlE "${project}_[A-Za-z]+_V[0-9]+_" Sources 2>/dev/null | grep -vE "^Sources/(${grpc}|${service}HTTP|${service})/"
 )"
 
 report "Only the executable reads configuration" "$(
