@@ -41,7 +41,7 @@ package enum LoanStatus: String, Equatable, Sendable {
 
 - A model is a `package struct` of `let` properties, `Equatable` and `Sendable`, with an explicit `package init`.
 - It's named for what it is in the service's language ([naming](conventions.md#naming)).
-- Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text.
+- Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text. A validated value, such as an `EmailAddress`, travels as itself through models, commands and ports, never as the `String` it was made from.
 - A rule more than one use case applies lives on a model or a policy, never in a use case for another to copy: `LoanPolicy.dueDate(borrowedAt:)`, a throwing `EmailAddress(_:)` that normalizes and validates.
 - A value operators change is a policy value (`LoanPolicy`, with `maximumActiveLoans` and `loanPeriod`), passed to the use cases that apply it and read from configuration by the executable ([configuration](composition.md#configuration)). A limit the domain fixes, such as an email address's 254 characters, is a static on its model (`EmailAddress.maximumLength`).
 - What the service knows about another service's data is its own model, in `Ports/`, beside the port that returns it: Loans' `Book` holds an id and a title, not Catalog's whole book.
@@ -65,7 +65,7 @@ package enum BorrowBookUseCaseError: Error, Equatable {
 }
 ```
 
-- Each error is an enum, `Error, Equatable`, with no associated values unless the caller acts on them, and without messages: a transport writes the message its caller reads ([status codes](grpc.md#status-codes)).
+- Each error is an enum, `Error, Equatable`, with no associated values unless the caller acts on them, and without messages: a transport writes the message its caller reads ([status codes](grpc.md#status-codes)). Its file holds only the enum; what a state means for a caller, such as whether a loan can still be returned, is a method on the model (`loan.isReturnable`).
 - A case names an outcome in the domain's terms (`bookNotFound`, `loanLimitReached`), never the failure that caused it (`queryFailed`).
 - `unknown` is the use case's last case: everything it can't name, logged where it's thrown.
 - A repository or port adapter raises only reasons it can detect, such as a constraint or a status code, and lets every other error propagate unchanged. A cache's read is the one exception ([Valkey](persistence.md#valkey)).
@@ -98,7 +98,7 @@ package struct CreateLoanCommand: Sendable {
 ```
 
 - A repository is the persistence of one area, in Core's terms ([naming](conventions.md#naming)). A read of one row returns an optional (`loan(id:)`), of several an array (`activeLoans(userID:)`).
-- A write that takes more than an id takes a command.
+- A write that takes more than an id takes a command, an update of several fields included (`ExtendLoanCommand`). A write that changes several rows returns them, never only their ids.
 - Methods use untyped `async throws`: a driver throws errors the domain doesn't name, and `XRepositoryError` carries the few it does.
 - A scope builds the repository on its transaction's connection ([database roles](persistence.md#database-roles)); nothing keeps one past the transaction.
 

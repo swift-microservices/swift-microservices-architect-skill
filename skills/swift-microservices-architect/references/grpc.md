@@ -258,7 +258,7 @@ extension Bookshelf_Loans_V1_Loan {
 }
 ```
 
-- Into Core, a conversion refuses what the wire allows and the domain doesn't: an id that isn't a UUID, an `…_UNSPECIFIED` or unrecognized enum value.
+- Into Core, a conversion refuses what the wire allows and the domain doesn't: an id that isn't a UUID, an `…_UNSPECIFIED` or unrecognized enum value, an unset message field the domain needs, such as a `Timestamp` (`hasDueDate`).
 - Out of Core, a conversion is total: every case of a Core enum maps to a proto value in an exhaustive `switch`, and an open set converts through its `rawValue`.
 - Conversions are the only code that sees both a generated type and a Core type.
 
@@ -349,7 +349,7 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 
 - It translates only the statuses a use case acts on; any other error propagates unchanged, so the use case that logs it logs its cause.
 - `notFound` on a lookup becomes `nil`, matching the port's optional.
-- The response conversion (`Book+Protobuf.swift` in `Clients/Protobuf/`) throws on a malformed message rather than inventing a value.
+- The response conversion (`Book+Protobuf.swift` in `Clients/Protobuf/`) throws on a malformed message, such as an id that isn't a UUID or an unset field the domain needs, rather than inventing a value.
 - Every call has a deadline: the client's `ServiceConfig` sets one for all methods, and a port that needs a tighter bound passes `CallOptions` with its own `timeout`.
 
 ## Transports

@@ -53,7 +53,7 @@ Each service publishes one proto package, `<project>.<x>.v1`, with one `XService
 - A service with no process calling in has no internal service. An RPC that would answer anyone's question about someone else (an account by email) is internal only.
 - Proto services and RPCs are named as [naming](conventions.md#naming) gives them.
 - Each contract owns its messages; no message is shared between contracts.
-- A create that a client may retry carries an `idempotency_key`; the owner deduplicates on it.
+- A create that a client may retry carries an `idempotency_key`; the owner deduplicates on it. A request that opens a record is a create whatever its verb: `BorrowBook` opens a loan.
 
 Message rules and the package layout: [contracts in the protos package](grpc.md#contracts-in-the-protos-package).
 

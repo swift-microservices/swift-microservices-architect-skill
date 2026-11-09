@@ -31,7 +31,7 @@ A service declares only the roles it uses: Catalog has no tenant table and runs 
 
 Row-level security holds while the role a caller's transaction runs as isn't a superuser, has no `BYPASSRLS` and doesn't own the table, and the caller is bound with the transaction-local `set_config(…, true)`, Postgres's `SET LOCAL` ([binding the tenant](#binding-the-tenant)). `CreateServiceRole` creates such roles, and no process but the migrator connects as the owner.
 
-The internal and worker roles see every row, so a query on them that acts for one user names that user in its own `WHERE`. A read by id that relies on the tenant policy confines nothing there.
+The internal and worker roles see every row, so a query on them that acts for one user, a system use case's read for one user included, names that user in its own `WHERE`. A read by id that relies on the tenant policy confines nothing there.
 
 ```swift
 package import LoansCore
