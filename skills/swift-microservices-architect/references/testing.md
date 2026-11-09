@@ -1,6 +1,6 @@
 # Testing
 
-Tests follow the module map: each target is tested on its own, over mocks of the protocols it depends on. The test code inside, with Swift Testing's `@Test`, `#expect`, traits and parameterized cases, follows the Swift Testing skill (`swift-testing-expert`).
+Tests follow the module map: each target is tested on its own, over mocks of the protocols it depends on. [Style](style.md) governs `Sources/`; the test code in `Tests/`, with Swift Testing's `@Test`, `#expect`, traits and parameterized cases, follows the Swift Testing skill (`swift-testing-expert`) instead.
 
 ## Test targets
 
@@ -24,7 +24,7 @@ Each module has a test target. It depends on the module, the modules whose types
 | Test target | Tests | Over |
 |---|---|---|
 | `XCoreTests` | Each use case: its result and every case of its error | `MockDatabase` with a scope of mock repositories, and mocks of its ports; `TemporalTestKit`'s test server for one that starts a workflow, since `TemporalClient` is a concrete type |
-| `XCoreTests`, for workflows | Each workflow's path, and replays of recorded histories | `TemporalTestKit`'s time-skipping test server, running the activity container over mocks |
+| `XCoreTests`, for workflows | Each workflow's path | `TemporalTestKit`'s time-skipping test server, running the activity container over mocks |
 | `XCoreTests`, for activity containers | Each activity's mapping, calling its method directly | Mocks of the container's use case and port protocols |
 | `XGRPCTests` | Each handler: the caller it requires, its conversions, every error case's status | Mock use cases, and a principal bound in `OperationContext` |
 | `XPostgresTests` | Statements, repositories, row-level security as each role, migrations | A real Postgres, the one dependency a mock can't stand in for |

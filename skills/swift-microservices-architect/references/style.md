@@ -26,6 +26,11 @@ The bar is the sample code in Apple's WWDC sessions, such as *Meet async/await i
 - `// MARK: -` names the sections of a composition root and the groups inside a type: a service's RPCs by audience, a router builder's tiers, an activity container's steps.
 - Code that a reader would otherwise check twice gets a one-line comment with the reason: a business rule, an ordering constraint, a safety property. A comment never narrates the next line.
 
+A feature is built the established way. Before writing one, look up the standard or documented practice that covers it: an RFC, OWASP's guidance, or the provider's or library's documented approach, such as RFC 9457 for problem details, RFC 8725 for JWTs, OWASP's password storage and the IETF `Idempotency-Key` header.
+- Adopt that practice within this skill's rules, and never invent a scheme where a standard exists.
+- Handle what most production systems meet. A rare edge case gets a sentence to the user, not code.
+- Without web access, tell the user that the approach comes from prior knowledge, unchecked against the current standard.
+
 ## Build, then call
 
 A value a call takes is built first, in a `let` named for what it is, and the call takes the name:

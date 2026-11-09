@@ -63,7 +63,7 @@ The agent loads the skill when a task matches it, or when asked: `/swift-microse
 - "Set up CI/CD for the loans service."
 - "Review this service's architecture and code style."
 
-To plan a backend, add a service, an operation or a durable process, set up CI/CD or review a backend, the agent follows the skill's checklist, and one that changes code ends with a build and a test run repeated until both pass.
+To plan a backend, add a service, an operation or a durable process, set up CI/CD or review a backend, the agent follows the skill's checklist. One that adds a feature starts by looking up the established standard for it, such as an RFC or OWASP's guidance, and one that changes code ends with a build and a test run repeated until both pass.
 
 ## What it covers
 
@@ -75,7 +75,7 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 | Persistence | Postgres roles and row-level security, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details |
-| Workflows | Temporal workflows and activities in Core, determinism, retries, versioning, the worker |
+| Workflows | Temporal workflows and activities in Core, how use cases start them, determinism, activity options, the worker |
 | Composition | Commands, configuration, logging, and graceful shutdown |
 | Security | mTLS with certificate reloading, JWTs and key rotation, secrets, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
@@ -92,6 +92,7 @@ The skill decides the shapes; these skills cover the code inside them:
 
 - [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill): actors, task groups, `Sendable` diagnostics
 - [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
+- [Temporal Developer](https://github.com/temporalio/skill-temporal-developer): how a workflow is designed and behaves, from signals and updates to versioning
 - A `swift-api-design-guidelines` skill: argument labels, method names, documentation comments
 
 ## Repository layout

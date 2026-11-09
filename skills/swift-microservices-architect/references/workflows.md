@@ -9,7 +9,6 @@ Durable processes on Temporal with swift-temporal-sdk: when work is a workflow, 
 - Determinism
 - Activities
 - Activity options
-- Histories and versions
 - The worker
 
 ## When work is a workflow
@@ -33,7 +32,7 @@ A use case that starts a workflow holds the concrete `TemporalClient` and the ta
   - `.rejectDuplicate` keeps a failed run from running again without a person. The error then propagates, since catching it would report unfinished work as done.
 - `catch is WorkflowAlreadyStartedError` joins the use case's one `do` when its answer needs nothing the `do` built, such as a webhook's. One that returns what the path built, as `BorrowBook` returns its loan, wraps the start in an inner `do` that ends the path.
 - The use case starts the workflow after its transaction commits; [transactions](use-cases.md#transactions) say how a lost start is recovered.
-- A start doesn't wait for the result. A use case that needs a workflow's state queries it, and a signal or an update goes the same way, through `TemporalClient`: `temporalClient.workflowHandle(type: LoanWorkflow.self, id: workflowID)`, then `handle.signal(signalType:input:)`, `handle.query(queryType:input:)` or `handle.executeUpdate(updateType:input:)`. A signal reaches only a run in flight and fails once the run has closed, so a fact that outlives the run, such as a return, stays in the database, where the activity that acts on it reads it (`markOverdue`).
+- A start doesn't wait for the result. A use case reaches a run through `TemporalClient`: `temporalClient.workflowHandle(type: LoanWorkflow.self, id: workflowID)`, then `handle.signal(signalType:input:)`, `handle.query(queryType:input:)` or `handle.executeUpdate(updateType:input:)`. A fact that outlives the run, such as a return, stays in the database, where the activity that acts on it reads it (`markOverdue`).
 
 A workflow a provider's [webhook](security.md#webhooks) starts takes ids, not the event's body, since events arrive more than once and out of order, and its id names the event. Started with the same two policies, a redelivery joins the run in flight, or runs again after a failure.
 
@@ -97,13 +96,9 @@ extension LoanWorkflow {
 ```
 
 - `run(context:input:)` reads as the process: wait, check, act, one activity per step. It's `mutating` when it or a handler changes the workflow's state.
-- A workflow takes a nested `Input` and returns a nested `Output` (or nothing), with explicit initializers, so fields can be added later.
+- A workflow takes a nested `Input` and returns a nested `Output` (or nothing), with explicit initializers.
 - Every payload is `Codable, Sendable`, and so is every type it holds: a workflow's input and output, a signal's, query's or update's, and an activity's. The SDK requires only `Sendable` and checks `Codable` when it converts the value, so a missing conformance compiles, then fails on every attempt. A domain enum a payload needs is mirrored as a nested enum.
 - State that handlers change is the workflow's private stored properties. A signal is a `@WorkflowSignal mutating func`; a query a `@WorkflowQuery func` taking `input:` and returning a value, which can't mutate; an update, which changes state and answers, a `@WorkflowUpdate`. The macros generate the types callers name, the method's name capitalized.
-- Waiting: `context.sleep(for:)` for time; `context.condition { … }` for state a handler sets; both together with the condition inside `context.timeout(for:)`, catching `CanceledError` as the timeout.
-- A step that is itself a process is a child workflow, `context.executeChildWorkflow(_:options:input:)`, with a deterministic id.
-- An outcome the process continues from is an activity's return value, not an error: `markOverdue` returns whether it marked the loan, and the workflow branches on it. Errors are failures, and a failure ends the run; undoing an earlier step's effect is another activity, run before the run ends.
-- Comments give the business reason for a step or an order, never what the next line does.
 
 ## Determinism
 
@@ -196,10 +191,9 @@ package struct LoanActivities {
 
 - An activity runs a [system use case](use-cases.md#system-use-cases) when the step reads or writes this service's data, on the worker's database, and calls a port when the step is one effect another system owns; a use case that would only forward to the port adds nothing. It makes no business decision: the use case decides, and the activity reports what it decided.
 - Its input is a small struct nested in the container, named for the activity (`MarkOverdueInput`), holding ids and values, never commands; the activity builds what the use case or port takes.
-- It returns a primitive (`Bool`) or a small nested output holding only what the workflow reads, never a domain model, which isn't `Codable` and would put the whole record in the history.
+- It returns a primitive (`Bool`) or a small nested output holding only what the workflow reads, never a domain model, which isn't `Codable`.
 - It maps a permanent failure, a case no retry can change, to `ApplicationError(message:type:isNonRetryable: true)`, catching that case explicitly. Every other error propagates, and Temporal retries it.
 - It's safe to run twice: writes are conditional or keyed, and external effects carry an idempotency key derived from the workflow's subject (`loans-overdue-notice-<loan id>`).
-- An activity that runs long calls `ActivityExecutionContext.current?.heartbeat()` regularly, and its options set `heartbeatTimeout`: without one, neither cancellation nor a lost worker reaches it before `startToCloseTimeout`.
 - Activities are registered by name, the method's name capitalized (`MarkOverdue`).
 
 ## Activity options
@@ -221,15 +215,6 @@ extension ActivityOptions {
     )
 }
 ```
-
-- Every activity has a `startToCloseTimeout` bounding one attempt; `scheduleToCloseTimeout` bounds all attempts when the process can't wait indefinitely.
-- `maximumAttempts: 0`, the default, retries until the schedule-to-close timeout, or for as long as the run lives without one; a bounded count is for effects that may be abandoned.
-
-## Histories and versions
-
-- A workflow's inputs, outputs and activity results are stored in its history. They hold ids and small values, never personal data, secrets or tokens; an activity reads those when it runs.
-- A recorded history must still decode: add `Codable` fields as optionals, and never rename or remove a field, or an enum case, that a running workflow's history holds.
-- Changing the commands a workflow issues, by adding, removing or reordering activities, timers or child workflows, breaks replay of runs started under the old code. Branch on `context.patch("<change>")` until those runs finish, then `context.deprecatePatch`; or give the new process a new workflow type.
 
 ## The worker
 
