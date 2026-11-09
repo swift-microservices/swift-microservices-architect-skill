@@ -73,10 +73,10 @@ CREATE POLICY worker_all ON loans TO "loans_worker" USING (true);
 
 ## Binding the tenant
 
-The swift-microservices libraries and `<org>-core` carry the caller from the token to the transaction:
+The swift-microservices libraries and `<project>-core` carry the caller from the token to the transaction:
 
 1. `BearerAuthenticationInterceptor` binds the token's `Principal<UserIdentity, String>` in `OperationContext`.
-2. `UserSettingsInterceptor` from `<Org>Persistence`, applied after it to the same descriptors, binds `OperationContext.postgresSettings = .user(identity)`, which is `["app.caller_user_id": "<lowercased user id>"]`; with no user bound it binds nothing.
+2. `UserSettingsInterceptor` from `<Project>Persistence`, applied after it to the same descriptors, binds `OperationContext.postgresSettings = .user(identity)`, which is `["app.caller_user_id": "<lowercased user id>"]`; with no user bound it binds nothing.
 3. `PostgresDatabase.withTransaction` reads the settings from `OperationContext` as each transaction begins, applies them over its constant settings with `set_config(name, value, true)`, and only then builds the scope.
 4. The setting is transaction-local: it ends with the transaction, by commit or rollback, so a pooled connection never carries one caller's setting into the next caller's transaction.
 

@@ -2,7 +2,7 @@
 #
 # Checks what SPM can't about a service's boundaries. Run it from the service's root:
 #
-#     check_boundaries.sh <X> <Org>
+#     check_boundaries.sh <X> <Project>
 #     check_boundaries.sh Loans Bookshelf
 #
 # Prints each violation under the rule it breaks, and exits 1 if there is any.
@@ -10,7 +10,7 @@
 set -u
 
 if [ "$#" -ne 2 ]; then
-    echo "usage: check_boundaries.sh <X> <Org>" >&2
+    echo "usage: check_boundaries.sh <X> <Project>" >&2
     exit 2
 fi
 
@@ -20,7 +20,7 @@ if [ ! -d Sources ] || [ ! -f Package.swift ]; then
 fi
 
 service=$1
-org=$2
+project=$2
 core="Sources/${service}Core"
 grpc="${service}GRPC"
 executable="Sources/${service}"
@@ -87,7 +87,7 @@ own_module_imports() {
 report "Adapters import no sibling adapter, and only ${grpc} imports the contract" "$(own_module_imports)"
 
 report "Generated contract types stay in ${grpc} and the executable" "$(
-    grep -rlE "${org}_[A-Za-z]+_V[0-9]+_" Sources 2>/dev/null | grep -vE "^Sources/(${grpc}|${service})/"
+    grep -rlE "${project}_[A-Za-z]+_V[0-9]+_" Sources 2>/dev/null | grep -vE "^Sources/(${grpc}|${service})/"
 )"
 
 report "Only the executable reads configuration" "$(

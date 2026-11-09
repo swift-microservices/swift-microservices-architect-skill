@@ -16,7 +16,7 @@ Contracts, the proto services a service implements, their handlers and conversio
 
 ## Contracts in the protos package
 
-`<org>-protos/Sources/LoansProtos/bookshelf/loans/v1/loans.proto`:
+`<project>-protos/Sources/LoansProtos/bookshelf/loans/v1/loans.proto`:
 
 ```proto
 syntax = "proto3";
@@ -105,7 +105,7 @@ service LoanService {
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
 - A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).
 - A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`.
-- Contracts release before the services that implement or call them ([the organization's core package](packages.md#the-organizations-core-package)). A service that serves a new RPC or field deploys before any caller or gateway route that uses it, and never removes an RPC a deployed caller still uses.
+- Contracts release before the services that implement or call them ([the project's core package](packages.md#the-projects-core-package)). A service that serves a new RPC or field deploys before any caller or gateway route that uses it, and never removes an RPC a deployed caller still uses.
 
 ## A service's gRPC services
 
@@ -354,7 +354,7 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 
 ## Transports
 
-The executable builds the server's and each client's transport from `<Org>Transport`'s readers ([mutual TLS](security.md#mutual-tls)), as [the composition root](composition.md#the-composition-root) shows:
+The executable builds the server's and each client's transport from `<Project>Transport`'s readers ([mutual TLS](security.md#mutual-tls)), as [the composition root](composition.md#the-composition-root) shows:
 
 - One `clientSecurity` serves every client of the process, and each upstream gets its own scoped configuration (`grpc.catalog`) with its host, port, transport config and service config.
 - The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.

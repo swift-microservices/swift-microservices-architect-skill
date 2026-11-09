@@ -36,12 +36,12 @@ Each module has a test target. It depends on the module, the modules whose types
 - Other adapter targets (`XValkeyTests`, `X<Provider>Tests`) test their own mapping the same way, and the executable's readers and defaults, when tested, are in `XTests`.
 - `XPostgresTests` fail, rather than skip, when `POSTGRES_HOST` is unset. No check is turned off to make CI pass.
 
-`<org>-core`'s products are what every service trusts, so their tests prove:
+`<project>-core`'s products are what every service trusts, so their tests prove:
 
 | Test target | Proves |
 |---|---|
-| `<Org>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip; refusal of an expired token and of a `sub` that isn't a UUID; the `.user` metadata provider |
-| `<Org>PersistenceTests` | Both branches of `UserSettingsInterceptor`: a bound user's setting, and nothing when none is bound |
+| `<Project>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip; refusal of an expired token and of a `sub` that isn't a UUID; the `.user` metadata provider |
+| `<Project>PersistenceTests` | Both branches of `UserSettingsInterceptor`: a bound user's setting, and nothing when none is bound |
 
 ```
 Tests/
@@ -54,4 +54,4 @@ Tests/
 - A mock conforms to the protocol it stands in for and is named for it: `MockLoanRepository`, `MockCatalogClient`, `MockBorrowBookUseCase` for `BorrowBookUseCaseProtocol`.
 - It's hand-written: it returns, or throws, what its initializer was given. One that records its calls is a `final class` keeping them in a `Mutex`, so it stays `Sendable` without `@unchecked`. There's no mocking framework.
 - A mock lives in the `Mocks/` folder of the test target that uses it, never in a module's sources.
-- A mock every service would write alike comes from a shared package's testing product instead. `<Org>Testing` holds `MockDatabase<Scope>`, which runs a transaction's closure on the scope a test gives it, and `MockAuthenticator`, which maps tokens to identities. A library whose protocols services depend on may ship such a product too.
+- A mock every service would write alike comes from a shared package's testing product instead. `<Project>Testing` holds `MockDatabase<Scope>`, which runs a transaction's closure on the scope a test gives it, and `MockAuthenticator`, which maps tokens to identities. A library whose protocols services depend on may ship such a product too.

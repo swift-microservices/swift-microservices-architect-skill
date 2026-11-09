@@ -6,7 +6,7 @@ Every change to the skill ends with [the checks](#after-every-change), repeated 
 
 ## What the skill is for
 
-- It decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together: Core's models, errors, repositories, ports, use cases and workflows; the Postgres, gRPC, Valkey and provider adapters; the gateway; the composition roots; the shared `<org>-core` and `<org>-protos` packages; how each package is tested, released and deployed; and how the code reads and is named.
+- It decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together: Core's models, errors, repositories, ports, use cases and workflows; the Postgres, gRPC, Valkey and provider adapters; the gateway; the composition roots; the shared `<project>-core` and `<project>-protos` packages; how each package is tested, released and deployed; and how the code reads and is named.
 - It states shapes and rules. The code inside a shape that isn't architecture (actor design, task group technique, test code) belongs to the skills under Related skills in `SKILL.md`.
 - Out of scope until decided: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends.
 
@@ -66,7 +66,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - CI/CD guidance states what a repository declares (its files, inputs, secrets and settings) and what its code must pass (the flags, checks and toolchains the CI pipelines apply, so an agent can reproduce them). How swift-microservices/ci implements them is that repository's documentation, not the skill's.
 - The code style is `SKILL.md`'s Code style and `style.md`; every example follows it, and a change never weakens it.
 - Describe the current design only, with no dates, old names, renames, migrations of the skill or history. A library's version appears only in `Package.swift` lower bounds and `stack.md`.
-- One term per concept, from this list, with no synonyms: service, `<org>-core`, capability, area, use case, system use case, repository, command, port, scope, database role, tenant database, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, activity container, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, CI pipeline (`library.yml`, `service.yml`), image.
+- One term per concept, from this list, with no synonyms: service, `<project>-core`, capability, area, use case, system use case, repository, command, port, scope, database role, tenant database, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, activity container, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, CI pipeline (`library.yml`, `service.yml`), image.
 - A new rule mustn't contradict an existing one. When it replaces one, change every place the old rule appears.
 - Voice: plain declarative sentences in the present tense, lists over paragraphs, no "you", no all-caps emphasis, no hedging.
 

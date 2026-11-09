@@ -245,7 +245,7 @@ extension InMemoryProvider {
 - Defaults hold mount paths, ports, the database's name, role names, the Temporal namespace, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
 - A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes first: `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)`. Required keys and validation live in the reader, not in the root.
 - A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
-- Readers every executable shares are `<Org>Transport`'s and `<Org>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)` ([with TLS set on it](persistence.md#valkey)), with the key names that library chose.
+- Readers every executable shares are `<Project>Transport`'s and `<Project>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)` ([with TLS set on it](persistence.md#valkey)), with the key names that library chose.
 - Keys are named as [naming](conventions.md#naming) gives them, and environment names derive from them: `postgres.service.password` is `POSTGRES_SERVICE_PASSWORD`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
 - A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
 - Secrets and key material follow [secrets](security.md#secrets).
@@ -253,7 +253,7 @@ extension InMemoryProvider {
 
 ## Logging
 
-- `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Org>Authentication` ([user tokens](security.md#user-tokens)).
+- `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Project>Authentication` ([user tokens](security.md#user-tokens)).
 - The level comes from `logLevel`, defaulting to `info`; the label is as [naming](conventions.md#naming) gives it.
 - The root's `logger` is passed to every client, database, use case and server that takes one, and bound around the group's run with `withLogger(logger)` for the libraries that log through `Logger.current`, such as swift-temporal-sdk. Nothing creates a logger of its own.
 

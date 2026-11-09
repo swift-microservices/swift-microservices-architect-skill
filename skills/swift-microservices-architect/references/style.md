@@ -63,7 +63,7 @@ Every package builds with [the Swift settings](packages.md#swift-settings).
 
 ## Access control and imports
 
-- Inside a service's package, what another target uses is `package`, the rest internal or `private`. `public` is for libraries other packages link: `<org>-core`, `<org>-protos`.
+- Inside a service's package, what another target uses is `package`, the rest internal or `private`. `public` is for libraries other packages link: `<project>-core`, `<project>-protos`.
 - A `package` struct spells its `package init`, since the memberwise initializer is internal.
 - Imports are internal by default. A file imports a module `package` when the module's types appear in its `package` declarations, `public` when in `public` ones, and plainly otherwise.
 - A file imports every module whose members it uses, since `MemberImportVisibility` hides members of modules it doesn't import.

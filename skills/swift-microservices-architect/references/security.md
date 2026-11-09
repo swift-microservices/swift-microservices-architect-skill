@@ -29,7 +29,7 @@ The edge proxy and certificate issuance belong to the deployment; this skill fix
 
 Every gRPC connection and every connection to Temporal is mutual TLS against a private certificate authority per environment. Postgres and Valkey connections are TLS against that authority, with a password proving the process. Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial.
 
-`<Org>Transport` holds the readers every executable uses:
+`<Project>Transport` holds the readers every executable uses:
 
 ```swift
 public import Configuration
@@ -84,7 +84,7 @@ extension TimedCertificateReloader.Configuration {
 
 One issuer signs every access token. Identity alone holds the EdDSA private key and issues tokens with `JWTIssuer<UserIdentity>`; every other process holds the public key and verifies with `JWTAuthenticator<UserIdentity>`.
 
-The token's payload is `<org>-core`'s `UserIdentity`:
+The token's payload is `<project>-core`'s `UserIdentity`:
 
 ```swift
 public struct UserIdentity: JWTPayload, Equatable, Sendable {
@@ -117,13 +117,13 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 
 - The token carries identity only: `sub`, `role`, `iss`, `iat`, `exp`, and `aud` where an audience is used. It carries no permissions, entitlements, business state or personal data; a use case reads those from the service that owns them.
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
-- `<Org>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`. Each key's id is its thumbprint (RFC 7638), which the issuer writes in every token's `kid` header, so a verifier picks the key a token names.
+- `<Project>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`. Each key's id is its thumbprint (RFC 7638), which the issuer writes in every token's `kid` header, so a verifier picks the key a token names.
 - Rotating the signing key keeps the old public key verifying until the tokens it signed expire: every verifier gets the new public key first, Identity then signs with the new private key, and the old public key goes once the last token it signed has expired.
 - Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes the `JWTIssuer`.
 - Access tokens are short-lived. A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh RPC, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)).
 - The gateway verifies the token to pick a tier and forwards the original with `BearerPropagationInterceptor`; each service's `BearerAuthenticationInterceptor` verifies it again. A token never travels on an internal RPC, into a workflow's input, or into a log.
 
-`<Org>Authentication` spells the lookup of the bound principal once, for handlers, interceptors and logging:
+`<Project>Authentication` spells the lookup of the bound principal once, for handlers, interceptors and logging:
 
 ```swift
 extension OperationContext {

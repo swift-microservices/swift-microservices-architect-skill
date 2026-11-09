@@ -70,7 +70,7 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 | Area | Covers |
 |---|---|
 | System design | Splitting a backend into services, contracts, how services talk, the written plan |
-| Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<org>-core` and `<org>-protos` packages |
+| Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
 | Persistence | Postgres roles and row-level security, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |

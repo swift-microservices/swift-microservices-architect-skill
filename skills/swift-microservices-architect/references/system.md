@@ -42,7 +42,7 @@ A step that was atomic across the two becomes a workflow. Moving or dropping dat
 
 ## Contracts
 
-Each service publishes one proto package, `<org>.<x>.v1`, with one `XService` and at most one `XInternalService`:
+Each service publishes one proto package, `<project>.<x>.v1`, with one `XService` and at most one `XInternalService`:
 
 | Proto service | Called by | Admitted by |
 |---|---|---|
@@ -77,22 +77,22 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 
 ## The shared packages
 
-Besides the swift-microservices libraries ([stack](stack.md)), every service and the gateway depend on two packages of the organization's own.
+Besides the swift-microservices libraries ([stack](stack.md)), every service and the gateway depend on two packages of the project's own.
 
-**`<org>-core`** holds what every service would otherwise write identically:
+**`<project>-core`** holds what every service would otherwise write identically:
 
 | Product | Holds | Linked by |
 |---|---|---|
-| `<Org>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, executables |
-| `<Org>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:)` | Executables with Postgres |
-| `<Org>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys | Executables |
-| `<Org>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
+| `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, executables |
+| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:)` | Executables with Postgres |
+| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys | Executables |
+| `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
 
 It holds none of these: a service's models, repositories, scopes or migrations; contracts; deployment defaults such as mount paths, ports and role names, which stay in each executable's `InMemoryProvider` defaults; generic abstractions, which belong to the swift-microservices libraries; a process identity or service token, since certificates prove processes.
 
-**`<org>-protos`** holds one target per contract (`IdentityProtos`, `CatalogProtos`, `LoansProtos`), generated at build time, so a consumer links only the contracts it calls. A package of its own lets contracts release apart from `<org>-core`.
+**`<project>-protos`** holds one target per contract (`IdentityProtos`, `CatalogProtos`, `LoansProtos`), generated at build time, so a consumer links only the contracts it calls. A package of its own lets contracts release apart from `<project>-core`.
 
-Both packages: [the organization's core package](packages.md#the-organizations-core-package), [the contracts package](packages.md#the-contracts-package).
+Both packages: [the project's core package](packages.md#the-projects-core-package), [the contracts package](packages.md#the-contracts-package).
 
 ## The plan
 
@@ -110,7 +110,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 |---|---|---|
 
 ## Module maps
-### <org>-<x>
+### <project>-<x>
 | Target | Holds |
 |---|---|
 - Commands: `serve [--migrate-database]`, `worker run`
@@ -118,8 +118,8 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 - Calls out to: other services' internal RPCs, providers, Temporal, Valkey
 
 ## Shared packages
-- <org>-core: each product and what it holds
-- <org>-protos: one target per contract
+- <project>-core: each product and what it holds
+- <project>-protos: one target per contract
 
 ## Gateway routes
 | Route | Tier | Upstream RPC |

@@ -17,7 +17,7 @@ How each package is tested, released and deployed. A repository's CI workflows c
 | Kind | Packages | Ships as |
 |---|---|---|
 | Public library | The swift-microservices libraries, any open-source package | Semantic versions, for anyone |
-| System library | `<org>-core`, `<org>-protos` | Semantic versions, for the organization's services and gateway |
+| System library | `<project>-core`, `<project>-protos` | Semantic versions, for the project's services and gateway |
 | Service | Each service, and the gateway | An image per commit on `main`, deployed to staging, then to production by hand; no versions or labels, and no long-lived branch but `main` |
 
 ## CI workflows
@@ -39,7 +39,7 @@ Each repository's `.github/workflows/` holds these, each file's `name:` in paren
 - Soundness checks every file's license header against `.license_header_template`, which holds the compact SPDX header with `@@` for the comment marker and `YEARS` for the year. `.licenseignore` lists `LICENSE` and `Package.swift`, whose tools-version line must come first.
 - A library's pull request carries exactly one label: `⚠️ semver/major`, `🆕 semver/minor`, `🔨 semver/patch` or `semver/none`. Below 1.0, a breaking change is minor and an addition patch; a doc-comment fix is patch; a change to the README, tests or CI is none.
 - Release tags the next version without a `v` and writes its notes grouped by `.github/release.yml`; the first release and every major one are tagged by hand. A tag never moves: a bad release is fixed forward with a new version.
-- Secrets: `PACKAGES_TOKEN`, passed only by a package with private dependencies, which is all that marks them: a fine-grained token owned by the organization, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy its applications.
+- Secrets: `PACKAGES_TOKEN`, passed only by a package with private dependencies, which is all that marks them: a fine-grained token owned by `<owner>`, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy its applications.
 
 ## Tests
 
@@ -94,7 +94,7 @@ jobs:
 - `api_breakage_check_enabled` is `true` from 1.0, so a breaking change shows on its pull request, and `false` below 1.0, where a minor release may break the API.
 - A public library builds on every toolchain its users may have: `linux_swift_versions` from its tools version up through the newest release, then `nightly-main` and the next release's nightly; `linux_host_archs: '["x86_64", "aarch64"]'`; `enable_linux_static_sdk_build: true`.
 - A library with DocC catalogs lists their targets in `docs_check_targets`, and Soundness fails on any DocC warning in them.
-- `<org>-protos`, which has no tests, passes `linux_build_command: swift build -c release`.
+- `<project>-protos`, which has no tests, passes `linux_build_command: swift build -c release`.
 
 ## A service's CI workflows
 

@@ -8,7 +8,7 @@ license: MIT
 
 In a backend built another way, keep its structure and conventions unless the user asks to change them, and take a shape from this skill only for what the backend lacks.
 
-`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Org>` and `<org>` for the organization. The examples are Bookshelf, a small lending library:
+`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Project>` and `<project>` for the project. The examples are Bookshelf, a small lending library:
 
 | Package | Holds |
 |---|---|
@@ -28,12 +28,12 @@ Service, worker ── gRPC, mTLS ──► another service's XInternalService
 Service, worker ── mTLS ──► Temporal          Service ──► its own Postgres database, Valkey
 ```
 
-Every service and the gateway depend on `<org>-core`, `<org>-protos` and the swift-microservices libraries ([stack](references/stack.md)).
+Every service and the gateway depend on `<project>-core`, `<project>-protos` and the swift-microservices libraries ([stack](references/stack.md)).
 
 ## A service's package
 
 ```
-<org>-x
+<project>-x
 ├── XCore         domain models, errors, repository protocols and commands, ports, use cases, workflows, activity containers
 ├── XPostgres     a scope per database role, repositories, statements, migrations
 ├── XGRPC         XService and XInternalService, Protobuf conversions, gRPC clients for Core's ports
@@ -57,12 +57,12 @@ A service has only the targets it needs, and each imports only what [its row](re
 | Business rules, authorization decisions, what an error means | The use case, in XCore; adapters only convert and delegate |
 | What a service knows about another's data | A model in its XCore `Ports/`, beside the port that returns it |
 | Protobuf ↔ domain, HTTP ↔ protobuf | XGRPC's `Protobuf/` conversions; the gateway's `Schemas/` |
-| Messages between processes; the public API | `<org>-protos`; the gateway's `openapi.yaml` |
+| Messages between processes; the public API | `<project>-protos`; the gateway's `openapi.yaml` |
 | Who the caller is | The gateway verifies and forwards the token; each service verifies it again |
 | Which processes may call an internal RPC | mTLS at the listener: every process the environment's authority signs |
-| Tenant isolation | Row-level security; `<Org>Persistence` binds the caller to each transaction, and each audience's use cases run as [their database role](references/persistence.md#database-roles) |
+| Tenant isolation | Row-level security; `<Project>Persistence` binds the caller to each transaction, and each audience's use cases run as [their database role](references/persistence.md#database-roles) |
 | Durable, delayed or multi-service work | A Temporal workflow in XCore's `Workflows/` |
-| What every service needs identically | `<org>-core`: identity, tenant binding, transport readers |
+| What every service needs identically | `<project>-core`: identity, tenant binding, transport readers |
 
 ## Code style
 
@@ -108,16 +108,16 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] Name each service; check its target names against every module in the graph
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, short-lived state
 - [ ] Per service: its targets, commands and database roles
-- [ ] <org>-core's products, <org>-protos' contracts, the gateway's routes by tier
-- [ ] Build order: <org>-core and <org>-protos, the token issuer, each service before its callers, the gateway
+- [ ] <project>-core's products, <project>-protos' contracts, the gateway's routes by tier
+- [ ] Build order: <project>-core and <project>-protos, the token issuer, each service before its callers, the gateway
 - [ ] Write the plan from system.md#the-plan; check it against the hard rules before any code
 ```
 
 **Add a service**
 
 ```
-- [ ] <org>-protos: XProtos with XService, and XInternalService if processes call in
-- [ ] Package <org>-x from packages.md#packageswift-template, with only the targets the plan names
+- [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in
+- [ ] Package <project>-x from packages.md#packageswift-template, with only the targets the plan names
 - [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
 - [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md)
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
