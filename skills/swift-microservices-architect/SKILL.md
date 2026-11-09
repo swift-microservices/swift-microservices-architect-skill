@@ -107,6 +107,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
 - [ ] Name each service; check its target names against every module in the graph
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, short-lived state
+- [ ] With workflows in the plan: load temporal-developer before shaping them
 - [ ] Per service: its targets and commands; whether it stores data, where, its roles and how processes prove them (system.md#data-placement)
 - [ ] <project>-core's products, <project>-protos' contracts, the gateway's routes by tier
 - [ ] Build order: <project>-core and <project>-protos, the token issuer, each service before its callers, the gateway
@@ -122,10 +123,10 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
 - [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md)
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
-- [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs
+- [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer
 - [ ] X: commands, InMemoryProvider defaults, Migrations, Serve, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
-- [ ] A test target per module, over mocks (testing.md)
+- [ ] A test target per module, over mocks (testing.md), written with swift-testing-expert
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
 - [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
 ```
@@ -140,7 +141,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] XGRPC: the handler and the input's conversion, every error case mapped
 - [ ] Executable: the use case on its role's database, passed to the service
 - [ ] Gateway: the route in its tier, if public
-- [ ] Tests: the use case's outcomes and the handler's statuses, over mocks
+- [ ] Tests: the use case's outcomes and the handler's statuses, over mocks, written with swift-testing-expert
 - [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
 ```
 
@@ -148,11 +149,12 @@ Copy the task's checklist into the response and check items off as they're done;
 
 ```
 - [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
+- [ ] Load temporal-developer, and design the workflow with it: signal or update, waiting, compensation, versioning
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
 - [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)
 - [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
 - [ ] Executable: TemporalClient and the task queue into Serve's use cases; the worker group and its Run root
-- [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks
+- [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks, written with swift-testing-expert
 - [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
 ```
 
@@ -172,6 +174,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] Each use case: its five files, typed throws, one catch per case, no helpers, the right database role
 - [ ] Each adapter only converts and delegates; every error case is mapped
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
+- [ ] Workflows checked with temporal-developer, and tests with swift-testing-expert, where the backend has them
 - [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), FoundationEssentials imports, package access, naming (conventions.md)
 - [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (the shapes), minor (naming, layout, logging), each citing a file and line or an empty grep, with the rule and the fix; then the user's decisions. Change code only when asked
 - [ ] swift build and swift test; report each result, or why it couldn't run
@@ -200,8 +203,8 @@ Read each reference when its row applies:
 
 ## Related skills
 
-For the code inside the shapes, load these when installed; where this skill states a shape, follow it:
-- Actors, task groups, cancellation, `Sendable` diagnostics, Swift 6 migration: `swift-concurrency`
-- Argument labels, method names, documentation comments: `swift-api-design-guidelines`
-- Tests of use cases, handlers and workflows: `swift-testing-expert`
-- How a workflow is designed and behaves (its history, signals and updates, waiting, compensation, versioning): `temporal-developer`
+These cover the code inside the shapes; where this skill states a shape, follow it. Load each when its task comes up, and always where a checklist names it. When one isn't among the installed skills, tell the user once, with its source, and carry on with this skill alone:
+- How a workflow is designed and behaves (its history, signals and updates, waiting, compensation, versioning): `temporal-developer` ([source](https://github.com/temporalio/skill-temporal-developer))
+- Test code, with Swift Testing: `swift-testing-expert` ([source](https://github.com/AvdLee/Swift-Testing-Agent-Skill))
+- Actors, task groups, cancellation, `Sendable` diagnostics, Swift 6 migration: `swift-concurrency` ([source](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill))
+- Argument labels, method names, documentation comments: `swift-api-design-guidelines`, or another Swift API Design Guidelines skill ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
