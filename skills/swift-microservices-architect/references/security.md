@@ -19,7 +19,7 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens,
 | Gateway to a service's `XService` | gRPC over mTLS, with the caller's token | Both processes by certificate; the user by the token, verified again by the service |
 | A service or worker to another's `XInternalService` | gRPC over mTLS | Both processes by certificate; the request names the user it acts for |
 | A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate |
-| A process to Postgres | TLS, required (`.require(…)`), against the environment's authority, as one of the service's roles | The server by certificate; the role by its password |
+| A process to Postgres | TLS, required (`.require(…)`), against the environment's authority, with the process's certificate, as one of the service's roles | Both sides by certificate; the server's map admits the process to its roles only ([Postgres](#postgres)) |
 | A process to Valkey | TLS, required, against the environment's authority, with a username and password (`authentication.*`) | The server by certificate; the process by its password |
 | Inside the database | Row-level security | The tenant, by the setting bound to the transaction |
 
@@ -27,7 +27,7 @@ The edge proxy and certificate issuance belong to the deployment; this skill fix
 
 ## Mutual TLS
 
-Every gRPC connection and every connection to Temporal is mutual TLS against a private certificate authority per environment. Postgres and Valkey connections are TLS against that authority, with a password proving the process. Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial.
+Every gRPC connection and every connection to Temporal or Postgres is mutual TLS against a private certificate authority per environment. Valkey connections are TLS against that authority, with a password proving the process. Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial and whose common name is its identity (`loans`, `loans-worker`).
 
 `<Project>Transport` holds the readers every executable uses:
 
@@ -76,9 +76,30 @@ extension TimedCertificateReloader.Configuration {
 - The server requires a client certificate signed by the trust roots and doesn't match it against a hostname; the client verifies the server's chain and hostname in full. The client's reader, on `HTTP2ClientTransport.Posix.TransportSecurity`, differs in one line: `$0.serverCertificateVerification = .fullVerification`.
 - `TimedCertificateReloader` from swift-nio-extras is the `CertificateReloader` that `.mTLS(certificateReloader:)` takes. `makeReloaderValidatingSources(configuration:)` loads the pair before any transport is built, so missing, malformed or mismatched files fail startup.
 - The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair, and servers bound connection age so every connection handshakes again ([transports](grpc.md#transports)); a failed reload keeps the last good pair and logs a warning.
-- One reloader per certificate pair: the service pair under `tls` for gRPC, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services'.
+- One reloader per certificate pair: the process's pair under `tls` for gRPC and Postgres, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services', and the migrator's under `postgres.owner.tls`.
 - Issuing and renewing certificates is the deployment's job; the process only reads files. A new trust root needs a restart.
 - An internal RPC is admitted by the listener's trust alone, so every peer the authority signs may call it; internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.
+
+### Postgres
+
+A process proves its database role with its certificate, the pair its gRPC connections present, and Postgres maps the certificate's common name to the roles that identity may use:
+
+```
+# pg_hba.conf
+hostssl  bookshelf_loans  all  all  cert  map=bookshelf_loans
+
+# pg_ident.conf
+# MAPNAME         SYSTEM-USERNAME  PG-USERNAME
+bookshelf_loans   loans            loans_service
+bookshelf_loans   loans            loans_internal
+bookshelf_loans   loans-worker     loans_worker
+bookshelf_loans   loans-migrator   loans_owner
+```
+
+- The deployment provides these lines; the service names the identities and roles in them ([naming](conventions.md#naming)).
+- The migrator is an identity of its own, whose pair only the deployment running `serve --migrate-database` mounts, so no serving replica can connect as the owner.
+- `PostgresClient.Configuration(config:role:certificateReloader:)` presents the reloader's pair over required TLS. Serve and the worker pass their `tls` reloader, so each new connection presents a renewed pair; `serve --migrate-database` passes a reloader of the migrator's pair, which its short-lived client uses before the `ServiceGroup` starts and which is never run.
+- Where a managed Postgres takes no client certificates, each role proves itself with a SCRAM-SHA-256 password from the secret store instead: `PostgresClient.Configuration(config:role:)` reads it as a secret, and migrations set it ([migrations](persistence.md#migrations)).
 
 ## User tokens
 

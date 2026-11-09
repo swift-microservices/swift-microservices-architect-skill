@@ -7,7 +7,7 @@ How a backend splits into services, how they talk, and the packages they share. 
 - Naming a service
 - Contracts
 - How services talk
-- Data ownership and storage
+- Data placement
 - The shared packages
 - The plan
 - Out of scope
@@ -69,9 +69,16 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 - Calls between services form no cycle. Break one by moving ownership, extracting a third capability, or making one direction a workflow.
 - What each hop proves, and where a user's token may travel: [the trust model](security.md#the-trust-model).
 
-## Data ownership and storage
+## Data placement
 
-- Each service owns its Postgres database (`bookshelf_loans`), with an owner and a role per purpose ([database roles](persistence.md#database-roles)); whether databases share an instance is the deployment's choice, and the module map doesn't change with it.
+A service's data is its own wherever it lives: only the service reads and writes it, and every other process reaches it through the service's contract. Where the data lives and how a process reaches it are choices, each with a default; a plan that departs from one records the choice and its reason under Decisions ([the plan](#the-plan)).
+
+| Choice | Default | Other options, and when |
+|---|---|---|
+| Where a service's data lives | One Postgres server per environment, with a database per service that stores data (`bookshelf_loans`) | Its own server, for throughput, isolation or compliance, which changes configuration, not code. No database, for a service that stores nothing. Valkey alone, for a service whose state is all short-lived |
+| The roles a process connects as | The owner for migrations, then a role per audience, `<x>_service`, `<x>_internal` and `<x>_worker`, each with its own policy and none with `BYPASSRLS` ([database roles](persistence.md#database-roles)) | One role, in a service with no tenant table. `<x>_internal` and `<x>_worker` as one role, in a small system |
+| How a process proves its role | Its client certificate from the environment's authority, the one its gRPC connections present, mapped to the roles its identity may use; no role has a password ([Postgres](security.md#postgres)) | SCRAM-SHA-256 passwords from the secret store, read as secrets, for a managed Postgres that takes no client certificates |
+
 - A table whose rows belong to a user is a tenant table under [row-level security](persistence.md#row-level-security).
 - Short-lived values with an expiry live in [Valkey](persistence.md#valkey).
 
@@ -84,7 +91,7 @@ Besides the swift-microservices libraries ([stack](stack.md)), every service and
 | Product | Holds | Linked by |
 |---|---|---|
 | `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, executables |
-| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:)` | Executables with Postgres |
+| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:certificateReloader:)` for a role proved by the process's certificate, and `(config:role:)` for the password fallback | Executables with Postgres |
 | `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys | Executables |
 | `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
 
@@ -114,7 +121,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 | Target | Holds |
 |---|---|
 - Commands: `serve [--migrate-database]`, `worker run`
-- Database roles and the use cases each runs
+- Data: where it lives, the database roles and the use cases each runs, and how each process proves its roles
 - Calls out to: other services' internal RPCs, providers, Temporal, Valkey
 
 ## Shared packages
@@ -126,7 +133,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 |---|---|---|
 
 ## Decisions
-- Each boundary and why it holds; each exception to a rule, with its reason
+- Each boundary and why it holds; each departure from a default or exception to a rule, with its reason
 ```
 
 Review the plan against the hard rules in `SKILL.md` before writing code.

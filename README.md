@@ -12,7 +12,7 @@ Ask for a plan, a new service, an endpoint, a background process or a review, an
 - **A service per capability.** Each service owns its data and the rules over it. No service reads another's database; data crosses only through gRPC contracts.
 - **Boundaries the compiler enforces.** A service is one Swift package. Its Core target holds the models, use cases and Temporal workflows and imports no driver or transport; adapters for Postgres, gRPC and Valkey sit around it; one executable wires them together. Each target declares what it imports, so most crossings fail the build, and the review checklist's boundary checks catch the rest.
 - **Code that reads like the requirement.** Use cases read top to bottom, the way Apple's sample code does: typed throws, one `catch` per outcome, no helper methods.
-- **Security on every hop.** Mutual TLS on gRPC and Temporal, TLS to Postgres and Valkey, the caller's token verified again by every service, and row-level security under every tenant query.
+- **Security on every hop.** Mutual TLS on gRPC, Temporal and Postgres, TLS to Valkey, the caller's token verified again by every service, and row-level security under every tenant query.
 - **Durable work on Temporal.** Anything that waits, retries or spans services is a workflow in Core, written directly against the Temporal SDK, never a fire-and-forget task.
 - **Modern Swift.** Swift 6 language mode with strict concurrency, structured concurrency only, `package` access, and owned code importing `FoundationEssentials`, so a service drops full Foundation once its dependencies do.
 
@@ -69,10 +69,10 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 
 | Area | Covers |
 |---|---|
-| System design | Splitting a backend into services, contracts, how services talk, the written plan |
+| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan |
 | Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
-| Persistence | Postgres roles and row-level security, statements, paging, migrations, Valkey |
+| Persistence | Postgres roles proved by certificates, row-level security, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details |
 | Workflows | Temporal workflows and activities in Core, how use cases start them, determinism, activity options, the worker |

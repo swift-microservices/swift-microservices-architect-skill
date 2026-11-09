@@ -45,13 +45,14 @@
 | Mock | `Mock` + the protocol's name, without `Protocol` | `MockCatalogClient`, `MockBorrowBookUseCase`, `MockDatabase` |
 | Statement | What it does + `Statement` | `CreateLoanStatement`, `ActiveLoansByUserIDStatement` |
 | Migration | What it changes | `CreateLoansTable`, `CreateLoansRLSPolicy`, `CreateServiceRole` |
-| Database, roles, policies | `<project>_<x>`; `<x>_service`, `<x>_internal`, `<x>_worker`; `tenant_isolation`, `<role>_all` | `bookshelf_loans`, `loans_service`, `internal_all` |
+| Database, roles, policies | `<project>_<x>`; `<x>_owner`, `<x>_service`, `<x>_internal`, `<x>_worker`; `tenant_isolation`, `<role>_all` | `bookshelf_loans`, `loans_service`, `internal_all` |
+| Process identity, a certificate's common name | `<x>` for serve, `<x>-worker`, `<x>-migrator` | `loans-migrator` |
 | Columns | The snake_case of the Swift property; a stored date is a noun, never `…At` | `creation_date` for `creationDate`, `due_date`; not `created_at` |
 | Indexes unique while active | `<table>_active_<columns>_key` | `loans_active_user_id_book_id_key` |
 | Tenant setting | `app.caller_user_id` | |
 | gRPC service types | The proto service's name | `LoanService`, `BookInternalService` |
 | Gateway | Targets `GatewayHTTP`, `Gateway`; router builder `<Project>API`; `XController` per resource; `IdentityRequestContext`, `AdministratorRequestContext` | `BookshelfAPI`, `LoanController` |
-| Configuration keys | Dotted scopes with lowerCamelCase leaves; a duration names its unit | `grpc.server.port`, `postgres.service.password`, `tls.refreshIntervalSeconds` |
+| Configuration keys | Dotted scopes with lowerCamelCase leaves; a duration names its unit | `grpc.server.port`, `postgres.service.user`, `tls.refreshIntervalSeconds` |
 | Logger label | `<project>-<x>`, `<project>-<x>-worker` | `bookshelf-loans-worker` |
 | Log metadata keys | lowerCamelCase | `loanID`, `userID`, `error` |
 | Valkey keys | `<x>:<purpose>:<id>` | `identity:reset-code:…` |

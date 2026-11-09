@@ -25,7 +25,7 @@ In a backend built another way, keep its structure and conventions unless the us
 Clients ── HTTPS ──► edge (TLS ends) ── HTTP ──► Gateway (Hummingbird, OpenAPI)
 Gateway ── gRPC, mTLS, the caller's JWT ──► each service's XService
 Service, worker ── gRPC, mTLS ──► another service's XInternalService
-Service, worker ── mTLS ──► Temporal          Service ──► its own Postgres database, Valkey
+Service, worker ── mTLS ──► Temporal          Service, worker ──► its own data, wherever it lives
 ```
 
 Every service and the gateway depend on `<project>-core`, `<project>-protos` and the swift-microservices libraries ([stack](references/stack.md)).
@@ -107,7 +107,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
 - [ ] Name each service; check its target names against every module in the graph
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, short-lived state
-- [ ] Per service: its targets, commands and database roles
+- [ ] Per service: its targets and commands; whether it stores data, where, its roles and how processes prove them (system.md#data-placement)
 - [ ] <project>-core's products, <project>-protos' contracts, the gateway's routes by tier
 - [ ] Build order: <project>-core and <project>-protos, the token issuer, each service before its callers, the gateway
 - [ ] Write the plan from system.md#the-plan; check it against the hard rules before any code

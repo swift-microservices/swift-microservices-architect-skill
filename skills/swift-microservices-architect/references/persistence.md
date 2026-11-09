@@ -18,16 +18,18 @@ XPostgres implements Core's repositories over swift-persistence-postgres and Pos
 
 ## Database roles
 
-Each service's database has an owner and a role per purpose. A process connects as one or more roles, each through its own `PostgresClient` and `PostgresDatabase`:
+By default ([data placement](system.md#data-placement)), each service's database has an owner and a role per purpose. A process connects as one or more roles, each through its own `PostgresClient` and `PostgresDatabase`:
 
 | Role | Connects | Sees | Scope |
 |---|---|---|---|
-| Owner | `serve --migrate-database`, for migrations only | Everything; bypasses row-level security | none |
+| Owner | `serve --migrate-database`, for migrations only, as the migrator ([Postgres](security.md#postgres)) | Everything; bypasses row-level security | none |
 | `<x>_service` | `serve`, for anyone's and the caller's own RPCs | Tenant tables narrowed to the bound caller; untenanted tables whole | `Postgres<X>Scope` |
 | `<x>_internal` | `serve`, for administrators' and internal RPCs, and anyone's that reach tenant rows with no caller bound, such as a webhook | Every row, through its own policy | `Postgres<X>InternalScope` |
 | `<x>_worker` | `worker run`, for [system use cases](use-cases.md#system-use-cases) | Every row, through its own policy | `Postgres<X>WorkerScope` |
 
-A service declares only the roles it uses: Catalog has no tenant table and runs everything as `catalog_service`. A use case runs on its role's `PostgresDatabase`: the tenant database (`<x>_service`), the internal database or the worker's database.
+A service declares only the roles it uses: Catalog has no tenant table and runs everything as `catalog_service`, and a small system may merge `<x>_internal` and `<x>_worker` into one role with one scope. A use case runs on its role's `PostgresDatabase`: the tenant database (`<x>_service`), the internal database or the worker's database.
+
+Row-level security holds while the role a caller's transaction runs as isn't a superuser, has no `BYPASSRLS` and doesn't own the table, and the caller is bound with the transaction-local `set_config(…, true)`, Postgres's `SET LOCAL` ([binding the tenant](#binding-the-tenant)). `CreateServiceRole` creates such roles, and no process but the migrator connects as the owner.
 
 The internal and worker roles see every row, so a query on them that acts for one user names that user in its own `WHERE`. A read by id that relies on the tenant policy confines nothing there.
 
@@ -68,7 +70,7 @@ CREATE POLICY worker_all ON loans TO "loans_worker" USING (true);
 - The tenant policy is a predicate on the tenant and nothing else. Whether a caller is an administrator is decided in the use case, which runs on the internal role; a policy that reads a role is authorization in SQL, where the domain's rules can't see it.
 - `NULLIF(…, '')` is required: once a pooled connection has carried the setting, reading it in a later transaction yields `''` rather than `NULL`, and `''::uuid` is an error rather than a non-match.
 - Policies combine with `OR`, so a role's `USING (true)` widens only that role.
-- Nothing bound means nothing visible: with no caller set, the tenant policy matches no row. A service running as its owner or a superuser bypasses every policy, so processes always connect as their roles.
+- Nothing bound means nothing visible: with no caller set, the tenant policy matches no row.
 - Untenanted tables carry no policy: public data (`books`) and rows found by a secret on anonymous paths, where no caller is bound yet (refresh tokens by digest).
 
 ## Binding the tenant
@@ -204,9 +206,9 @@ package struct CreateLoansTable: DatabaseMigration {
 - One migration per change, each its own type named for what it does, since postgres-migrations records a migration by its type's name: `CreateServiceRole`, `CreateInternalRole`, `CreateWorkerRole`, `CreateLoansTable`, `CreateLoansRLSPolicy`, `AddLoansReturnDate`. The roles come first, since a policy's `TO` names them.
 - One SQL statement per `connection.query`: PostgresNIO sends every query as a prepared statement, and Postgres refuses several commands in one. `CreateLoansRLSPolicy` runs four.
 - A migration keeps the schema usable by the image before it, since a rollback runs that image on the current schema ([deployment](delivery.md#a-services-ci-workflows)): it expands now and contracts in a later deploy, and a change that renames or moves data ships with code that reads both shapes.
-- Migrations create the roles, since the database and its owner exist before the service first deploys; the owner has `CREATEROLE` for them. Role names are cluster-wide, so they carry the service's name (`loans_service`). `CreateServiceRole(role:database:)` creates the login role and grants it `CONNECT`, schema usage, `SELECT, INSERT, UPDATE, DELETE` on tables and `USAGE` on sequences, and the same for future tables through default privileges; never `ALL`, since `TRUNCATE` ignores row-level security. A migration runs once, so `Migrations.apply()` runs the list and then sets each role's password from configuration (`ALTER ROLE … PASSWORD`), and rotating one is a configuration change and a deploy. Role names and passwords come from configuration and are quoted into `PostgresQuery(unsafeSQL:)`, since a statement that names a role takes no bindings.
+- Migrations create the roles, since the database and its owner exist before the service first deploys; the owner has `CREATEROLE` for them. Role names are cluster-wide, so they carry the service's name (`loans_service`). `CreateServiceRole(role:database:)` creates the login role and grants it `CONNECT`, schema usage, `SELECT, INSERT, UPDATE, DELETE` on tables and `USAGE` on sequences, and the same for future tables through default privileges; never `ALL`, since `TRUNCATE` ignores row-level security. A role has no password: the process's certificate proves it ([Postgres](security.md#postgres)). With the password fallback, `Migrations.apply()` runs the list and then sets each role's password from configuration (`ALTER ROLE … PASSWORD`), since a migration runs once, and rotating one is a configuration change and a deploy. Role names, and the fallback's passwords, come from configuration and are quoted into `PostgresQuery(unsafeSQL:)`, since a statement that names a role takes no bindings.
 - The executable's `Database/Migrations.swift` lists them in applied order. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited or renamed.
-- `serve --migrate-database` applies them as the owner over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before the role clients and the `ServiceGroup` are built ([commands](composition.md#commands)).
+- `serve --migrate-database` applies them as the owner, proved by the migrator's certificate, over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before the role clients and the `ServiceGroup` are built ([commands](composition.md#commands)).
 - One process migrates, before the serving replicas start: postgres-migrations takes no lock, so replicas that apply at once race and all but one fail. `serve --migrate-database` runs in one process, deployed first ([a service's CI workflows](delivery.md#a-services-ci-workflows)); every other serve replica runs without the flag.
 
 ## Valkey

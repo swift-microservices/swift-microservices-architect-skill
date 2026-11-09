@@ -134,7 +134,7 @@ jobs:
       DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
 ```
 
-- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest. An environment runs it as one Dokploy application per process, `loans` (serve) and `loans worker run` ([commands](composition.md#commands)), and `application_ids` lists the one that runs `serve --migrate-database` first.
+- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest. An environment runs it as one Dokploy application per process, `loans` (serve) and `loans worker run` ([commands](composition.md#commands)), and `application_ids` lists the one that runs `serve --migrate-database` first. That application alone mounts the migrator's certificate ([Postgres](security.md#postgres)).
 - The gateway's `ci.yml` has no `postgres_image` and one application per environment, since it has no worker, and excludes `gateway` while its generated OpenAPI code links full Foundation.
 - `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls `deploy_dokploy.yml` with `environment: production`, that `commit`, the `image_repository`, the production `application_ids` and the Dokploy secrets. It deploys only a commit that staging ran.
 - `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package, keeping its 30 newest versions. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).
