@@ -48,7 +48,7 @@ The CI pipelines run the tests, and they're the gate:
 | Flag | Packages | Holds every change to |
 |---|---|---|
 | `-Xswiftc -warnings-as-errors` | Every kind, except on nightly toolchains | No warnings |
-| `--explicit-target-dependency-import-check error` | Every kind | Importing only the modules its target declares |
+| `--explicit-target-dependency-import-check error` | Every kind | Importing no module outside the target's dependency closure |
 | `-Xswiftc -require-explicit-sendable` | Libraries | Every `public` type stating whether it's `Sendable` |
 
 - The toolchain is the package's `swift-tools-version`. CI tests on it, a service and a system library on Ubuntu noble and linux/arm64, where services run, and the `Containerfile` builds on it, so moving a package to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.

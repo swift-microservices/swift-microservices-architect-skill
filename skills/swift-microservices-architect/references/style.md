@@ -45,9 +45,10 @@ let rows = try await connection.execute(statement, logger: logger)
 - Errors are mapped with `do` and one `catch` per case: `catch CatalogClientError.unavailable { throw .catalogUnavailable }`. The order and the final `catch` are in [the body of a use case](use-cases.md#the-body-of-a-use-case); a handler maps every case and has no final `catch` ([a handler](grpc.md#a-handler)).
 - The `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
 - Each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
+- A `do` nests in one place: around a workflow's start, when its `catch` returns what the path built ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` is spelled in full: `throw BorrowBookUseCaseError.bookNotFound`.
 - `String(reflecting: error)` goes into the log line of an unknown error, never into a response.
-- `CancellationError` propagates; nothing catches it to carry on.
+- A use case's typed error has no case for cancellation, so `CancellationError` reaches its final `catch` and leaves as `.unknown`. Everywhere else it propagates, and nothing catches it to carry on.
 
 ## Concurrency
 
@@ -107,7 +108,7 @@ package import Foundation
 - Absence is an optional, never a sentinel such as `""`, `-1` or `.distantPast`.
 - A value that can be invalid is validated where it's made, by a throwing or failable initializer, so a model never holds an invalid one.
 - Protocols exist only where substitution is real: use cases, repositories, scopes, the database and ports. Models, commands, policies and configuration are concrete. There is no clock or id-generator protocol: ids and stored dates come from the database, and a use case that decides on time reads `Date.now`.
-- Stored dependencies are existentials (`any CatalogClient`), parameters opaque where they can be (`some JWTAlgorithm`), and a type is generic where the compiler must check a constraint on it or it wraps a library's generic client: a use case over its database, `GRPCCatalogClient<Transport>`.
+- Stored dependencies are existentials (`any CatalogClient`), except `TemporalClient`, which Core holds as the concrete type; parameters are opaque where they can be (`some JWTAlgorithm`), and a type is generic where the compiler must check a constraint on it or it wraps a library's generic client: a use case over its database, `GRPCCatalogClient<Transport>`.
 - `logger` is the last parameter of every initializer and function that takes one, and the last stored dependency; only a trailing closure follows it.
 
 ## Documentation comments

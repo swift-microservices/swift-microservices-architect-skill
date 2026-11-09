@@ -12,6 +12,7 @@ checklist in CLAUDE.md.
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -125,6 +126,10 @@ def check_frontmatter(skill_text: str) -> str:
         result = subprocess.run(["ruby", "-e", script, str(SKILL / "SKILL.md")], capture_output=True, text=True)
         if result.returncode != 0:
             fail(f"frontmatter: not valid YAML: {result.stderr.strip()[:200]}")
+    elif os.environ.get("CI"):
+        fail("frontmatter: CI needs ruby to parse the YAML")
+    else:
+        print("frontmatter: YAML not parsed, no ruby command")
 
     plugin = json.loads(read(ROOT / ".claude-plugin" / "plugin.json"))
     if fields.get("license") != plugin.get("license"):
@@ -144,12 +149,8 @@ def check_skill_size(skill_text: str) -> None:
     if tokens > MAX_SKILL_TOKENS:
         fail(f"SKILL.md: about {tokens:.0f} tokens, under {MAX_SKILL_TOKENS}")
 
-    start = skill_text.find("\n## References")
-    end = skill_text.find("\n## ", start + 1)
-    if start < 0:
+    if "\n## References" not in skill_text:
         fail("SKILL.md: no References section")
-    elif (end if end > 0 else len(skill_text)) / CHARS_PER_TOKEN > MAX_SKILL_TOKENS:
-        fail("SKILL.md: the References table ends past the first 5,000 tokens, which compaction keeps")
     print(f"SKILL.md: {lines} lines, about {tokens:.0f} tokens")
 
 
@@ -194,6 +195,27 @@ def check_links() -> None:
                     anchors = {slug(heading) for heading in headings(read(destination))}
                     if anchor not in anchors:
                         fail(f"{relative(path)}:{number}: no heading for #{anchor}")
+
+
+def check_checklist_references(skill_text: str) -> None:
+    """Checks the references and scripts SKILL.md's checklists name, which sit in code fences."""
+    in_fence = False
+    for number, line in enumerate(skill_text.splitlines(), 1):
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence or not line.startswith("- ["):
+            continue
+
+        for name, anchor in re.findall(r"\b([a-z-]+\.md)(?:#([\w-]+))?", line):
+            path = REFERENCES / name
+            if not path.exists():
+                fail(f"SKILL.md:{number}: no reference named {name}")
+            elif anchor and anchor not in {slug(heading) for heading in headings(read(path))}:
+                fail(f"SKILL.md:{number}: no heading for {name}#{anchor}")
+        for script in re.findall(r"\bscripts/[\w.-]+", line):
+            if not (SKILL / script).exists():
+                fail(f"SKILL.md:{number}: no script at {script}")
 
 
 # MARK: - Manifests
@@ -261,16 +283,32 @@ def is_constant(value: str) -> bool:
     return bool(re.match(r'(\.|\d|\[|"|true\b|false\b|nil\b|$)', value))
 
 
+def logical_lines(lines: list[tuple[int, str]]):
+    """Joins a call's wrapped arguments, so each argument is checked where it sits."""
+    joined: list[tuple[int, str]] = []
+    last_number = 0
+    for number, line in lines:
+        code = re.sub(r'"(?:[^"\\]|\\.)*"', '""', line).strip()
+        previous = joined[-1][1] if joined else ""
+        continues = number == last_number + 1 and "//" not in previous and (previous.endswith(("(", ",")) or code.startswith(")"))
+        if continues:
+            separator = "" if previous.endswith("(") or code.startswith(")") else " "
+            joined[-1] = (joined[-1][0], previous + separator + code)
+        else:
+            joined.append((number, code))
+        last_number = number
+    return joined
+
+
 def check_swift_examples() -> None:
     initializer = re.compile(r"(\(|\w: |, )([A-Z][\w.]*(?:<[^<>()]*>)?)\(")
     method_result = re.compile(r"(\(|\w: |, )[a-z]\w*(?:\.[a-z]\w*)*\.(\w+)\(")
     effect = re.compile(r"(\(|\w: |, )(try|await) ")
-    declaration = re.compile(r"^\s+(let|var) \w+: [^=]+$")
+    declaration = re.compile(r"^\s*(var \w+\b.*|let \w+: [^=]+)$")
 
     for path in sorted(SKILL.rglob("*.md")):
         lines = list(swift_lines(read(path)))
-        for position, (number, line) in enumerate(lines):
-            code = re.sub(r'"(?:[^"\\]|\\.)*"', '""', line)
+        for number, code in logical_lines(lines):
             where = f"{relative(path)}:{number}"
             if effect.search(code):
                 fail(f"{where}: a try or await inside an argument; build the value in a let first")
@@ -282,10 +320,12 @@ def check_swift_examples() -> None:
                 # Hummingbird's route builder stays inline: controller.addRoutes(to: group.group("loans")).
                 if match.group(2) != "group":
                     fail(f"{where}: a method's result inside an argument; build it in a let first")
+
+        for position, (number, line) in enumerate(lines):
             if declaration.match(line):
                 following = [text.strip() for _, text in lines[position + 1 : position + 4]]
                 if any(text.startswith("do {") for text in following):
-                    fail(f"{where}: declared before a do for its catches to fill; end each path in its own catch")
+                    fail(f"{relative(path)}:{number}: declared before a do for its catches to fill; end each path in its own catch")
 
 
 # MARK: - Plugin
@@ -310,6 +350,7 @@ def main() -> int:
     check_skill_size(skill_text)
     check_references(skill_text, readme_text)
     check_links()
+    check_checklist_references(skill_text)
     check_manifests(description)
     check_swift_examples()
     check_plugin()

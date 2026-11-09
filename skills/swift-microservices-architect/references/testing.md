@@ -11,7 +11,11 @@ Each module has a test target. It depends on the module, the modules whose types
     name: "LoansCoreTests",
     dependencies: [
         "LoansCore",
+        .product(name: "BookshelfAuthentication", package: "bookshelf-core"),
         .product(name: "BookshelfTesting", package: "bookshelf-core"),
+        .product(name: "Logging", package: "swift-log"),
+        .product(name: "Temporal", package: "swift-temporal-sdk"),
+        .product(name: "TemporalTestKit", package: "swift-temporal-sdk"),
     ],
     swiftSettings: swiftSettings
 ),
@@ -19,17 +23,20 @@ Each module has a test target. It depends on the module, the modules whose types
 
 | Test target | Tests | Over |
 |---|---|---|
-| `XCoreTests` | Each use case: its result and every case of its error | `MockDatabase` with a scope of mock repositories, and mocks of its ports |
+| `XCoreTests` | Each use case: its result and every case of its error | `MockDatabase` with a scope of mock repositories, and mocks of its ports; `TemporalTestKit`'s test server for one that starts a workflow, since `TemporalClient` is a concrete type |
+| `XCoreTests`, for workflows | Each workflow's path, and replays of recorded histories | `TemporalTestKit`'s time-skipping test server, running the activity container over mocks |
+| `XCoreTests`, for activity containers | Each activity's mapping, calling its method directly | Mocks of the container's use case and port protocols |
 | `XGRPCTests` | Each handler: the caller it requires, its conversions, every error case's status | Mock use cases, and a principal bound in `OperationContext` |
-| `XTemporalTests` | Each workflow's path, and replays of recorded histories; each activity's mapping | Temporal's time-skipping test server with mock activities; mock use cases and ports |
 | `XPostgresTests` | Statements, repositories, row-level security as each role, migrations | A real Postgres, the one dependency a mock can't stand in for |
 | `GatewayHTTPTests` | Routes in their tiers, conversions, problem details | Mock upstream clients and `MockAuthenticator` |
 
 - A test runs only its module's code, over mocks of the rest: a handler's test doesn't build a use case, and a use case's test never reaches Postgres.
+- A workflow's suite takes the trait `.temporalTimeSkippingTestServer` and reads `TemporalTestServer.timeSkippingTestServer`; a starting use case's takes `.temporalTestServer` and reads `.testServer`. `withConnectedClient(logger:_:)` gives it a `TemporalClient`, and `withConnectedWorker(configuration:activities:workflows:_:)` runs a worker, with `activities: loanActivities.allActivities`. An activity that reads `ActivityExecutionContext` runs inside `withActivityTestEnvironment(info:_:)`.
+- A run downloads the test server on first use, so the machine running `XCoreTests` needs network access.
 - Other adapter targets (`XValkeyTests`, `X<Provider>Tests`) test their own mapping the same way, and the executable's readers and defaults, when tested, are in `XTests`.
 - `XPostgresTests` fail, rather than skip, when `POSTGRES_HOST` is unset. No check is turned off to make CI pass.
 
-The org core's products are what every service trusts, so their tests prove:
+`<org>-core`'s products are what every service trusts, so their tests prove:
 
 | Test target | Proves |
 |---|---|

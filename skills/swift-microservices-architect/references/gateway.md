@@ -312,13 +312,7 @@ package struct Problem: HTTPResponseError {
         …
     }
 
-    package func response(from request: Request, context: some RequestContext) throws -> Response {
-        let body = Body(title: status.reasonPhrase, status: status.code, detail: detail, instance: request.uri.path)
-        var response = try context.responseEncoder.encode(body, from: request, context: context)
-        response.status = status
-        response.headers[.contentType] = "application/problem+json"
-        return response
-    }
+    package func response(from request: Request, context: some RequestContext) throws -> Response { … }
 
     private struct Body: Encodable {
         …  // title, status, detail, instance

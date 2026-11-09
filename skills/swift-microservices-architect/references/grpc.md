@@ -98,7 +98,7 @@ service LoanService {
 }
 ```
 
-- The file is `<org>/<x>/v1/<x>.proto` in package `<org>.<x>.v1`. Generated types take the package as a prefix: `Bookshelf_Loans_V1_Loan`, `Bookshelf_Loans_V1_LoanService`.
+- The file and package are named as [naming](conventions.md#naming) gives them. Generated types take the package as a prefix: `Bookshelf_Loans_V1_Loan`, `Bookshelf_Loans_V1_LoanService`.
 - Comments in the contract say who calls each group of RPCs and what a request may name.
 - Fields are snake_case. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
 - Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`.
@@ -153,17 +153,11 @@ package struct LoanService: Bookshelf_Loans_V1_LoanService.SimpleServiceProtocol
 
     /// The interceptor identifies a user without requiring one; the caller's own and
     /// administrators' RPCs require one.
-    private func requireUser() throws -> UserIdentity {
-        guard let user = OperationContext.current.user else {
-            throw RPCError(code: .unauthenticated, message: "Authentication is required.")
-        }
-
-        return user.identity
-    }
+    private func requireUser() throws -> UserIdentity { … }
 }
 ```
 
-- `SimpleServiceProtocol` gives each handler its messages, streaming RPCs included; `ServiceProtocol` is only for a handler that reads request metadata or sets response metadata.
+- `SimpleServiceProtocol` gives each handler its messages; `ServiceProtocol` is only for a handler that reads request metadata or sets response metadata. A response-streaming handler runs after the interceptors have returned, so nothing they bound is visible in it: an RPC that needs the caller or the tenant answers with one message.
 - `XService` and `XInternalService` are separate structs ([an internal service](#an-internal-service)).
 - The service holds use cases only: no repositories, ports, databases or rules.
 
