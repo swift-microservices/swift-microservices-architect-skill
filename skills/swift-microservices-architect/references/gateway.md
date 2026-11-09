@@ -47,16 +47,11 @@ generate:
   - types
 accessModifier: package
 namingStrategy: idiomatic
-typeOverrides:
-  schemas:
-    UUID: Foundation.UUID
-nameOverrides:
-  UUID: UUID
 ```
 
 - The routes are Hummingbird's, so request contexts and middleware stay native; the generated `Components.Schemas` types are the request and response bodies.
 - `openapi.yaml` is the contract clients code against: it changes before the routes do, and a route answers exactly the statuses it documents.
-- It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references. The generator maps `format: uuid` to `String`; the overrides make the schema `UUID`, so conversions take and give ids as `UUID`s.
+- It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references, which the generator makes a `String`, so ids cross HTTP as the services write them, lowercase ([conversions](#conversions)).
 - `servers` ends in `/v1`, and paths are written without it.
 - Every operation has an `operationId` and a `security` entry for its tier: `[]` for no caller, `[{bearerAuth: []}]` for a caller or an administrator ([request contexts](#request-contexts-and-tiers)).
 
@@ -66,7 +61,7 @@ Each group of routes runs in the context that states what it guarantees:
 
 | Tier | Context | Guarantees |
 |---|---|---|
-| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, public reads, signed webhooks |
+| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, sign-out, public reads, signed webhooks |
 | A caller | `IdentityRequestContext`, behind `BearerAuthenticationMiddleware` and `IsAuthenticatedMiddleware` | `identity` is set |
 | Administrators | `AdministratorRequestContext`, converted at the verb | A non-optional administrator `identity` |
 
@@ -106,7 +101,7 @@ package struct AdministratorRequestContext: ChildRequestContext {
 - A child context's throwing initializer is the check: a handler that takes `AdministratorRequestContext` never re-tests the role.
 - Absent and insufficient answer differently: `401` when no one identified, `403` when the caller can't do this whatever token they hold.
 - The administrator check happens at the verb, not behind an `/admin` path prefix, so a resource's path is shared by its audiences. `/admin/…` is only for an administrator's view of a collection that callers also list (`/admin/loans`).
-- A route whose bearer token isn't an access token, such as the refresh token a refresh request presents, stays in the first tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the first tier too, since there is no caller yet.
+- A route whose bearer token isn't an access token, such as the refresh token a refresh or sign-out request presents, stays in the first tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the first tier too, since there is no caller yet.
 
 ## The router
 
@@ -185,7 +180,7 @@ package struct LoanController: Sendable {
         context: IdentityRequestContext
     ) async throws -> EditedResponse<Components.Schemas.LoanResponse> {
         let body = try await request.decode(as: Components.Schemas.BorrowBookRequest.self, context: context)
-        let borrowBookRequest = Bookshelf_Loans_V1_BorrowBookRequest(body)
+        let borrowBookRequest = try Bookshelf_Loans_V1_BorrowBookRequest(body)
         let loan = try await client.borrowBook(borrowBookRequest)
         let response = try Components.Schemas.LoanResponse(loan)
         return EditedResponse(status: .created, response: response)
@@ -246,25 +241,26 @@ package struct ResendWebhookController: Sendable {
 ```swift
 extension Components.Schemas.LoanResponse: ResponseCodable {
     init(_ loan: Bookshelf_Loans_V1_Loan) throws {
-        guard let id = UUID(uuidString: loan.id), let bookID = UUID(uuidString: loan.bookID) else {
-            throw HTTPError(.internalServerError, message: "The loan record is malformed.")
-        }
-
         let status = try Components.Schemas.LoanStatus(loan.status)
-        self.init(id: id, bookID: bookID, status: status, dueDate: loan.dueDate.date)
+        self.init(id: loan.id, bookID: loan.bookID, status: status, dueDate: loan.dueDate.date)
     }
 }
 
 extension Bookshelf_Loans_V1_BorrowBookRequest {
-    init(_ body: Components.Schemas.BorrowBookRequest) {
+    init(_ body: Components.Schemas.BorrowBookRequest) throws {
+        guard let bookID = UUID(uuidString: body.bookID) else {
+            throw HTTPError(.badRequest, message: "bookID must be a UUID.")
+        }
+
         self.init()
-        self.bookID = body.bookID.uuidString.lowercased()
+        self.bookID = bookID.uuidString.lowercased()
         self.idempotencyKey = body.idempotencyKey
     }
 }
 ```
 
-- A response conversion throws on a malformed upstream value, such as a non-UUID id or an unspecified enum, answering `500` rather than dropping or inventing a field.
+- An id passes through as the string it is: a response takes the service's lowercase id unchanged, and a request parses a body's id with `UUID(uuidString:)`, answering `400` for one that isn't a UUID, and sends it lowercased. A path's id is read with `context.parameters.require("id", as: UUID.self)`.
+- A response conversion throws on a malformed upstream value, such as an unspecified enum, answering `500` rather than dropping or inventing a field.
 - A body field the client omits reaches the service as the proto default; the service's conversion decides what an empty value means.
 - A paged route reads `pageSize` and `pageToken` or `page` from the query, answers the items with `pageInfo` or `nextPageToken`, and passes each through unchanged; the service applies [the paging rules](grpc.md#lists-and-pages).
 

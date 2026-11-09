@@ -138,10 +138,9 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 
 - The token carries identity only: `sub`, `role`, `iss`, `iat`, `exp`, and `aud` where an audience is used. It carries no permissions, entitlements, business state or personal data; a use case reads those from the service that owns them.
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
-- `<Project>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`. Each key's id is its thumbprint (RFC 7638), which the issuer writes in every token's `kid` header, so a verifier picks the key a token names.
-- Rotating the signing key keeps the old public key verifying until the tokens it signed expire: every verifier gets the new public key first, Identity then signs with the new private key, and the old public key goes once the last token it signed has expired.
+- `<Project>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`.
 - Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes the `JWTIssuer`.
-- Access tokens are short-lived. A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh RPC, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)).
+- Access tokens are short-lived. A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh and sign-out RPCs, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)). Sign-out ends the one session that refresh token belongs to.
 - The gateway verifies the token to pick a tier and forwards the original with `BearerPropagationInterceptor`; each service's `BearerAuthenticationInterceptor` verifies it again. A token never travels on an internal RPC, into a workflow's input, or into a log.
 
 `<Project>Authentication` spells the lookup of the bound principal once, for handlers, interceptors and logging:
@@ -179,7 +178,7 @@ Each layer refuses what it can see; the use case decides.
 | Row-level security | The tenant: a caller's transaction sees only the caller's rows ([row-level security](persistence.md#row-level-security)) |
 
 - Every layer but the use case is defense in depth. A rule that exists only in the gateway or only in a policy is missing from the domain.
-- An anonymous RPC that could confirm whether an account exists answers the same either way: a password reset for an unknown address succeeds and sends nothing.
+- An anonymous RPC that could confirm whether an account exists answers the same either way: a password reset for an unknown address succeeds and sends nothing. Registration is the one exception: an address already registered answers `duplicateEmail` as `alreadyExists`, so sign-up stays one step, at the cost of revealing which addresses are registered.
 - A caller asking for another user's resource gets the answer a missing resource gets.
 
 ## Secrets

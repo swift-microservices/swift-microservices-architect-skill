@@ -77,7 +77,7 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details |
 | Workflows | Temporal workflows and activities in Core, how use cases start them, determinism, activity options, the worker |
 | Composition | Commands, configuration, logging, and graceful shutdown |
-| Security | mTLS with certificate reloading, JWTs and key rotation, secrets, webhook signatures |
+| Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs, secrets, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
 | Delivery | GitHub Actions CI, semantic-version releases, images on GitHub Container Registry, deploys through Dokploy |
 | Style | How the code reads, and how everything is named |

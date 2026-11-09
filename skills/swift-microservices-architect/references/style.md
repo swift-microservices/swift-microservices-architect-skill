@@ -108,8 +108,8 @@ package import Foundation
 
 ## Types and values
 
-- Models, inputs, commands and outputs are structs of `let` properties. Closed sets are enums (`LoanStatus`); a set other services may extend is a `RawRepresentable` string struct with static members (`UserRole`).
-- Ids are `UUID` in Swift and lowercase strings only on the wire. Instants are `Date`, durations `Duration`.
+- Models, inputs, commands and outputs are structs of `let` properties. Closed sets are enums (`LoanStatus`); a set other services may extend is a `RawRepresentable` string struct with static members (`UserRole`), which a contract carries as its raw string ([contracts](grpc.md#contracts-in-the-protos-package)).
+- Ids are `UUID` in owned Swift and lowercase strings on the wire, over gRPC and HTTP alike; the gateway's generated types hold them as `String`s ([OpenAPI types](gateway.md#openapi-types)). Instants are `Date`, durations `Duration`.
 - Absence is an optional, never a sentinel such as `""`, `-1` or `.distantPast`.
 - A value that can be invalid is validated where it's made, by a throwing or failable initializer, so a model never holds an invalid one.
 - Protocols exist only where substitution is real: use cases, repositories, scopes, the database and ports. Models, commands, policies and configuration are concrete. There is no clock or id-generator protocol: ids and stored dates come from the database, and a use case that decides on time reads `Date.now`.
