@@ -33,7 +33,8 @@ struct Loans: AsyncParsableCommand {
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
 - `serve --migrate-database` applies pending migrations as the owner, proved by the migrator's certificate, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
 - A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
-- An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived subcommand of the executable, never an administrators' RPC.
+- An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
+- A short-lived command connects as `<x>_internal`, since no caller is bound, and reads a secret it needs through the `ConfigReader` with `isSecret: true`, never from a flag, which the process list shows.
 - Each command's `run()` is a composition root: the only code that reads configuration, constructs concrete types and runs them. Nothing below it reads configuration, builds a client or starts a task.
 
 ## The composition root
@@ -201,7 +202,7 @@ struct Serve: AsyncParsableCommand {
 }
 ```
 
-- **Configuration, Logging, Infrastructure, Composition, the server, Lifecycle**: every root has these sections, in this order.
+- **Configuration, Logging, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order, and a short-lived command's the first four ([commands](#commands)).
 - Infrastructure builds what talks to the outside: certificate reloaders, database clients per role, the authenticator, upstream clients, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
 - The use cases that start workflows take what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
@@ -226,6 +227,7 @@ extension InMemoryProvider {
             "tls.privateKeyPath": "/run/tls/key.pem",
             "tls.trustRootsPath": "/run/tls/ca.pem",
             "jwt.publicKeysPath": "/run/secrets/jwt-public",
+            "postgres.port": 5432,
             "postgres.db": "bookshelf_loans",
             "postgres.tls.trustRootsPath": "/run/tls/ca.pem",
             "postgres.owner.user": "loans_owner",
@@ -249,10 +251,21 @@ extension InMemoryProvider {
 ```
 
 - Defaults hold mount paths, ports, the database's name, role names, the Temporal namespace, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
-- A role's keys are its `user` alone, since its process's certificate proves it. The password fallback adds `postgres.<role>.password` for each role, a required secret with no default (`POSTGRES_SERVICE_PASSWORD`).
 - A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes first: `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)`. Required keys and validation live in the reader, not in the root.
 - A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
-- Readers every executable shares are `<Project>Transport`'s and `<Project>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)` ([with TLS set on it](persistence.md#valkey)), with the key names that library chose.
+- A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)` ([with TLS set on it](persistence.md#valkey)), with the key names that library chose. A service's own readers, for its policies and provider clients, are in its `Configuration/`.
+- Readers every executable shares are `<Project>Transport`'s and `<Project>Persistence`'s, under these keys, relative to the scopes the roots give them:
+
+| Reader | Scopes | Keys, with tuning defaults |
+|---|---|---|
+| `TimedCertificateReloader.Configuration(config:logger:)` | `tls`, `temporal.tls`, `postgres.owner.tls` | `certificatePath`, `privateKeyPath`; `refreshIntervalSeconds` (60) |
+| The server's and the client's `TransportSecurity.mTLS(config:certificateReloader:)` | `tls`, `temporal.tls` | `trustRootsPath` |
+| `HTTP2ServerTransport.Posix.Config(config:)` | `grpc.server` | `maxConnectionAgeSeconds` (1800), `connectionGraceTimeSeconds` (30), `minPingIntervalSeconds` (10) |
+| `HTTP2ClientTransport.Posix.Config(config:)`, `ServiceConfig(config:)` | `grpc.<upstream>` | `keepaliveTimeSeconds` (30), `keepaliveTimeoutSeconds` (10); `deadlineSeconds` (10) |
+| `JWTAuthenticator<UserIdentity>(config:)`, Identity's `JWTIssuer<UserIdentity>(config:)` | `jwt` | `publicKeysPath`, a directory of PEM files; `privateKeyPath` |
+| `PostgresClient.Configuration(config:role:certificateReloader:)` | `postgres` | `host`, `port`, `db`, `tls.trustRootsPath`, `<role>.user`; the password fallback's `(config:role:)` adds `<role>.password`, a secret (`POSTGRES_SERVICE_PASSWORD`) |
+
+- A `<project>-core` reader requires every value a deployment sets, such as a path, host, port or user, and defaults only tuning; the executable's defaults hold the deployment's values.
 - Keys are named as [naming](conventions.md#naming) gives them, and environment names derive from them: `postgres.service.user` is `POSTGRES_SERVICE_USER`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
 - A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
 - Secrets and key material follow [secrets](security.md#secrets).

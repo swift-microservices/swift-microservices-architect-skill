@@ -56,7 +56,7 @@
 | Logger label | `<project>-<x>`, `<project>-<x>-worker` | `bookshelf-loans-worker` |
 | Log metadata keys | lowerCamelCase | `loanID`, `userID`, `error` |
 | Valkey keys | `<x>:<purpose>:<id>` | `identity:reset-code:…` |
-| Idempotency keys for providers | `<x>-<what>-<subject id>` | `loans-overdue-notice-<loan id>` |
+| Idempotency keys for providers | `<x>-<what>-<subject id>`, then `-<effect id>` when the subject gets the effect more than once | `loans-overdue-notice-<loan id>` |
 | Conversion files | `Type+Protobuf.swift`, `Type+PostgresRow.swift`, `Type+PostgresCodable.swift`, `Type+ConfigReader.swift`; in the gateway `Type+RPC.swift` | `Loan+Protobuf.swift`, `LoanResponse+RPC.swift` |
 
 ## Folders
@@ -67,7 +67,7 @@
 | XPostgres | `Scopes/`, `Repositories/<Area>/`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/`, `Migrations/Role/` |
 | XGRPC | A folder per area with its proto services and `Protobuf/`; `Clients/` with `Clients/Protobuf/` |
 | XValkey, X<Provider> | Flat, one file per type |
-| X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift`, `Worker/Worker.swift`, `Worker/Run.swift` |
+| X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift`, `Worker/Worker.swift`, `Worker/Run.swift`, `<Command>/<Command>.swift` for a short-lived command |
 | Test target | `Mocks/`, then a file per tested type: `BorrowBookUseCaseTests.swift` |
 | GatewayHTTP | `openapi.yaml`, `openapi-generator-config.yaml`, `<Project>API.swift`, `Contexts/`, `Controllers/`, `Middlewares/`, `Schemas/Requests/`, `Schemas/Responses/`, `Schemas/Shared/` |
 

@@ -19,11 +19,11 @@ The targets inside a service's package, how they depend on each other, its `Pack
 | Target | Holds | Imports |
 |---|---|---|
 | `XCore` | Domain models, errors, repository protocols and commands, ports, use cases, workflows and activity containers | `Persistence`, `<Project>Authentication`, `Logging`, `Temporal` in a service with workflows, and what else [Core may link](#what-core-may-link) |
-| `XPostgres` | A scope per database role, repositories, prepared statements, row decoding, migrations | `XCore`, `PersistencePostgres`, `PostgresNIO`, `PostgresMigrations`, `AsyncAlgorithms`, `Logging` |
+| `XPostgres` | A scope per database role, repositories, prepared statements, row decoding, migrations | `XCore`, `PersistencePostgres`, `PostgresNIO`, `PostgresMigrations`, `AsyncAlgorithms`, `Logging`; `<Project>Authentication` where a table stores a `UserRole` |
 | `XGRPC` | The service's proto services, `Protobuf/` conversions, gRPC clients for Core's ports | `XCore`, its own and its callees' `XProtos`, `GRPCCore`, `SwiftProtobuf`, `Authentication`, `OperationContext`, `<Project>Authentication` |
 | `XValkey` | Repositories over Valkey | `XCore`, `Valkey` |
-| `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK |
-| `X` | The executable: commands, configuration defaults and readers, the migration list, composition roots | Every target above, `<Project>Transport`, `<Project>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser` |
+| `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK; `NIOPosix` for work on `NIOThreadPool` |
+| `X` | The executable: commands, configuration defaults and readers, the migration list, composition roots | Every target above, `<Project>Transport`, `<Project>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser`; `NIOSSL` with Valkey |
 
 A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC` and `Catalog`.
 
@@ -252,7 +252,7 @@ bookshelf-core/
 ```
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
-- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; only executables link it. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
+- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; only executables link it. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
 - Its API is `public`, with `public import` for every module whose types it exposes.
 - It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<project>-protos`, is released and tagged first; each service and the gateway then raise their requirement.
 

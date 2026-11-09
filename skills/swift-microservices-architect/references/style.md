@@ -22,7 +22,7 @@ The bar is the sample code in Apple's WWDC sessions, such as *Meet async/await i
 - No workarounds: no `Result` juggling, flags that steer control flow, `try?` that hides a failure, nested `do` inside a `catch`, force unwraps or `as!`.
 - `guard` for refusals and unwrapping, with the `else` doing one thing. `switch` over every case of an enum outcome; `if case` only when one case matters.
 - Names say what a value is: `activeLoans`, `isMarkedOverdue`, `catalogConfig`; never `result`, `data`, `flag` or a type's name.
-- Tunable numbers are named where they belong: `ActivityOptions.notification`, `LoanPolicy.maximumActiveLoans`; never an inline literal in a workflow or use case.
+- Numbers are named where they belong ([domain models](use-cases.md#domain-models)), never an inline literal in a workflow or use case: `ActivityOptions.notification`, `LoanPolicy.maximumActiveLoans`, `EmailAddress.maximumLength`.
 - `// MARK: -` names the sections of a composition root and the groups inside a type: a service's RPCs by audience, a router builder's tiers, an activity container's steps.
 - Code that a reader would otherwise check twice gets a one-line comment with the reason: a business rule, an ordering constraint, a safety property. A comment never narrates the next line.
 
@@ -109,6 +109,7 @@ package import Foundation
 ## Types and values
 
 - Models, inputs, commands and outputs are structs of `let` properties. Closed sets are enums (`LoanStatus`); a set other services may extend is a `RawRepresentable` string struct with static members (`UserRole`), which a contract carries as its raw string ([contracts](grpc.md#contracts-in-the-protos-package)).
+- Foundation adds no `Duration` to a `Date`, so a `TimeInterval` appears only at a `Date`'s arithmetic, converted once in the policy or model method that owns the duration: `let loanSeconds = loanPeriod / .seconds(1)`, then `borrowedAt.addingTimeInterval(loanSeconds)`. Every other duration is a `Duration`.
 - Ids are `UUID` in owned Swift and lowercase strings on the wire, over gRPC and HTTP alike; the gateway's generated types hold them as `String`s ([OpenAPI types](gateway.md#openapi-types)). Instants are `Date`, durations `Duration`.
 - Absence is an optional, never a sentinel such as `""`, `-1` or `.distantPast`.
 - A value that can be invalid is validated where it's made, by a throwing or failable initializer, so a model never holds an invalid one.

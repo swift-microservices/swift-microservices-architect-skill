@@ -52,7 +52,7 @@ The CI pipelines run the tests, and they're the gate:
 | `-Xswiftc -require-explicit-sendable` | Libraries | Every `public` type stating whether it's `Sendable` |
 
 - The toolchain is the package's `swift-tools-version`. CI tests on it, a service and a system library on Ubuntu noble and linux/arm64, where services run, and the `Containerfile` builds on it, so moving a package to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.
-- `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it.
+- `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it. `XValkeyTests` reach a real Valkey through `VALKEY_HOST` and `VALKEY_PORT`.
 
 ## Foundation linking
 

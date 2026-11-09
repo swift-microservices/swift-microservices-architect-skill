@@ -43,7 +43,7 @@ package enum LoanStatus: String, Equatable, Sendable {
 - It's named for what it is in the service's language ([naming](conventions.md#naming)).
 - Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text.
 - A rule more than one use case applies lives on a model or a policy, never in a use case for another to copy: `LoanPolicy.dueDate(borrowedAt:)`, a throwing `EmailAddress(_:)` that normalizes and validates.
-- Tunable rules are a policy value (`LoanPolicy`, with `maximumActiveLoans` and `loanPeriod`), passed to the use cases that apply it and read from configuration by the executable ([configuration](composition.md#configuration)).
+- A value operators change is a policy value (`LoanPolicy`, with `maximumActiveLoans` and `loanPeriod`), passed to the use cases that apply it and read from configuration by the executable ([configuration](composition.md#configuration)). A limit the domain fixes, such as an email address's 254 characters, is a static on its model (`EmailAddress.maximumLength`).
 - What the service knows about another service's data is its own model, in `Ports/`, beside the port that returns it: Loans' `Book` holds an id and a title, not Catalog's whole book.
 
 ## Errors
@@ -351,7 +351,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - **The caller's own.** The use case acts on `subject.userID`, never on a user id from its input, and runs on the tenant database, where row-level security confines it as well ([row-level security](persistence.md#row-level-security)).
 - **Administrators.** The use case checks the role before anything else, then runs on the internal database in a service with tenant tables. The gateway's `AdministratorRequestContext` refuses earlier; the use case's check is the rule.
 - **Internal callers.** The use case takes the user it acts for in its input; mTLS admitted the calling process.
-- **The system.** A [system use case](#system-use-cases) acts for no caller and runs on the worker's database.
+- **The system.** A [system use case](#system-use-cases) acts for no caller and runs on the worker's database, or on the internal database when a short-lived command runs it ([commands](composition.md#commands)), whose scope then adopts its scope protocol too.
 
 ```swift
 package func callAsFunction(

@@ -27,14 +27,15 @@ Each module has a test target. It depends on the module, the modules whose types
 | `XCoreTests`, for workflows | Each workflow's path | `TemporalTestKit`'s time-skipping test server, running the activity container over mocks |
 | `XCoreTests`, for activity containers | Each activity's mapping, calling its method directly | Mocks of the container's use case and port protocols |
 | `XGRPCTests` | Each handler: the caller it requires, its conversions, every error case's status | Mock use cases, and a principal bound in `OperationContext` |
-| `XPostgresTests` | Statements, repositories, row-level security as each role, migrations | A real Postgres, the one dependency a mock can't stand in for |
+| `XPostgresTests` | Statements, repositories, row-level security as each role, migrations | A real Postgres, which no mock can stand in for |
+| `XValkeyTests` | Each repository's commands, expiries and atomic reads | A real Valkey, since `ValkeyClientProtocol` can't be mocked by hand |
 | `GatewayHTTPTests` | Routes in their tiers, conversions, problem details | Mock upstream clients and `MockAuthenticator` |
 
 - A test runs only its module's code, over mocks of the rest: a handler's test doesn't build a use case, and a use case's test never reaches Postgres.
 - A workflow's suite takes the trait `.temporalTimeSkippingTestServer` and reads `TemporalTestServer.timeSkippingTestServer`; a starting use case's takes `.temporalTestServer` and reads `.testServer`. `withConnectedClient(logger:_:)` gives it a `TemporalClient`, and `withConnectedWorker(configuration:activities:workflows:_:)` runs a worker, with `activities: loanActivities.allActivities`. An activity that reads `ActivityExecutionContext` runs inside `withActivityTestEnvironment(info:_:)`.
 - A run downloads the test server on first use, so the machine running `XCoreTests` needs network access.
-- Other adapter targets (`XValkeyTests`, `X<Provider>Tests`) test their own mapping the same way, and the executable's readers and defaults, when tested, are in `XTests`.
-- `XPostgresTests` fail, rather than skip, when `POSTGRES_HOST` is unset. No check is turned off to make CI pass.
+- `X<Provider>Tests` test the provider target's mapping the same way, and the executable's readers and defaults, when tested, are in `XTests`.
+- `XPostgresTests` and `XValkeyTests` fail, rather than skip, when `POSTGRES_HOST` or `VALKEY_HOST` is unset. No check is turned off to make CI pass.
 
 `<project>-core`'s products are what every service trusts, so their tests prove:
 
@@ -42,6 +43,8 @@ Each module has a test target. It depends on the module, the modules whose types
 |---|---|
 | `<Project>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip; refusal of an expired token and of a `sub` that isn't a UUID; the `.user` metadata provider |
 | `<Project>PersistenceTests` | Both branches of `UserSettingsInterceptor`: a bound user's setting, and nothing when none is bound |
+
+`<Project>Transport` and `<Project>Testing` have no test target: every service's startup proves the readers, and the tests that use them prove the mocks.
 
 ```
 Tests/

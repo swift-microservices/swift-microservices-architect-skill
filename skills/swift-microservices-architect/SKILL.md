@@ -127,7 +127,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module, over mocks (testing.md)
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
-- [ ] swift build and swift test with CI's flags and POSTGRES_* set (delivery.md#tests), scripts/check_boundaries.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
+- [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
 ```
 
 **Add an operation**
@@ -141,7 +141,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] Executable: the use case on its role's database, passed to the service
 - [ ] Gateway: the route in its tier, if public
 - [ ] Tests: the use case's outcomes and the handler's statuses, over mocks
-- [ ] swift build and swift test with CI's flags and POSTGRES_* set (delivery.md#tests), scripts/check_boundaries.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
+- [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
 ```
 
 **Add a durable process**
@@ -153,7 +153,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
 - [ ] Executable: TemporalClient and the task queue into Serve's use cases; the worker group and its Run root
 - [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks
-- [ ] swift build and swift test with CI's flags and POSTGRES_* set (delivery.md#tests), scripts/check_boundaries.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
+- [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
 ```
 
 **Set up CI/CD**
