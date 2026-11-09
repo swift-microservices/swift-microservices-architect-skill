@@ -9,22 +9,6 @@ Ask for a plan, a new service, an endpoint, a background process or a review, an
 
 ## The architecture
 
-```mermaid
-flowchart LR
-    Clients -- HTTPS --> Edge["Edge proxy"] -- HTTP --> Gateway["Gateway<br/>Hummingbird · OpenAPI"]
-    Gateway -- "gRPC over mTLS,<br/>with the caller's token" --> Services
-    subgraph Services
-        Identity
-        Catalog
-        Loans
-    end
-    Loans -- internal gRPC --> Identity & Catalog
-    Identity --> IdentityDB[(Postgres)] & Valkey[(Valkey)]
-    Catalog --> CatalogDB[(Postgres)]
-    Loans --> LoansDB[(Postgres)]
-    Loans -- "workflows, from its Core" --> Temporal
-```
-
 - **A service per capability.** Each service owns its data and the rules over it. No service reads another's database; data crosses only through gRPC contracts.
 - **Boundaries the compiler enforces.** A service is one Swift package. Its Core target holds the models, use cases and Temporal workflows and imports no driver or transport; adapters for Postgres, gRPC and Valkey sit around it; one executable wires them together. Each target declares what it imports, so most crossings fail the build, and the review checklist's boundary checks catch the rest.
 - **Code that reads like the requirement.** Use cases read top to bottom, the way Apple's sample code does: typed throws, one `catch` per outcome, no helper methods.
