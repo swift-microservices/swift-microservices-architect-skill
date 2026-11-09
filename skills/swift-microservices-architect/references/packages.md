@@ -1,6 +1,6 @@
 # Packages
 
-The targets inside a service's package, how they depend on each other, its `Package.swift`, and the organization's shared packages. The build fails an import the target can't reach; [the boundary script](#checking-the-boundaries) and review hold the rest.
+The targets inside a service's package, how they depend on each other, its `Package.swift`, and the project's shared packages. The build fails an import the target can't reach; [the boundary script](#checking-the-boundaries) and review hold the rest.
 
 ## Contents
 - The targets of a service
@@ -9,7 +9,7 @@ The targets inside a service's package, how they depend on each other, its `Pack
 - Swift settings
 - Traits and Foundation
 - Folder layout
-- The organization's core package
+- The project's core package
 - The contracts package
 - The gateway package
 - Checking the boundaries
@@ -18,12 +18,12 @@ The targets inside a service's package, how they depend on each other, its `Pack
 
 | Target | Holds | Imports |
 |---|---|---|
-| `XCore` | Domain models, errors, repository protocols and commands, ports, use cases, workflows and activity containers | `Persistence`, `<Org>Authentication`, `Logging`, `Temporal` in a service with workflows, and what else [Core may link](#what-core-may-link) |
-| `XPostgres` | A scope per database role, repositories, prepared statements, row decoding, migrations | `XCore`, `PersistencePostgres`, `PostgresNIO`, `PostgresMigrations`, `AsyncAlgorithms`, `Logging` |
-| `XGRPC` | The service's proto services, `Protobuf/` conversions, gRPC clients for Core's ports | `XCore`, its own and its callees' `XProtos`, `GRPCCore`, `SwiftProtobuf`, `Authentication`, `OperationContext`, `<Org>Authentication` |
+| `XCore` | Domain models, errors, repository protocols and commands, ports, use cases, workflows and activity containers | `Persistence`, `<Project>Authentication`, `Logging`, `Temporal` in a service with workflows, and what else [Core may link](#what-core-may-link) |
+| `XPostgres` | A scope per database role, repositories, prepared statements, row decoding, migrations | `XCore`, `PersistencePostgres`, `PostgresNIO`, `PostgresMigrations`, `AsyncAlgorithms`, `Logging`; `<Project>Authentication` where a table stores a `UserRole` |
+| `XGRPC` | The service's proto services, `Protobuf/` conversions, gRPC clients for Core's ports | `XCore`, its own and its callees' `XProtos`, `GRPCCore`, `SwiftProtobuf`, `Authentication`, `OperationContext`, `<Project>Authentication` |
 | `XValkey` | Repositories over Valkey | `XCore`, `Valkey` |
-| `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK |
-| `X` | The executable: commands, configuration defaults and readers, the migration list, composition roots | Every target above, `<Org>Transport`, `<Org>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser` |
+| `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK; `NIOPosix` for work on `NIOThreadPool` |
+| `X` | The executable: commands, configuration defaults and readers, the migration list, composition roots | Every target above, `<Project>Transport`, `<Project>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser`; `NIOSSL` with Valkey |
 
 A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC` and `Catalog`.
 
@@ -39,7 +39,7 @@ Core links a library that saves every service re-declaring a concept, when the l
 - doesn't pull full Foundation into the target;
 - is stable enough for its types to appear in use case signatures.
 
-`Persistence`, `<Org>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
+`Persistence`, `<Project>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
 
 `Temporal` is the one deliberate exception to these criteria: Core commits to it, as it does to the standard library. A workflow is the application's orchestration, and Temporal's determinism rules and macros make a wrapper cost more than it saves. It stays in its own corner of Core, file by file, since a module's types are visible only in files that import it:
 - `import Temporal` appears only in `XCore/Workflows/**` and in the use cases that start, signal, query or update a workflow, in `XUseCase.swift` alone of their five files.
@@ -189,7 +189,7 @@ On Linux, full Foundation brings `FoundationInternationalization` and ICU's data
 | swift-configuration | `JSON`*, `YAML`, `PropertyList` | `traits: []`, plus `Reloading` or `CommandLineArguments` when used |
 | swift-protobuf | `BinaryDelimitedStreams`* | `traits: []`, plus `FieldMaskUtilities` when a contract uses field masks |
 
-- Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<org>-core`, `<org>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the template's lower bounds are releases that do.
+- Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<project>-core`, `<project>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the template's lower bounds are releases that do.
 - A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
 - A dependency that still links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's README. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does, and CI checks it from then on ([Foundation linking](delivery.md#foundation-linking)).
 - Before adding a dependency, list its traits with `swift package show-traits` and read its sources' Foundation imports. A library proves it in CI with the Foundation-linking check ([Foundation linking](delivery.md#foundation-linking)).
@@ -232,7 +232,7 @@ bookshelf-loans/
 
 Where each file goes: [folders](conventions.md#folders).
 
-## The organization's core package
+## The project's core package
 
 ```
 bookshelf-core/
@@ -252,9 +252,9 @@ bookshelf-core/
 ```
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
-- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, grpc-swift-2 for the interceptor and swift-configuration; only executables link it. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
+- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; only executables link it. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
 - Its API is `public`, with `public import` for every module whose types it exposes.
-- It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<org>-protos`, is released and tagged first; each service and the gateway then raise their requirement.
+- It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<project>-protos`, is released and tagged first; each service and the gateway then raise their requirement.
 
 ## The contracts package
 
@@ -313,7 +313,7 @@ with `grpc-swift-proto-generator-config.json`:
 
 ## Checking the boundaries
 
-SPM checks that a target can reach what it imports, but not what a declaration should be. This skill's `scripts/check_boundaries.sh <X> <Org>` checks the rest, run from a service's root (`check_boundaries.sh Loans Bookshelf`). It prints each violation under its rule and exits non-zero if there is any:
+SPM checks that a target can reach what it imports, but not what a declaration should be. This skill's `scripts/check_boundaries.sh <X> <Project>` checks the rest, run from a service's root (`check_boundaries.sh Loans Bookshelf`) or the gateway's (`check_boundaries.sh Gateway Bookshelf`). It prints each violation under its rule and exits non-zero if there is any:
 
 - Core imports no adapter technology or contract.
 - Temporal stays out of the adapter targets.
@@ -322,7 +322,7 @@ SPM checks that a target can reach what it imports, but not what a declaration s
 - An activity container stores only use case and port protocols and a `Logger`.
 - Activities call system use cases only, so nothing in `Workflows/` names a caller.
 - Adapters import no sibling adapter, and only XGRPC imports the service's contract.
-- Generated contract types stay in XGRPC and the executable.
+- Generated contract types stay in XGRPC, the gateway's `GatewayHTTP` and the executable.
 - Only the executable reads configuration.
 - Every Foundation import is the conditional one.
 - There are no unstructured tasks.
@@ -330,3 +330,12 @@ SPM checks that a target can reach what it imports, but not what a declaration s
 - No package defaults to the main actor.
 
 It also lists each use of unchecked concurrency for review, without failing: every one is in an adapter target with its reason on the line above, as [concurrency](style.md#concurrency) allows.
+
+`scripts/check_style.sh`, run from any package's root with no arguments, checks the style rules a script can see, and fails the same way:
+
+- No `try` or `await` inside a call's arguments, across wrapped lines ([build, then call](style.md#build-then-call)).
+- A use case's `logger.error` line reads `<Activity> failed: unknown error` ([logging](use-cases.md#logging)).
+- One top-level type per file ([files](conventions.md#files)).
+- Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, and a role's `user` and `password` ([configuration](composition.md#configuration)).
+
+It also lists each Core repository method with two parameters or more and no command or page size for review: a read passes, and a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)).

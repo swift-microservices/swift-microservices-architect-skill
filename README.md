@@ -10,9 +10,9 @@ Ask for a plan, a new service, an endpoint, a background process or a review, an
 ## The architecture
 
 - **A service per capability.** Each service owns its data and the rules over it. No service reads another's database; data crosses only through gRPC contracts.
-- **Boundaries the compiler enforces.** A service is one Swift package. Its Core target holds the models, use cases and Temporal workflows and imports no driver or transport; adapters for Postgres, gRPC and Valkey sit around it; one executable wires them together. Each target declares what it imports, so most crossings fail the build, and the review checklist's boundary checks catch the rest.
+- **Boundaries the compiler enforces.** A service is one Swift package. Its Core target holds the models, use cases and Temporal workflows and imports no driver or transport; adapters for Postgres, gRPC and Valkey sit around it; one executable wires them together. Each target declares what it imports, so most crossings fail the build, and the skill's boundary and style scripts catch the rest.
 - **Code that reads like the requirement.** Use cases read top to bottom, the way Apple's sample code does: typed throws, one `catch` per outcome, no helper methods.
-- **Security on every hop.** Mutual TLS on gRPC and Temporal, TLS to Postgres and Valkey, the caller's token verified again by every service, and row-level security under every tenant query.
+- **Security on every hop.** Mutual TLS on gRPC, Temporal and Postgres, TLS to Valkey, the caller's token verified again by every service, and row-level security under every tenant query.
 - **Durable work on Temporal.** Anything that waits, retries or spans services is a workflow in Core, written directly against the Temporal SDK, never a fire-and-forget task.
 - **Modern Swift.** Swift 6 language mode with strict concurrency, structured concurrency only, `package` access, and owned code importing `FoundationEssentials`, so a service drops full Foundation once its dependencies do.
 
@@ -63,21 +63,21 @@ The agent loads the skill when a task matches it, or when asked: `/swift-microse
 - "Set up CI/CD for the loans service."
 - "Review this service's architecture and code style."
 
-To plan a backend, add a service, an operation or a durable process, set up CI/CD or review a backend, the agent follows the skill's checklist, and one that changes code ends with a build and a test run repeated until both pass.
+To plan a backend, add a service, an operation or a durable process, set up CI/CD or review a backend, the agent follows the skill's checklist. One that adds a feature starts by looking up the established standard for it, such as an RFC or OWASP's guidance, and one that changes code ends with a build and a test run repeated until both pass.
 
 ## What it covers
 
 | Area | Covers |
 |---|---|
-| System design | Splitting a backend into services, contracts, how services talk, the written plan |
-| Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<org>-core` and `<org>-protos` packages |
+| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan |
+| Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
-| Persistence | Postgres roles and row-level security, statements, paging, migrations, Valkey |
+| Persistence | Postgres roles proved by certificates, row-level security, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details |
-| Workflows | Temporal workflows and activities in Core, determinism, retries, versioning, the worker |
+| Workflows | Temporal workflows and activities in Core, how use cases start them, determinism, activity options, the worker |
 | Composition | Commands, configuration, logging, and graceful shutdown |
-| Security | mTLS with certificate reloading, JWTs and key rotation, secrets, webhook signatures |
+| Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs, secrets, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
 | Delivery | GitHub Actions CI, semantic-version releases, images on GitHub Container Registry, deploys through Dokploy |
 | Style | How the code reads, and how everything is named |
@@ -92,6 +92,7 @@ The skill decides the shapes; these skills cover the code inside them:
 
 - [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill): actors, task groups, `Sendable` diagnostics
 - [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
+- [Temporal Developer](https://github.com/temporalio/skill-temporal-developer): how a workflow is designed and behaves, from signals and updates to versioning
 - A `swift-api-design-guidelines` skill: argument labels, method names, documentation comments
 
 ## Repository layout
@@ -103,7 +104,8 @@ The skill decides the shapes; these skills cover the code inside them:
 skills/swift-microservices-architect/
 ├── SKILL.md                    what every task needs: the shape, hard rules, style, gotchas, checklists
 ├── agents/openai.yaml          the skill's name in Codex
-├── scripts/check_boundaries.sh the boundary checks for a service
+├── scripts/check_boundaries.sh the boundary checks for a service or the gateway
+├── scripts/check_style.sh      the style checks for any package
 └── references/                 read when a task reaches their topic
     ├── system.md               services, contracts, shared packages, the plan
     ├── packages.md             targets, Package.swift, Swift settings, boundary checks

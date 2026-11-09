@@ -17,7 +17,7 @@ How each package is tested, released and deployed. A repository's CI workflows c
 | Kind | Packages | Ships as |
 |---|---|---|
 | Public library | The swift-microservices libraries, any open-source package | Semantic versions, for anyone |
-| System library | `<org>-core`, `<org>-protos` | Semantic versions, for the organization's services and gateway |
+| System library | `<project>-core`, `<project>-protos` | Semantic versions, for the project's services and gateway |
 | Service | Each service, and the gateway | An image per commit on `main`, deployed to staging, then to production by hand; no versions or labels, and no long-lived branch but `main` |
 
 ## CI workflows
@@ -39,7 +39,7 @@ Each repository's `.github/workflows/` holds these, each file's `name:` in paren
 - Soundness checks every file's license header against `.license_header_template`, which holds the compact SPDX header with `@@` for the comment marker and `YEARS` for the year. `.licenseignore` lists `LICENSE` and `Package.swift`, whose tools-version line must come first.
 - A library's pull request carries exactly one label: `⚠️ semver/major`, `🆕 semver/minor`, `🔨 semver/patch` or `semver/none`. Below 1.0, a breaking change is minor and an addition patch; a doc-comment fix is patch; a change to the README, tests or CI is none.
 - Release tags the next version without a `v` and writes its notes grouped by `.github/release.yml`; the first release and every major one are tagged by hand. A tag never moves: a bad release is fixed forward with a new version.
-- Secrets: `PACKAGES_TOKEN`, passed only by a package with private dependencies, which is all that marks them: a fine-grained token owned by the organization, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy its applications.
+- Secrets: `PACKAGES_TOKEN`, passed only by a package with private dependencies, which is all that marks them: a fine-grained token owned by `<owner>`, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy its applications.
 
 ## Tests
 
@@ -52,7 +52,7 @@ The CI pipelines run the tests, and they're the gate:
 | `-Xswiftc -require-explicit-sendable` | Libraries | Every `public` type stating whether it's `Sendable` |
 
 - The toolchain is the package's `swift-tools-version`. CI tests on it, a service and a system library on Ubuntu noble and linux/arm64, where services run, and the `Containerfile` builds on it, so moving a package to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.
-- `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it.
+- `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it. `XValkeyTests` reach a real Valkey through `VALKEY_HOST` and `VALKEY_PORT`.
 
 ## Foundation linking
 
@@ -94,7 +94,7 @@ jobs:
 - `api_breakage_check_enabled` is `true` from 1.0, so a breaking change shows on its pull request, and `false` below 1.0, where a minor release may break the API.
 - A public library builds on every toolchain its users may have: `linux_swift_versions` from its tools version up through the newest release, then `nightly-main` and the next release's nightly; `linux_host_archs: '["x86_64", "aarch64"]'`; `enable_linux_static_sdk_build: true`.
 - A library with DocC catalogs lists their targets in `docs_check_targets`, and Soundness fails on any DocC warning in them.
-- `<org>-protos`, which has no tests, passes `linux_build_command: swift build -c release`.
+- `<project>-protos` has no tests and only builds: its `ci.yml` passes `linux_build_command: swift build -c release`, and `swift build` stands in for `swift test`, which fails on a package with no tests.
 
 ## A service's CI workflows
 
@@ -134,7 +134,7 @@ jobs:
       DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
 ```
 
-- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest. An environment runs it as one Dokploy application per process, `loans` (serve) and `loans worker run` ([commands](composition.md#commands)), and `application_ids` lists the one that runs `serve --migrate-database` first.
+- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest. An environment runs it as one Dokploy application per process, `loans` (serve) and `loans worker run` ([commands](composition.md#commands)), and `application_ids` lists the one that runs `serve --migrate-database` first. That application alone mounts the migrator's certificate ([Postgres](security.md#postgres)).
 - The gateway's `ci.yml` has no `postgres_image` and one application per environment, since it has no worker, and excludes `gateway` while its generated OpenAPI code links full Foundation.
 - `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls `deploy_dokploy.yml` with `environment: production`, that `commit`, the `image_repository`, the production `application_ids` and the Dokploy secrets. It deploys only a commit that staging ran.
 - `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package, keeping its 30 newest versions. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).

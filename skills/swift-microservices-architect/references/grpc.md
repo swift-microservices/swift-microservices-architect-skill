@@ -16,7 +16,7 @@ Contracts, the proto services a service implements, their handlers and conversio
 
 ## Contracts in the protos package
 
-`<org>-protos/Sources/LoansProtos/bookshelf/loans/v1/loans.proto`:
+`<project>-protos/Sources/LoansProtos/bookshelf/loans/v1/loans.proto`:
 
 ```proto
 syntax = "proto3";
@@ -100,12 +100,12 @@ service LoanService {
 
 - The file and package are named as [naming](conventions.md#naming) gives them. Generated types take the package as a prefix: `Bookshelf_Loans_V1_Loan`, `Bookshelf_Loans_V1_LoanService`.
 - Comments in the contract say who calls each group of RPCs and what a request may name.
-- Fields are snake_case. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
-- Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`.
+- Fields are snake_case. swift-protobuf generates `book_id` as `bookID` but `book_ids` as `bookIds`, and code spells each as generated. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
+- Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`. Only a closed set is a proto enum; an open set, such as `UserRole`, is its raw `string`.
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
 - A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).
-- A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`.
-- Contracts release before the services that implement or call them ([the organization's core package](packages.md#the-organizations-core-package)). A service that serves a new RPC or field deploys before any caller or gateway route that uses it, and never removes an RPC a deployed caller still uses.
+- A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`. Before a contract's first deploy it changes in place, with no `v2`, as a major release of `<project>-protos`.
+- Contracts release before the services that implement or call them ([the project's core package](packages.md#the-projects-core-package)). A service that serves a new RPC or field deploys before any caller or gateway route that uses it, and never removes an RPC a deployed caller still uses.
 
 ## A service's gRPC services
 
@@ -258,8 +258,8 @@ extension Bookshelf_Loans_V1_Loan {
 }
 ```
 
-- Into Core, a conversion refuses what the wire allows and the domain doesn't: an id that isn't a UUID, an `…_UNSPECIFIED` or unrecognized enum value.
-- Out of Core, a conversion is total: every case of a Core enum maps to a proto value in an exhaustive `switch`.
+- Into Core, a conversion refuses what the wire allows and the domain doesn't: an id that isn't a UUID, an `…_UNSPECIFIED` or unrecognized enum value, an unset message field the domain needs, such as a `Timestamp` (`hasDueDate`).
+- Out of Core, a conversion is total: every case of a Core enum maps to a proto value in an exhaustive `switch`, and an open set converts through its `rawValue`.
 - Conversions are the only code that sees both a generated type and a Core type.
 
 ## Lists and pages
@@ -301,13 +301,13 @@ extension Bookshelf_Loans_V1_ListAllLoansResponse {
 | Malformed or invalid input (`invalidIdempotencyKey`) | `invalidArgument` |
 | The request's own proof fails (`signatureRejected`, `credentialsRejected`) | `unauthenticated` |
 | What the request names doesn't exist (`…NotFound`) | `notFound` |
-| What the request creates exists (`duplicate…`) | `alreadyExists` |
-| The current state refuses it (`loanLimitReached`, `alreadyReturned`, `idempotencyConflict`) | `failedPrecondition` |
-| The caller may not (`forbidden`) | `permissionDenied` |
+| What the request creates, or asks for a second time, exists (`duplicate…`) | `alreadyExists` |
+| The resource's state refuses it, whoever asks (`loanLimitReached`, `alreadyReturned`, `idempotencyConflict`) | `failedPrecondition` |
+| Who the caller is refuses it (`forbidden`) | `permissionDenied` |
 | A dependency is down (`…Unavailable`) | `unavailable` |
 | `unknown` | `internalError` |
 
-A missing caller is `unauthenticated`, from `requireUser()`. A message is one sentence for the client, ending in a period, naming nothing internal.
+A refusal that turns on who the caller is, such as approving a request the caller made, is `permissionDenied` even when it reads the resource; one that turns on the resource's state alone is `failedPrecondition`. A missing caller is `unauthenticated`, from `requireUser()`. A message is one sentence for the client, ending in a period, naming nothing internal.
 
 ## Interceptors
 
@@ -349,12 +349,12 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 
 - It translates only the statuses a use case acts on; any other error propagates unchanged, so the use case that logs it logs its cause.
 - `notFound` on a lookup becomes `nil`, matching the port's optional.
-- The response conversion (`Book+Protobuf.swift` in `Clients/Protobuf/`) throws on a malformed message rather than inventing a value.
+- The response conversion (`Book+Protobuf.swift` in `Clients/Protobuf/`) throws on a malformed message, such as an id that isn't a UUID or an unset field the domain needs, rather than inventing a value.
 - Every call has a deadline: the client's `ServiceConfig` sets one for all methods, and a port that needs a tighter bound passes `CallOptions` with its own `timeout`.
 
 ## Transports
 
-The executable builds the server's and each client's transport from `<Org>Transport`'s readers ([mutual TLS](security.md#mutual-tls)), as [the composition root](composition.md#the-composition-root) shows:
+The executable builds the server's and each client's transport from `<Project>Transport`'s readers ([mutual TLS](security.md#mutual-tls)), as [the composition root](composition.md#the-composition-root) shows:
 
 - One `clientSecurity` serves every client of the process, and each upstream gets its own scoped configuration (`grpc.catalog`) with its host, port, transport config and service config.
 - The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.

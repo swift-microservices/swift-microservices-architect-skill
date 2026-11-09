@@ -8,7 +8,7 @@ license: MIT
 
 In a backend built another way, keep its structure and conventions unless the user asks to change them, and take a shape from this skill only for what the backend lacks.
 
-`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Org>` and `<org>` for the organization. The examples are Bookshelf, a small lending library:
+`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Project>` and `<project>` for the project. The examples are Bookshelf, a small lending library:
 
 | Package | Holds |
 |---|---|
@@ -25,15 +25,15 @@ In a backend built another way, keep its structure and conventions unless the us
 Clients ── HTTPS ──► edge (TLS ends) ── HTTP ──► Gateway (Hummingbird, OpenAPI)
 Gateway ── gRPC, mTLS, the caller's JWT ──► each service's XService
 Service, worker ── gRPC, mTLS ──► another service's XInternalService
-Service, worker ── mTLS ──► Temporal          Service ──► its own Postgres database, Valkey
+Service, worker ── mTLS ──► Temporal          Service, worker ──► its own data, wherever it lives
 ```
 
-Every service and the gateway depend on `<org>-core`, `<org>-protos` and the swift-microservices libraries ([stack](references/stack.md)).
+Every service and the gateway depend on `<project>-core`, `<project>-protos` and the swift-microservices libraries ([stack](references/stack.md)).
 
 ## A service's package
 
 ```
-<org>-x
+<project>-x
 ├── XCore         domain models, errors, repository protocols and commands, ports, use cases, workflows, activity containers
 ├── XPostgres     a scope per database role, repositories, statements, migrations
 ├── XGRPC         XService and XInternalService, Protobuf conversions, gRPC clients for Core's ports
@@ -57,12 +57,12 @@ A service has only the targets it needs, and each imports only what [its row](re
 | Business rules, authorization decisions, what an error means | The use case, in XCore; adapters only convert and delegate |
 | What a service knows about another's data | A model in its XCore `Ports/`, beside the port that returns it |
 | Protobuf ↔ domain, HTTP ↔ protobuf | XGRPC's `Protobuf/` conversions; the gateway's `Schemas/` |
-| Messages between processes; the public API | `<org>-protos`; the gateway's `openapi.yaml` |
+| Messages between processes; the public API | `<project>-protos`; the gateway's `openapi.yaml` |
 | Who the caller is | The gateway verifies and forwards the token; each service verifies it again |
 | Which processes may call an internal RPC | mTLS at the listener: every process the environment's authority signs |
-| Tenant isolation | Row-level security; `<Org>Persistence` binds the caller to each transaction, and each audience's use cases run as [their database role](references/persistence.md#database-roles) |
+| Tenant isolation | Row-level security; `<Project>Persistence` binds the caller to each transaction, and each audience's use cases run as [their database role](references/persistence.md#database-roles) |
 | Durable, delayed or multi-service work | A Temporal workflow in XCore's `Workflows/` |
-| What every service needs identically | `<org>-core`: identity, tenant binding, transport readers |
+| What every service needs identically | `<project>-core`: identity, tenant binding, transport readers |
 
 ## Code style
 
@@ -107,17 +107,18 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
 - [ ] Name each service; check its target names against every module in the graph
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, short-lived state
-- [ ] Per service: its targets, commands and database roles
-- [ ] <org>-core's products, <org>-protos' contracts, the gateway's routes by tier
-- [ ] Build order: <org>-core and <org>-protos, the token issuer, each service before its callers, the gateway
+- [ ] Per service: its targets and commands; whether it stores data, where, its roles and how processes prove them (system.md#data-placement)
+- [ ] <project>-core's products, <project>-protos' contracts, the gateway's routes by tier
+- [ ] Build order: <project>-core and <project>-protos, the token issuer, each service before its callers, the gateway
 - [ ] Write the plan from system.md#the-plan; check it against the hard rules before any code
 ```
 
 **Add a service**
 
 ```
-- [ ] <org>-protos: XProtos with XService, and XInternalService if processes call in
-- [ ] Package <org>-x from packages.md#packageswift-template, with only the targets the plan names
+- [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
+- [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in
+- [ ] Package <project>-x from packages.md#packageswift-template, with only the targets the plan names
 - [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
 - [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md)
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
@@ -126,12 +127,13 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module, over mocks (testing.md)
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
-- [ ] swift build and swift test with CI's flags and POSTGRES_* set (delivery.md#tests), scripts/check_boundaries.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
+- [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
 ```
 
 **Add an operation**
 
 ```
+- [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
 - [ ] Contract: the RPC under its audience in XService, or in XInternalService
 - [ ] XCore: the use case's five files; its scope lists only what it touches (use-cases.md)
 - [ ] XPostgres: the scopes of the roles it may run as adopt its scope protocol
@@ -139,18 +141,19 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] Executable: the use case on its role's database, passed to the service
 - [ ] Gateway: the route in its tier, if public
 - [ ] Tests: the use case's outcomes and the handler's statuses, over mocks
-- [ ] swift build and swift test with CI's flags and POSTGRES_* set (delivery.md#tests), scripts/check_boundaries.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
+- [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
 ```
 
 **Add a durable process**
 
 ```
+- [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
 - [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)
 - [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
 - [ ] Executable: TemporalClient and the task queue into Serve's use cases; the worker group and its Run root
 - [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks
-- [ ] swift build and swift test with CI's flags and POSTGRES_* set (delivery.md#tests), scripts/check_boundaries.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
+- [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, and report any suite that can't run
 ```
 
 **Set up CI/CD**
@@ -165,7 +168,7 @@ Copy the task's checklist into the response and check items off as they're done;
 **Review a backend**
 
 ```
-- [ ] Run this skill's scripts/check_boundaries.sh from the service's root (packages.md#checking-the-boundaries)
+- [ ] Run this skill's scripts/check_boundaries.sh from each service's and the gateway's root, and scripts/check_style.sh from every package's (packages.md#checking-the-boundaries)
 - [ ] Each use case: its five files, typed throws, one catch per case, no helpers, the right database role
 - [ ] Each adapter only converts and delegates; every error case is mapped
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
@@ -180,16 +183,16 @@ Read each reference when its row applies:
 
 | Reference | Read when |
 |---|---|
-| [system.md](references/system.md) | Planning a backend, adding or splitting a service, deciding how services talk |
-| [packages.md](references/packages.md) | Creating a package, changing a target's imports or dependencies, deciding what Core may link, checking boundaries |
+| [system.md](references/system.md) | Planning a backend, adding or splitting a service, deciding how services talk or where data lives |
+| [packages.md](references/packages.md) | Creating a package, changing a target's imports or dependencies, deciding what Core may link, running the boundary or style checks |
 | [stack.md](references/stack.md) | Choosing a library or a version, or checking whether one links full Foundation |
 | [use-cases.md](references/use-cases.md) | Writing a model, error, repository, port or use case, including a system use case, or deciding a transaction or authorization |
 | [persistence.md](references/persistence.md) | Writing a scope, statement, migration, policy, tenant table, Valkey repository or Valkey client |
 | [grpc.md](references/grpc.md) | Changing a contract, handler, conversion, client, paged list or transport |
 | [gateway.md](references/gateway.md) | Adding a route, request context, controller, webhook route or error mapping |
-| [workflows.md](references/workflows.md) | Writing or starting a workflow, activity container or worker, or changing a workflow that has runs in flight |
+| [workflows.md](references/workflows.md) | Writing or starting a workflow, activity container or worker |
 | [composition.md](references/composition.md) | Wiring a command, composition root, configuration, logging or the ServiceGroup |
-| [security.md](references/security.md) | Touching TLS or mTLS, tokens, secrets, authorization layers or webhook verification |
+| [security.md](references/security.md) | Touching TLS or mTLS, database logins, tokens, secrets, authorization layers or webhook verification |
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |
 | [delivery.md](references/delivery.md) | Setting up CI, releases, deployment, the Containerfile or Dependabot |
@@ -201,3 +204,4 @@ For the code inside the shapes, load these when installed; where this skill stat
 - Actors, task groups, cancellation, `Sendable` diagnostics, Swift 6 migration: `swift-concurrency`
 - Argument labels, method names, documentation comments: `swift-api-design-guidelines`
 - Tests of use cases, handlers and workflows: `swift-testing-expert`
+- How a workflow is designed and behaves (its history, signals and updates, waiting, compensation, versioning): `temporal-developer`

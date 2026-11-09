@@ -31,9 +31,10 @@ struct Loans: AsyncParsableCommand {
 ```
 
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
-- `serve --migrate-database` applies pending migrations and sets the roles' passwords as the owner, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
+- `serve --migrate-database` applies pending migrations as the owner, proved by the migrator's certificate, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
 - A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
-- An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived subcommand of the executable, never an administrators' RPC.
+- An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived command, a subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
+- A short-lived command connects as `<x>_internal`, since no caller is bound, and reads a secret it needs through the `ConfigReader` with `isSecret: true`, never from a flag, which the process list shows.
 - Each command's `run()` is a composition root: the only code that reads configuration, constructs concrete types and runs them. Nothing below it reads configuration, builds a client or starts a task.
 
 ## The composition root
@@ -70,23 +71,26 @@ struct Serve: AsyncParsableCommand {
         let logger = Logger(label: "bookshelf-loans")
 
         // MARK: - Infrastructure
+        let tlsConfig = config.scoped(to: "tls")
+        let certificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)
+        let certificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(configuration: certificateReloaderConfiguration)
+        let clientSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
+
         let postgresConfig = config.scoped(to: "postgres")
         if migrateDatabase {
-            let ownerPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "owner")
+            let migratorTLSConfig = postgresConfig.scoped(to: "owner.tls")
+            let migratorCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: migratorTLSConfig, logger: logger)
+            let migratorCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(configuration: migratorCertificateReloaderConfiguration)
+            let ownerPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "owner", certificateReloader: migratorCertificateReloader)
             try await PostgresClient.withClient(configuration: ownerPostgresConfiguration, logger: logger) { client in
                 let migrations = Migrations(client: client, …, logger: logger)
                 try await migrations.apply()
             }
         }
-        let servicePostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "service")
-        let internalPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "internal")
+        let servicePostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "service", certificateReloader: certificateReloader)
+        let internalPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "internal", certificateReloader: certificateReloader)
         let postgresClient = PostgresClient(configuration: servicePostgresConfiguration, backgroundLogger: logger)
         let internalPostgresClient = PostgresClient(configuration: internalPostgresConfiguration, backgroundLogger: logger)
-
-        let tlsConfig = config.scoped(to: "tls")
-        let certificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)
-        let certificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(configuration: certificateReloaderConfiguration)
-        let clientSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
 
         let jwtConfig = config.scoped(to: "jwt")
         let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
@@ -180,10 +184,10 @@ struct Serve: AsyncParsableCommand {
         // MARK: - Lifecycle
         let serviceGroup = ServiceGroup(
             services: [
-                postgresClient,
-                internalPostgresClient,
                 certificateReloader,
                 temporalCertificateReloader,
+                postgresClient,
+                internalPostgresClient,
                 catalogGRPCClient,
                 temporalClient,
                 server,
@@ -198,8 +202,8 @@ struct Serve: AsyncParsableCommand {
 }
 ```
 
-- **Configuration, Logging, Infrastructure, Composition, the server, Lifecycle**: every root has these sections, in this order.
-- Infrastructure builds what talks to the outside: database clients per role, certificate reloaders, the authenticator, upstream clients, the Temporal and Valkey clients.
+- **Configuration, Logging, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order, and a short-lived command's the first four ([commands](#commands)).
+- Infrastructure builds what talks to the outside: certificate reloaders, database clients per role, the authenticator, upstream clients, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
 - The use cases that start workflows take what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
 - Each use case is a `let` named like the property that holds it, on the database its audience requires; the service then takes the names. Every value in a root is built this way ([build, then call](style.md#build-then-call)).
@@ -223,8 +227,12 @@ extension InMemoryProvider {
             "tls.privateKeyPath": "/run/tls/key.pem",
             "tls.trustRootsPath": "/run/tls/ca.pem",
             "jwt.publicKeysPath": "/run/secrets/jwt-public",
+            "postgres.port": 5432,
             "postgres.db": "bookshelf_loans",
             "postgres.tls.trustRootsPath": "/run/tls/ca.pem",
+            "postgres.owner.user": "loans_owner",
+            "postgres.owner.tls.certificatePath": "/run/postgres-owner-tls/cert.pem",
+            "postgres.owner.tls.privateKeyPath": "/run/postgres-owner-tls/key.pem",
             "postgres.service.user": "loans_service",
             "postgres.internal.user": "loans_internal",
             "postgres.worker.user": "loans_worker",
@@ -245,15 +253,27 @@ extension InMemoryProvider {
 - Defaults hold mount paths, ports, the database's name, role names, the Temporal namespace, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
 - A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes first: `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)`. Required keys and validation live in the reader, not in the root.
 - A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
-- Readers every executable shares are `<Org>Transport`'s and `<Org>Persistence`'s; a service's own, for its policies and provider clients, are in its `Configuration/`. A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)` ([with TLS set on it](persistence.md#valkey)), with the key names that library chose.
-- Keys are named as [naming](conventions.md#naming) gives them, and environment names derive from them: `postgres.service.password` is `POSTGRES_SERVICE_PASSWORD`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
+- A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)` ([with TLS set on it](persistence.md#valkey)), with the key names that library chose. A service's own readers are in the executable's `Configuration/`: its policies' (`LoanPolicy+ConfigReader.swift`), and its provider clients', as extensions on the provider target's types (`ResendNoticeEventVerifier+ConfigReader.swift`), since a provider target never reads configuration.
+- Readers every executable shares are `<Project>Transport`'s and `<Project>Persistence`'s, under these keys, relative to the scopes the roots give them:
+
+| Reader | Scopes | Keys, with tuning defaults |
+|---|---|---|
+| `TimedCertificateReloader.Configuration(config:logger:)` | `tls`, `temporal.tls`, `postgres.owner.tls` | `certificatePath`, `privateKeyPath`; `refreshIntervalSeconds` (60) |
+| The server's and the client's `TransportSecurity.mTLS(config:certificateReloader:)` | `tls`, `temporal.tls` | `trustRootsPath` |
+| `HTTP2ServerTransport.Posix.Config(config:)` | `grpc.server` | `maxConnectionAgeSeconds` (1800), `connectionGraceTimeSeconds` (30), `minPingIntervalSeconds` (10) |
+| `HTTP2ClientTransport.Posix.Config(config:)`, `ServiceConfig(config:)` | `grpc.<upstream>` | `keepaliveTimeSeconds` (30), `keepaliveTimeoutSeconds` (10); `deadlineSeconds` (10) |
+| `JWTAuthenticator<UserIdentity>(config:)`, Identity's `JWTIssuer<UserIdentity>(config:)` | `jwt` | `publicKeysPath`, a directory of PEM files; `privateKeyPath` |
+| `PostgresClient.Configuration(config:role:certificateReloader:)` | `postgres` | `host`, `port`, `db`, `tls.trustRootsPath`, `<role>.user`; the password fallback's `(config:role:)` adds `<role>.password`, a secret (`POSTGRES_SERVICE_PASSWORD`) |
+
+- A `<project>-core` reader requires every value a deployment sets, such as a path, host, port or user, and defaults only tuning; the executable's defaults hold the deployment's values.
+- Keys are named as [naming](conventions.md#naming) gives them, and environment names derive from them: `postgres.service.user` is `POSTGRES_SERVICE_USER`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
 - A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
 - Secrets and key material follow [secrets](security.md#secrets).
 - A reader's doc comment lists its keys, their types, defaults and whether they're secret.
 
 ## Logging
 
-- `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Org>Authentication` ([user tokens](security.md#user-tokens)).
+- `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Project>Authentication` ([user tokens](security.md#user-tokens)).
 - The level comes from `logLevel`, defaulting to `info`; the label is as [naming](conventions.md#naming) gives it.
 - The root's `logger` is passed to every client, database, use case and server that takes one, and bound around the group's run with `withLogger(logger)` for the libraries that log through `Logger.current`, such as swift-temporal-sdk. Nothing creates a logger of its own.
 
@@ -262,7 +282,7 @@ extension InMemoryProvider {
 A root lists its long-lived components in one `ServiceGroup` and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
 
 - Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `TemporalClient`, `TemporalWorker`.
-- Order is dependency order: database clients, certificate reloaders, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
+- Order is dependency order: certificate reloaders, database clients, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
 - `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. Running the group is the root's last line.
 - A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
 - A long-running component of the service's own is a `Service` whose `run()` returns on graceful shutdown: its loop iterates `sequence.cancelOnGracefulShutdown()`, or wraps its work in `withGracefulShutdownHandler`.
@@ -273,9 +293,9 @@ A root lists its long-lived components in one `ServiceGroup` and nothing else: n
 
 ```swift
 // MARK: - Infrastructure
-let workerPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "worker")
-let workerPostgresClient = PostgresClient(configuration: workerPostgresConfiguration, backgroundLogger: logger)
 …  // tls, temporal and each client's transport, as in Serve
+let workerPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "worker", certificateReloader: certificateReloader)
+let workerPostgresClient = PostgresClient(configuration: workerPostgresConfiguration, backgroundLogger: logger)
 let identityGRPCClient = GRPCClient(transport: identityTransport)
 let catalogGRPCClient = GRPCClient(transport: catalogTransport)
 
@@ -303,7 +323,7 @@ let worker = try TemporalWorker(
 )
 
 // MARK: - Lifecycle
-// workerPostgresClient, certificateReloader, temporalCertificateReloader, identityGRPCClient, catalogGRPCClient, worker
+// certificateReloader, temporalCertificateReloader, workerPostgresClient, identityGRPCClient, catalogGRPCClient, worker
 ```
 
 - The root builds each activity container from system use cases and port implementations, here XGRPC's and the provider target's, so no adapter target imports another, and registers the workflows. `activityContainers:` takes each container as its own argument.

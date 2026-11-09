@@ -22,9 +22,14 @@ The bar is the sample code in Apple's WWDC sessions, such as *Meet async/await i
 - No workarounds: no `Result` juggling, flags that steer control flow, `try?` that hides a failure, nested `do` inside a `catch`, force unwraps or `as!`.
 - `guard` for refusals and unwrapping, with the `else` doing one thing. `switch` over every case of an enum outcome; `if case` only when one case matters.
 - Names say what a value is: `activeLoans`, `isMarkedOverdue`, `catalogConfig`; never `result`, `data`, `flag` or a type's name.
-- Tunable numbers are named where they belong: `ActivityOptions.notification`, `LoanPolicy.maximumActiveLoans`; never an inline literal in a workflow or use case.
+- Numbers are named where they belong ([domain models](use-cases.md#domain-models)), never an inline literal in a workflow or use case: `ActivityOptions.notification`, `LoanPolicy.maximumActiveLoans`, `EmailAddress.maximumLength`.
 - `// MARK: -` names the sections of a composition root and the groups inside a type: a service's RPCs by audience, a router builder's tiers, an activity container's steps.
 - Code that a reader would otherwise check twice gets a one-line comment with the reason: a business rule, an ordering constraint, a safety property. A comment never narrates the next line.
+
+A feature is built the established way. Before writing one, look up the standard or documented practice that covers it: an RFC, OWASP's guidance, or the provider's or library's documented approach, such as RFC 9457 for problem details, RFC 8725 for JWTs, OWASP's password storage and the IETF `Idempotency-Key` header.
+- Adopt that practice within this skill's rules, and never invent a scheme where a standard exists.
+- Handle what most production systems meet. A rare edge case gets a sentence to the user, not code.
+- Without web access, tell the user that the approach comes from prior knowledge, unchecked against the current standard.
 
 ## Build, then call
 
@@ -43,8 +48,8 @@ let rows = try await connection.execute(statement, logger: logger)
 
 - A use case declares its error with typed throws: `async throws(BorrowBookUseCaseError) -> Loan`. Repositories, ports, clients and handlers use untyped `throws`.
 - Errors are mapped with `do` and one `catch` per case: `catch CatalogClientError.unavailable { throw .catalogUnavailable }`. The order and the final `catch` are in [the body of a use case](use-cases.md#the-body-of-a-use-case); a handler maps every case and has no final `catch` ([a handler](grpc.md#a-handler)).
-- The `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
-- Each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
+- In a use case, a handler and an activity, the `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
+- There, each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
 - A `do` nests in one place: around a workflow's start, when its `catch` returns what the path built ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` is spelled in full: `throw BorrowBookUseCaseError.bookNotFound`.
 - `String(reflecting: error)` goes into the log line of an unknown error, never into a response.
@@ -57,13 +62,13 @@ Every package builds with [the Swift settings](packages.md#swift-settings).
 - Everything that crosses a boundary is `Sendable`: models, inputs, commands, errors, protocols. Structs and enums by default; an actor only for mutable state shared across tasks; `Mutex` from `Synchronization` for a small piece of state touched synchronously.
 - No `@unchecked Sendable`, `nonisolated(unsafe)` or `@preconcurrency` in owned code. When a dependency needs one, it appears once, in the adapter that wraps the dependency, with the reason on the line above.
 - No unstructured tasks in a service. Long-running work is a `Service` in the `ServiceGroup`; work that must outlive a request is a [workflow](workflows.md#when-work-is-a-workflow); concurrency inside a request is `async let` or a task group, which end with the request.
-- A requirement from a library built without `NonisolatedNonsendingByDefault` is implemented with `@concurrent` on each `async` closure parameter, since the library's plain spelling means `@concurrent` there and the caller's isolation here: Hummingbird middleware's `next` is written `next: @concurrent (Request, Context) async throws -> Response`, a grpc-swift `ServerInterceptor`'s `next: @concurrent @Sendable (…)`, and a `ClientInterceptor`'s `next: @concurrent (…)`. Copied as the library spells it, the method doesn't satisfy the requirement.
+- A requirement from a library built without `NonisolatedNonsendingByDefault` is implemented with `@concurrent` on each `async` closure parameter, since the library's plain spelling means `@concurrent` there and the caller's isolation here: Hummingbird middleware's `next` is written `next: @concurrent (Request, Context) async throws -> Response`, a grpc-swift `ServerInterceptor`'s `next: @concurrent @Sendable (…)`, and a `ClientInterceptor`'s `next: @concurrent (…)`. Copied as the library spells it, the method doesn't satisfy the requirement. When the closure type wraps, swift-format moves it to the line after `next:` ([binding the tenant](persistence.md#binding-the-tenant)).
 - CPU-heavy synchronous work, such as hashing a password, runs on `NIOThreadPool.singleton.runIfActive { … }`, off the cooperative pool.
 - No server type is `@MainActor`.
 
 ## Access control and imports
 
-- Inside a service's package, what another target uses is `package`, the rest internal or `private`. `public` is for libraries other packages link: `<org>-core`, `<org>-protos`.
+- Inside a service's package, what another target uses is `package`, the rest internal or `private`. `public` is for libraries other packages link: `<project>-core`, `<project>-protos`.
 - A `package` struct spells its `package init`, since the memberwise initializer is internal.
 - Imports are internal by default. A file imports a module `package` when the module's types appear in its `package` declarations, `public` when in `public` ones, and plainly otherwise.
 - A file imports every module whose members it uses, since `MemberImportVisibility` hides members of modules it doesn't import.
@@ -103,8 +108,9 @@ package import Foundation
 
 ## Types and values
 
-- Models, inputs, commands and outputs are structs of `let` properties. Closed sets are enums (`LoanStatus`); a set other services may extend is a `RawRepresentable` string struct with static members (`UserRole`).
-- Ids are `UUID` in Swift and lowercase strings only on the wire. Instants are `Date`, durations `Duration`.
+- Models, inputs, commands and outputs are structs of `let` properties. Closed sets are enums (`LoanStatus`); a set other services may extend is a `RawRepresentable` string struct with static members (`UserRole`), which a contract carries as its raw string ([contracts](grpc.md#contracts-in-the-protos-package)).
+- Foundation adds no `Duration` to a `Date`, so a `TimeInterval` appears only at a `Date`'s arithmetic, converted once in the policy or model method that owns the duration: `let loanSeconds = loanPeriod / .seconds(1)`, then `borrowedAt.addingTimeInterval(loanSeconds)`. Every other duration is a `Duration`.
+- Ids are `UUID` in owned Swift and lowercase strings on the wire, over gRPC and HTTP alike; the gateway's generated types hold them as `String`s ([OpenAPI types](gateway.md#openapi-types)). Instants are `Date`, durations `Duration`.
 - Absence is an optional, never a sentinel such as `""`, `-1` or `.distantPast`.
 - A value that can be invalid is validated where it's made, by a throwing or failable initializer, so a model never holds an invalid one.
 - Protocols exist only where substitution is real: use cases, repositories, scopes, the database and ports. Models, commands, policies and configuration are concrete. There is no clock or id-generator protocol: ids and stored dates come from the database, and a use case that decides on time reads `Date.now`.

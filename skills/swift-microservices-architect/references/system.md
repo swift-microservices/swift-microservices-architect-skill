@@ -7,7 +7,7 @@ How a backend splits into services, how they talk, and the packages they share. 
 - Naming a service
 - Contracts
 - How services talk
-- Data ownership and storage
+- Data placement
 - The shared packages
 - The plan
 - Out of scope
@@ -42,7 +42,7 @@ A step that was atomic across the two becomes a workflow. Moving or dropping dat
 
 ## Contracts
 
-Each service publishes one proto package, `<org>.<x>.v1`, with one `XService` and at most one `XInternalService`:
+Each service publishes one proto package, `<project>.<x>.v1`, with one `XService` and at most one `XInternalService`:
 
 | Proto service | Called by | Admitted by |
 |---|---|---|
@@ -53,7 +53,7 @@ Each service publishes one proto package, `<org>.<x>.v1`, with one `XService` an
 - A service with no process calling in has no internal service. An RPC that would answer anyone's question about someone else (an account by email) is internal only.
 - Proto services and RPCs are named as [naming](conventions.md#naming) gives them.
 - Each contract owns its messages; no message is shared between contracts.
-- A create that a client may retry carries an `idempotency_key`; the owner deduplicates on it.
+- A create that a client may retry carries an `idempotency_key`; the owner deduplicates on it. A request that opens a record is a create whatever its verb: `BorrowBook` opens a loan.
 
 Message rules and the package layout: [contracts in the protos package](grpc.md#contracts-in-the-protos-package).
 
@@ -69,30 +69,37 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 - Calls between services form no cycle. Break one by moving ownership, extracting a third capability, or making one direction a workflow.
 - What each hop proves, and where a user's token may travel: [the trust model](security.md#the-trust-model).
 
-## Data ownership and storage
+## Data placement
 
-- Each service owns its Postgres database (`bookshelf_loans`), with an owner and a role per purpose ([database roles](persistence.md#database-roles)); whether databases share an instance is the deployment's choice, and the module map doesn't change with it.
+A service's data is its own wherever it lives: only the service reads and writes it, and every other process reaches it through the service's contract. Where the data lives and how a process reaches it are choices, each with a default; a plan that departs from one records the choice and its reason under Decisions ([the plan](#the-plan)).
+
+| Choice | Default | Other options, and when |
+|---|---|---|
+| Where a service's data lives | One Postgres server per environment, with a database per service that stores data (`bookshelf_loans`) | Its own server, for throughput, isolation or compliance, which changes configuration, not code. No database, for a service that stores nothing. Valkey alone, for a service whose state is all short-lived |
+| The roles a process connects as | The owner for migrations, then a role per audience, `<x>_service`, `<x>_internal` and `<x>_worker`, each with its own policy and none with `BYPASSRLS` ([database roles](persistence.md#database-roles)) | One role, in a service with no tenant table. `<x>_internal` and `<x>_worker` as one role, in a small system |
+| How a process proves its role | Its client certificate from the environment's authority, the one its gRPC connections present, mapped to the roles its identity may use; no role has a password ([Postgres](security.md#postgres)) | SCRAM-SHA-256 passwords from the secret store, read as secrets, for a managed Postgres that takes no client certificates |
+
 - A table whose rows belong to a user is a tenant table under [row-level security](persistence.md#row-level-security).
 - Short-lived values with an expiry live in [Valkey](persistence.md#valkey).
 
 ## The shared packages
 
-Besides the swift-microservices libraries ([stack](stack.md)), every service and the gateway depend on two packages of the organization's own.
+Besides the swift-microservices libraries ([stack](stack.md)), every service and the gateway depend on two packages of the project's own.
 
-**`<org>-core`** holds what every service would otherwise write identically:
+**`<project>-core`** holds what every service would otherwise write identically:
 
 | Product | Holds | Linked by |
 |---|---|---|
-| `<Org>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, executables |
-| `<Org>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:)` | Executables with Postgres |
-| `<Org>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys | Executables |
-| `<Org>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
+| `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, executables |
+| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:certificateReloader:)` for a role proved by the process's certificate, and `(config:role:)` for the password fallback | Executables with Postgres |
+| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys | Executables |
+| `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
 
 It holds none of these: a service's models, repositories, scopes or migrations; contracts; deployment defaults such as mount paths, ports and role names, which stay in each executable's `InMemoryProvider` defaults; generic abstractions, which belong to the swift-microservices libraries; a process identity or service token, since certificates prove processes.
 
-**`<org>-protos`** holds one target per contract (`IdentityProtos`, `CatalogProtos`, `LoansProtos`), generated at build time, so a consumer links only the contracts it calls. A package of its own lets contracts release apart from `<org>-core`.
+**`<project>-protos`** holds one target per contract (`IdentityProtos`, `CatalogProtos`, `LoansProtos`), generated at build time, so a consumer links only the contracts it calls. A package of its own lets contracts release apart from `<project>-core`.
 
-Both packages: [the organization's core package](packages.md#the-organizations-core-package), [the contracts package](packages.md#the-contracts-package).
+Both packages: [the project's core package](packages.md#the-projects-core-package), [the contracts package](packages.md#the-contracts-package).
 
 ## The plan
 
@@ -110,23 +117,23 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 |---|---|---|
 
 ## Module maps
-### <org>-<x>
+### <project>-<x>
 | Target | Holds |
 |---|---|
 - Commands: `serve [--migrate-database]`, `worker run`
-- Database roles and the use cases each runs
+- Data: where it lives, the database roles and the use cases each runs, and how each process proves its roles
 - Calls out to: other services' internal RPCs, providers, Temporal, Valkey
 
 ## Shared packages
-- <org>-core: each product and what it holds
-- <org>-protos: one target per contract
+- <project>-core: each product and what it holds
+- <project>-protos: one target per contract
 
 ## Gateway routes
 | Route | Tier | Upstream RPC |
 |---|---|---|
 
 ## Decisions
-- Each boundary and why it holds; each exception to a rule, with its reason
+- Each boundary and why it holds; each departure from a default or exception to a rule, with its reason
 ```
 
 Review the plan against the hard rules in `SKILL.md` before writing code.

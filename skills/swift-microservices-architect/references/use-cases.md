@@ -41,9 +41,9 @@ package enum LoanStatus: String, Equatable, Sendable {
 
 - A model is a `package struct` of `let` properties, `Equatable` and `Sendable`, with an explicit `package init`.
 - It's named for what it is in the service's language ([naming](conventions.md#naming)).
-- Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text.
+- Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text. A validated value, such as an `EmailAddress`, travels as itself through models, commands and ports, never as the `String` it was made from.
 - A rule more than one use case applies lives on a model or a policy, never in a use case for another to copy: `LoanPolicy.dueDate(borrowedAt:)`, a throwing `EmailAddress(_:)` that normalizes and validates.
-- Tunable rules are a policy value (`LoanPolicy`, with `maximumActiveLoans` and `loanPeriod`), passed to the use cases that apply it and read from configuration by the executable ([configuration](composition.md#configuration)).
+- A value operators change is a policy value (`LoanPolicy`, with `maximumActiveLoans` and `loanPeriod`), passed to the use cases that apply it and read from configuration by the executable ([configuration](composition.md#configuration)). A limit the domain fixes, such as an email address's 254 characters, is a static on its model (`EmailAddress.maximumLength`).
 - What the service knows about another service's data is its own model, in `Ports/`, beside the port that returns it: Loans' `Book` holds an id and a title, not Catalog's whole book.
 
 ## Errors
@@ -65,7 +65,7 @@ package enum BorrowBookUseCaseError: Error, Equatable {
 }
 ```
 
-- Each error is an enum, `Error, Equatable`, with no associated values unless the caller acts on them, and without messages: a transport writes the message its caller reads ([status codes](grpc.md#status-codes)).
+- Each error is an enum, `Error, Equatable`, with no associated values unless the caller acts on them, and without messages: a transport writes the message its caller reads ([status codes](grpc.md#status-codes)). Its file holds only the enum; what a state means for a caller, such as whether a loan can still be returned, is a method on the model (`loan.isReturnable`).
 - A case names an outcome in the domain's terms (`bookNotFound`, `loanLimitReached`), never the failure that caused it (`queryFailed`).
 - `unknown` is the use case's last case: everything it can't name, logged where it's thrown.
 - A repository or port adapter raises only reasons it can detect, such as a constraint or a status code, and lets every other error propagate unchanged. A cache's read is the one exception ([Valkey](persistence.md#valkey)).
@@ -98,7 +98,7 @@ package struct CreateLoanCommand: Sendable {
 ```
 
 - A repository is the persistence of one area, in Core's terms ([naming](conventions.md#naming)). A read of one row returns an optional (`loan(id:)`), of several an array (`activeLoans(userID:)`).
-- A write that takes more than an id takes a command.
+- A write that takes more than an id takes a command, an update of several fields included (`ExtendLoanCommand`). A write that changes several rows returns them, never only their ids.
 - Methods use untyped `async throws`: a driver throws errors the domain doesn't name, and `XRepositoryError` carries the few it does.
 - A scope builds the repository on its transaction's connection ([database roles](persistence.md#database-roles)); nothing keeps one past the transaction.
 
@@ -156,7 +156,7 @@ Ports and their implementations are named as [naming](conventions.md#naming) giv
 
 ## A use case
 
-There is one use case per operation: one per RPC, and one per database step an activity runs (`MarkLoanOverdue`). Its five files sit in `UseCases/<Name>/`:
+There is one use case per operation: one per RPC, and one per database step an activity runs (`MarkLoanOverdue`). A read that `XService` offers anyone and `XInternalService` offers other processes, with the same input and answer, is one use case both services hold, such as Catalog's `GetBook`. Its five files, four when it takes no input, sit in `UseCases/<Name>/`:
 
 ```swift
 package protocol BorrowBookUseCaseProtocol: Sendable {
@@ -341,7 +341,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - A transaction holds a pooled connection until it ends, so it contains only database work. Remote calls go before it (the catalog lookup) or after it commits (the workflow start).
 - A decision that must be atomic with its write happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
 - A rule over a count, such as the loan limit, first locks what it counts (`lockLoans(userID:)`), since `SELECT … FOR UPDATE` locks only rows that already exist; the lock ends with the transaction. A rule a constraint can state, such as a unique index, is that constraint, mapped to a case.
-- A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)); the use case maps its `nil` to its case (`alreadyReturned`).
+- A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue or returned, and throws `loanNotFound` only when there's no loan.
 - Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
 
@@ -351,7 +351,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - **The caller's own.** The use case acts on `subject.userID`, never on a user id from its input, and runs on the tenant database, where row-level security confines it as well ([row-level security](persistence.md#row-level-security)).
 - **Administrators.** The use case checks the role before anything else, then runs on the internal database in a service with tenant tables. The gateway's `AdministratorRequestContext` refuses earlier; the use case's check is the rule.
 - **Internal callers.** The use case takes the user it acts for in its input; mTLS admitted the calling process.
-- **The system.** A [system use case](#system-use-cases) acts for no caller and runs on the worker's database.
+- **The system.** A [system use case](#system-use-cases) acts for no caller and runs on the worker's database, or on the internal database when a short-lived command runs it ([commands](composition.md#commands)), whose scope then adopts its scope protocol too.
 
 ```swift
 package func callAsFunction(
@@ -377,7 +377,7 @@ package func callAsFunction(
 ## Logging
 
 - Each use case logs through the `Logger` it's built with; the metadata provider adds the caller's `userID` to every line of a request ([user tokens](security.md#user-tokens)).
-- Levels: `info` for a completed change, `warning` for a refusal, `error` for `unknown`. A successful read logs nothing.
+- Levels: `info` for a completed change, `warning` for a refusal, `error` for `unknown`. Input refused before the `do`, such as an empty idempotency key, throws without a log line, and a successful read logs nothing.
 - Messages are short sentences: `Book borrowed`, `Borrowing refused: no such book`, `Borrowing failed: unknown error`.
 - `error` holds `String(reflecting: error)`.
 - Never logged: tokens, passwords, secrets and their digests, email addresses, names, request bodies.

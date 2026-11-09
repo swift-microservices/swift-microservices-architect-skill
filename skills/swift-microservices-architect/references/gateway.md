@@ -47,16 +47,47 @@ generate:
   - types
 accessModifier: package
 namingStrategy: idiomatic
-typeOverrides:
-  schemas:
-    UUID: Foundation.UUID
-nameOverrides:
-  UUID: UUID
 ```
 
 - The routes are Hummingbird's, so request contexts and middleware stay native; the generated `Components.Schemas` types are the request and response bodies.
-- `openapi.yaml` is the contract clients code against: it changes before the routes do, and a route answers exactly the statuses it documents.
-- It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references. The generator maps `format: uuid` to `String`; the overrides make the schema `UUID`, so conversions take and give ids as `UUID`s.
+- `openapi.yaml` is the contract clients code against: it changes before the routes do, and a route answers exactly the statuses it documents. Every operation documents `500`, `503` and `504` besides its own, through shared `Problem` responses:
+
+```yaml
+paths:
+  /loans:
+    post:
+      operationId: borrowBook
+      security:
+        - bearerAuth: []
+      …
+      responses:
+        "201":
+          …
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+
+components:
+  responses:
+    ServiceUnavailable:
+      description: A service the request needs is unavailable.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    …
+```
+
+- It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references, which the generator makes a `String`, so ids cross HTTP as the services write them, lowercase ([conversions](#conversions)).
 - `servers` ends in `/v1`, and paths are written without it.
 - Every operation has an `operationId` and a `security` entry for its tier: `[]` for no caller, `[{bearerAuth: []}]` for a caller or an administrator ([request contexts](#request-contexts-and-tiers)).
 
@@ -66,7 +97,7 @@ Each group of routes runs in the context that states what it guarantees:
 
 | Tier | Context | Guarantees |
 |---|---|---|
-| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, public reads, signed webhooks |
+| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, sign-out, public reads, signed webhooks |
 | A caller | `IdentityRequestContext`, behind `BearerAuthenticationMiddleware` and `IsAuthenticatedMiddleware` | `identity` is set |
 | Administrators | `AdministratorRequestContext`, converted at the verb | A non-optional administrator `identity` |
 
@@ -106,7 +137,7 @@ package struct AdministratorRequestContext: ChildRequestContext {
 - A child context's throwing initializer is the check: a handler that takes `AdministratorRequestContext` never re-tests the role.
 - Absent and insufficient answer differently: `401` when no one identified, `403` when the caller can't do this whatever token they hold.
 - The administrator check happens at the verb, not behind an `/admin` path prefix, so a resource's path is shared by its audiences. `/admin/…` is only for an administrator's view of a collection that callers also list (`/admin/loans`).
-- A route whose bearer token isn't an access token, such as the refresh token a refresh request presents, stays in the first tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the first tier too, since there is no caller yet.
+- A route whose bearer token isn't an access token, such as the refresh token a refresh or sign-out request presents, stays in the first tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the first tier too, since there is no caller yet.
 
 ## The router
 
@@ -185,7 +216,7 @@ package struct LoanController: Sendable {
         context: IdentityRequestContext
     ) async throws -> EditedResponse<Components.Schemas.LoanResponse> {
         let body = try await request.decode(as: Components.Schemas.BorrowBookRequest.self, context: context)
-        let borrowBookRequest = Bookshelf_Loans_V1_BorrowBookRequest(body)
+        let borrowBookRequest = try Bookshelf_Loans_V1_BorrowBookRequest(body)
         let loan = try await client.borrowBook(borrowBookRequest)
         let response = try Components.Schemas.LoanResponse(loan)
         return EditedResponse(status: .created, response: response)
@@ -210,7 +241,7 @@ package struct LoanController: Sendable {
 - A controller registers its routes in `addPublicRoutes(to:)`, `addAuthenticatedRoutes(to:)` and `addAdministratorRoutes(to:)`, each taking the group of its tier; the router decides the paths.
 - A handler is a `private func` with the signature `(Request, Context) async throws -> Response`: decode the body or parameters, call the client, convert the answer. Nothing else.
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
-- Status codes follow the method: `201` with `EditedResponse` for a create, `202` for work accepted to run later, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, `200` otherwise.
+- Status codes follow the method: `201` with `EditedResponse` for a create, `202` for a route that only asks for work to happen later and has nothing yet to return, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, `200` otherwise.
 - Hummingbird keys a path capture by one name per segment, so every route on one path shares its capture name (`:id`).
 
 A provider's webhooks get a controller of their own, in the first tier at `webhooks/<provider>`, that forwards each event unparsed:
@@ -246,25 +277,27 @@ package struct ResendWebhookController: Sendable {
 ```swift
 extension Components.Schemas.LoanResponse: ResponseCodable {
     init(_ loan: Bookshelf_Loans_V1_Loan) throws {
-        guard let id = UUID(uuidString: loan.id), let bookID = UUID(uuidString: loan.bookID) else {
-            throw HTTPError(.internalServerError, message: "The loan record is malformed.")
-        }
-
         let status = try Components.Schemas.LoanStatus(loan.status)
-        self.init(id: id, bookID: bookID, status: status, dueDate: loan.dueDate.date)
+        self.init(id: loan.id, bookID: loan.bookID, status: status, dueDate: loan.dueDate.date)
     }
 }
 
 extension Bookshelf_Loans_V1_BorrowBookRequest {
-    init(_ body: Components.Schemas.BorrowBookRequest) {
+    init(_ body: Components.Schemas.BorrowBookRequest) throws {
+        guard let bookID = UUID(uuidString: body.bookID) else {
+            throw HTTPError(.badRequest, message: "bookID must be a UUID.")
+        }
+
         self.init()
-        self.bookID = body.bookID.uuidString.lowercased()
+        self.bookID = bookID.uuidString.lowercased()
         self.idempotencyKey = body.idempotencyKey
     }
 }
 ```
 
-- A response conversion throws on a malformed upstream value, such as a non-UUID id or an unspecified enum, answering `500` rather than dropping or inventing a field.
+- An id passes through as the string it is: a response takes the service's lowercase id unchanged, and a request parses a body's id with `UUID(uuidString:)`, answering `400` for one that isn't a UUID, and sends it lowercased. A path's id is read with `context.parameters.require("id", as: UUID.self)`.
+- A file that imports `SwiftProtobuf` spells the standard library's decoder `any Swift.Decoder`, since SwiftProtobuf declares a `Decoder` protocol too.
+- A response conversion throws on a malformed upstream value, such as an unspecified enum, answering `500` rather than dropping or inventing a field.
 - A body field the client omits reaches the service as the proto default; the service's conversion decides what an empty value means.
 - A paged route reads `pageSize` and `pageToken` or `page` from the query, answers the items with `pageInfo` or `nextPageToken`, and passes each through unchanged; the service applies [the paging rules](grpc.md#lists-and-pages).
 
