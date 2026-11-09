@@ -57,7 +57,7 @@ let rows = try await connection.execute(statement, logger: logger)
 
 ## Concurrency
 
-Every package builds with [the Swift settings](packages.md#swift-settings).
+Every package builds with [the Swift settings](packages.md#swift-settings). The code inside these rules, such as an actor's design, a `Mutex`, a task group or `async let`, cancellation, a long-running `Service` of the service's own or an interceptor's `@concurrent` `next`, follows the Swift Concurrency skill (`swift-concurrency`).
 
 - Everything that crosses a boundary is `Sendable`: models, inputs, commands, errors, protocols. Structs and enums by default; an actor only for mutable state shared across tasks; `Mutex` from `Synchronization` for a small piece of state touched synchronously.
 - No `@unchecked Sendable`, `nonisolated(unsafe)` or `@preconcurrency` in owned code. When a dependency needs one, it appears once, in the adapter that wraps the dependency, with the reason on the line above.

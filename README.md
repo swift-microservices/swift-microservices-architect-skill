@@ -88,12 +88,12 @@ Not covered: setting up Dokploy and its servers, compose files, networks, the ed
 
 ### Works well with
 
-The skill decides the shapes; these skills cover the code inside them:
+The skill decides the shapes; these skills cover the code inside them. The agent loads each where a checklist calls for it, such as Temporal's skill before designing a workflow and the testing skill before writing tests, and tells you when one isn't installed:
 
 - [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill): actors, task groups, `Sendable` diagnostics
 - [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
 - [Temporal Developer](https://github.com/temporalio/skill-temporal-developer): how a workflow is designed and behaves, from signals and updates to versioning
-- A `swift-api-design-guidelines` skill: argument labels, method names, documentation comments
+- [Swift API Design Guidelines](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill): argument labels, method names, documentation comments
 
 ## Repository layout
 
