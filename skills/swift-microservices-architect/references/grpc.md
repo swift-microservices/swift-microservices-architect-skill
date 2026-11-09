@@ -104,7 +104,7 @@ service LoanService {
 - Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`.
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
 - A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).
-- A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`.
+- A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`. Before a contract's first deploy it changes in place, with no `v2`, as a major release of `<project>-protos`.
 - Contracts release before the services that implement or call them ([the project's core package](packages.md#the-projects-core-package)). A service that serves a new RPC or field deploys before any caller or gateway route that uses it, and never removes an RPC a deployed caller still uses.
 
 ## A service's gRPC services

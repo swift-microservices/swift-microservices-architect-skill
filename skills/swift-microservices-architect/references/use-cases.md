@@ -156,7 +156,7 @@ Ports and their implementations are named as [naming](conventions.md#naming) giv
 
 ## A use case
 
-There is one use case per operation: one per RPC, and one per database step an activity runs (`MarkLoanOverdue`). Its five files sit in `UseCases/<Name>/`:
+There is one use case per operation: one per RPC, and one per database step an activity runs (`MarkLoanOverdue`). A read that `XService` offers anyone and `XInternalService` offers other processes, with the same input and answer, is one use case both services hold, such as Catalog's `GetBook`. Its five files, four when it takes no input, sit in `UseCases/<Name>/`:
 
 ```swift
 package protocol BorrowBookUseCaseProtocol: Sendable {
@@ -341,7 +341,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - A transaction holds a pooled connection until it ends, so it contains only database work. Remote calls go before it (the catalog lookup) or after it commits (the workflow start).
 - A decision that must be atomic with its write happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
 - A rule over a count, such as the loan limit, first locks what it counts (`lockLoans(userID:)`), since `SELECT … FOR UPDATE` locks only rows that already exist; the lock ends with the transaction. A rule a constraint can state, such as a unique index, is that constraint, mapped to a case.
-- A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)); the use case maps its `nil` to its case (`alreadyReturned`).
+- A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue or returned, and throws `loanNotFound` only when there's no loan.
 - Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
 
@@ -377,7 +377,7 @@ package func callAsFunction(
 ## Logging
 
 - Each use case logs through the `Logger` it's built with; the metadata provider adds the caller's `userID` to every line of a request ([user tokens](security.md#user-tokens)).
-- Levels: `info` for a completed change, `warning` for a refusal, `error` for `unknown`. A successful read logs nothing.
+- Levels: `info` for a completed change, `warning` for a refusal, `error` for `unknown`. Input refused before the `do`, such as an empty idempotency key, throws without a log line, and a successful read logs nothing.
 - Messages are short sentences: `Book borrowed`, `Borrowing refused: no such book`, `Borrowing failed: unknown error`.
 - `error` holds `String(reflecting: error)`.
 - Never logged: tokens, passwords, secrets and their digests, email addresses, names, request bodies.
