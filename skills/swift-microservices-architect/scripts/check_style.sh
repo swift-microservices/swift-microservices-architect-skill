@@ -6,7 +6,7 @@
 #     check_style.sh
 #
 # Prints each violation under the rule it breaks, and exits 1 if there is any. Then lists
-# repository methods for review, without failing.
+# repository methods and test files for review, without failing.
 
 set -u
 
@@ -97,7 +97,7 @@ FNR == 1 { pending = 0 }
     }
     if (match(line, /"[^"]*"/)) {
         message = substr(line, RSTART + 1, RLENGTH - 2)
-        if (message !~ /^[A-Z][A-Za-z ]* failed: unknown error$/) {
+        if (message !~ /^[A-Z][A-Za-z -]* failed: unknown error$/) {
             print FILENAME ":" start ": " message
         }
         pending = 0
@@ -165,6 +165,22 @@ report "Configuration is read in a reader in Configuration/, except a root's own
 # A repository method in Core with two parameters or more, none of them a command and none
 # a page size, printed as one line.
 repository_methods='
+# A read is named for what it returns: loan(userID:idempotencyKey:) -> Loan?, activeLoans(userID:) -> [Loan].
+function is_read(    name, returned) {
+    if (declaration !~ /->/) return 0
+    name = declaration
+    sub(/^.*func +/, "", name)
+    sub(/[^A-Za-z0-9_].*$/, "", name)
+    if (name ~ /^(create|insert|add|update|set|mark|save|store|replace|remove|delete|end|revoke|lock)([A-Z]|$)/) return 0
+    returned = declaration
+    sub(/^.*-> */, "", returned)
+    gsub(/[^A-Za-z0-9_]/, " ", returned)
+    sub(/^ *(KeyedPage|Page) +/, "", returned)
+    sub(/^ +/, "", returned)
+    sub(/ .*$/, "", returned)
+    if (returned == "") return 0
+    return index(tolower(name), tolower(returned)) > 0
+}
 function analyze(    rest, depth, i, c, previous, parameters, count) {
     rest = substr(declaration, index(declaration, "(") + 1)
     depth = 1
@@ -184,6 +200,7 @@ function analyze(    rest, depth, i, c, previous, parameters, count) {
     if (parameters ~ /^[[:space:]]*$/) return
     if (count < 1) return
     if (parameters ~ /Command/ || parameters ~ /pageSize:/) return
+    if (is_read()) return
     gsub(/[[:space:]]+/, " ", declaration)
     gsub(/\( /, "(", declaration)
     gsub(/ \)/, ")", declaration)
@@ -217,6 +234,19 @@ repository_review=$(run_awk "$repository_methods" "$repository_files")
 if [ -n "$repository_review" ]; then
     echo "REVIEW each is a read; a write that takes more than an id takes a command"
     echo "$repository_review" | sed 's/^/  /'
+fi
+
+# A test file outside Mocks/ and Support/ named for no type's file in Sources/.
+unmatched_tests=$(
+    [ -d Tests ] || exit 0
+    find Tests -type f -name '*Tests.swift' ! -path '*/Mocks/*' ! -path '*/Support/*' | sort | while read -r file; do
+        tested=$(basename "$file" Tests.swift)
+        [ -n "$(find Sources -type f -name "${tested}.swift" | head -n 1)" ] || echo "$file"
+    done
+)
+if [ -n "$unmatched_tests" ]; then
+    echo "REVIEW each test file is named for the one type it tests"
+    echo "$unmatched_tests" | sed 's/^/  /'
 fi
 
 if [ "$failed" -eq 0 ]; then

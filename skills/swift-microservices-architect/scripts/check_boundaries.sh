@@ -71,6 +71,10 @@ report "Activities call system use cases only, so nothing in Workflows/ names a 
     grep -rnE 'subject:|UserIdentity' "$core/Workflows" 2>/dev/null
 )"
 
+# The package's own modules: its targets and its contract. A project product whose name
+# starts with the service's, such as BookshelfAuthentication beside a service named Book, is neither.
+own_modules="$(ls Sources | tr '\n' '|')${service}Protos"
+
 # Lives in a function because macOS's bash 3.2 can't parse a case inside $(…).
 own_module_imports() {
     for target in Sources/*/; do
@@ -82,7 +86,7 @@ own_module_imports() {
         "$grpc") allowed="${service}Core|${service}Protos" ;;
         *) allowed="${service}Core" ;;
         esac
-        grep -rnE "${import_prefix} ${service}[A-Za-z]+\$" "$target" 2>/dev/null | grep -vE "import (${allowed})\$"
+        grep -rnE "${import_prefix} (${own_modules})\$" "$target" 2>/dev/null | grep -vE "import (${allowed})\$"
     done
 }
 
@@ -91,6 +95,12 @@ report "Adapters import no sibling adapter, and only ${grpc} imports the contrac
 report "Generated contract types stay in XGRPC, the gateway's HTTP target and the executable" "$(
     grep -rlE "${project}_[A-Za-z]+_V[0-9]+_" Sources 2>/dev/null | grep -vE "^Sources/(${grpc}|${service}HTTP|${service})/"
 )"
+
+if [ "$service" = Gateway ]; then
+    report "The gateway routes to no XInternalService" "$(
+        grep -rnE '[A-Za-z]InternalService' Sources 2>/dev/null
+    )"
+fi
 
 report "Only the executable reads configuration" "$(
     grep -rlE "${import_prefix} Configuration\$" Sources 2>/dev/null | grep -v "^${executable}/"

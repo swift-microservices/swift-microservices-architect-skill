@@ -50,7 +50,7 @@ namingStrategy: idiomatic
 ```
 
 - The routes are Hummingbird's, so request contexts and middleware stay native; the generated `Components.Schemas` types are the request and response bodies.
-- `openapi.yaml` is the contract clients code against: it changes before the routes do, and a route answers exactly the statuses it documents. Every operation documents `500`, `503` and `504` besides its own, through shared `Problem` responses:
+- `openapi.yaml` is the contract clients code against: it changes before the routes do, and a handler answers only the statuses its operation documents. Every operation documents `500`, `503` and `504` besides its own, through shared `Problem` responses; the statuses any route can answer before its handler runs or from the edge (`413`, `429`, `499`, `501`) are documented once, in the document's description:
 
 ```yaml
 paths:
@@ -89,6 +89,8 @@ components:
 
 - It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references, which the generator makes a `String`, so ids cross HTTP as the services write them, lowercase ([conversions](#conversions)).
 - `servers` ends in `/v1`, and paths are written without it.
+- A create a client may retry declares the `Idempotency-Key` header as a required parameter, once under `components/parameters` ([controllers](#controllers)).
+- A page's schema is `<Resource>PageResponse`, its items under the resource's plural beside `pageInfo` or `nextPageToken`.
 - Every operation has an `operationId` and a `security` entry for its tier: `[]` for no caller, `[{bearerAuth: []}]` for a caller or an administrator ([request contexts](#request-contexts-and-tiers)).
 
 ## Request contexts and tiers
@@ -137,7 +139,8 @@ package struct AdministratorRequestContext: ChildRequestContext {
 - A child context's throwing initializer is the check: a handler that takes `AdministratorRequestContext` never re-tests the role.
 - Absent and insufficient answer differently: `401` when no one identified, `403` when the caller can't do this whatever token they hold.
 - The administrator check happens at the verb, not behind an `/admin` path prefix, so a resource's path is shared by its audiences. `/admin/…` is only for an administrator's view of a collection that callers also list (`/admin/loans`).
-- A route whose bearer token isn't an access token, such as the refresh token a refresh or sign-out request presents, stays in the first tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the first tier too, since there is no caller yet.
+- Only administrators have a context of their own. A route for another role, such as a librarian's, is in the caller tier, and the use case behind it refuses the wrong role as `403` ([authorization](use-cases.md#authorization)): a context per role would copy the domain's rules into the gateway.
+- A route whose bearer token isn't an access token, such as the refresh token a refresh, sign-out or change of organization presents, stays in the first tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the first tier too, since there is no caller yet.
 
 ## The router
 
@@ -215,8 +218,9 @@ package struct LoanController: Sendable {
         request: Request,
         context: IdentityRequestContext
     ) async throws -> EditedResponse<Components.Schemas.LoanResponse> {
+        let idempotencyKey = try request.headers.requireIdempotencyKey()
         let body = try await request.decode(as: Components.Schemas.BorrowBookRequest.self, context: context)
-        let borrowBookRequest = try Bookshelf_Loans_V1_BorrowBookRequest(body)
+        let borrowBookRequest = try Bookshelf_Loans_V1_BorrowBookRequest(body, idempotencyKey: idempotencyKey)
         let loan = try await client.borrowBook(borrowBookRequest)
         let response = try Components.Schemas.LoanResponse(loan)
         return EditedResponse(status: .created, response: response)
@@ -240,8 +244,13 @@ package struct LoanController: Sendable {
 
 - A controller registers its routes in `addPublicRoutes(to:)`, `addAuthenticatedRoutes(to:)` and `addAdministratorRoutes(to:)`, each taking the group of its tier; the router decides the paths.
 - A handler is a `private func` with the signature `(Request, Context) async throws -> Response`: decode the body or parameters, call the client, convert the answer. Nothing else.
+- A handler makes one upstream call. An answer that needs another service's data is the owning service's to assemble, through its port, so the gateway never joins two services' answers.
+- A route belongs to the controller of the resource it answers with, whatever its path: `books/:id/loans` is `LoanController`'s, registered by the router under `books`.
+- A create reads its key from the IETF `Idempotency-Key` header, never a body field, with `requireIdempotencyKey()`, an extension on `HTTPFields` in `Schemas/Shared/` that answers `400` for a request without it.
+- A query value that is present and malformed answers `400`, like a malformed body; only an absent one takes the service's default.
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
-- Status codes follow the method: `201` with `EditedResponse` for a create, `202` for a route that only asks for work to happen later and has nothing yet to return, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, `200` otherwise.
+- An action on a resource that isn't a create, read, update or delete is `POST :id/<verb>` (`:id/return`), as the RPC names it.
+- Status codes follow the method: `201` with `EditedResponse` for a create, `202` for a route that only asks for work to happen later and has nothing yet to return, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, a `DELETE` included, `200` otherwise.
 - Hummingbird keys a path capture by one name per segment, so every route on one path shares its capture name (`:id`).
 
 A provider's webhooks get a controller of their own, in the first tier at `webhooks/<provider>`, that forwards each event unparsed:
@@ -283,21 +292,24 @@ extension Components.Schemas.LoanResponse: ResponseCodable {
 }
 
 extension Bookshelf_Loans_V1_BorrowBookRequest {
-    init(_ body: Components.Schemas.BorrowBookRequest) throws {
+    init(_ body: Components.Schemas.BorrowBookRequest, idempotencyKey: String) throws {
         guard let bookID = UUID(uuidString: body.bookID) else {
             throw HTTPError(.badRequest, message: "bookID must be a UUID.")
         }
 
         self.init()
         self.bookID = bookID.uuidString.lowercased()
-        self.idempotencyKey = body.idempotencyKey
+        self.idempotencyKey = idempotencyKey
     }
 }
 ```
 
 - An id passes through as the string it is: a response takes the service's lowercase id unchanged, and a request parses a body's id with `UUID(uuidString:)`, answering `400` for one that isn't a UUID, and sends it lowercased. A path's id is read with `context.parameters.require("id", as: UUID.self)`.
 - A file that imports `SwiftProtobuf` spells the standard library's decoder `any Swift.Decoder`, since SwiftProtobuf declares a `Decoder` protocol too.
-- A response conversion throws on a malformed upstream value, such as an unspecified enum, answering `500` rather than dropping or inventing a field.
+- A request conversion takes the body unlabeled, then what the path or headers gave, labeled for what it is (`idempotencyKey:`, `loanID:`).
+- A response conversion throws `UpstreamValueError`, in `Schemas/Shared/`, on a malformed upstream value, such as an unspecified enum or an unset field the schema requires. It isn't an HTTP error, so `ErrorMiddleware`'s final `catch` logs it and answers `500` with no detail, rather than dropping or inventing a field.
+- An upstream's unset `optional` field becomes an absent property, read with its `has…` property, never by testing for an empty string.
+- A shape several contracts declare, such as `PageInfo`, is one file in `Schemas/Shared/` with an initializer per contract.
 - A body field the client omits reaches the service as the proto default; the service's conversion decides what an empty value means.
 - A paged route reads `pageSize` and `pageToken` or `page` from the query, answers the items with `pageInfo` or `nextPageToken`, and passes each through unchanged; the service applies [the paging rules](grpc.md#lists-and-pages).
 
@@ -386,4 +398,4 @@ The executable builds one `GRPCClient` per upstream service over mTLS, its trans
 ## The edge
 
 - Clients reach the gateway over TLS, terminated by the edge in front of it (a CDN or reverse proxy, which may itself re-encrypt to the proxy beside the gateway). The gateway listens for plain HTTP on its private interface; it never configures TLS for clients.
-- CORS is the gateway's, in `CORSMiddleware` first on the router, for the origins, headers and methods browsers use ([the gateway's root](composition.md#the-gateways-root)).
+- CORS is the gateway's, in `CORSMiddleware` first on the router, for the origins, methods and headers browsers use, `Idempotency-Key` among them ([the gateway's root](composition.md#the-gateways-root)).

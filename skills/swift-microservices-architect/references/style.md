@@ -26,7 +26,7 @@ The bar is the sample code in Apple's WWDC sessions, such as *Meet async/await i
 - `// MARK: -` names the sections of a composition root and the groups inside a type: a service's RPCs by audience, a router builder's tiers, an activity container's steps.
 - Code that a reader would otherwise check twice gets a one-line comment with the reason: a business rule, an ordering constraint, a safety property. A comment never narrates the next line.
 
-A feature is built the established way. Before writing one, look up the standard or documented practice that covers it: an RFC, OWASP's guidance, or the provider's or library's documented approach, such as RFC 9457 for problem details, RFC 8725 for JWTs, OWASP's password storage and the IETF `Idempotency-Key` header.
+A feature is built the established way. Before writing one, look up the standard or documented practice that covers it: an RFC, OWASP's guidance, or the provider's or library's documented approach, such as RFC 9457 for problem details, RFC 8725 for JWTs, OWASP's password storage, the IETF `Idempotency-Key` header, RFC 3339 for dates on the wire and Google's AIPs for a contract's standard methods and fields.
 - Adopt that practice within this skill's rules, and never invent a scheme where a standard exists.
 - Handle what most production systems meet. A rare edge case gets a sentence to the user, not code.
 - Without web access, tell the user that the approach comes from prior knowledge, unchecked against the current standard.
@@ -53,7 +53,7 @@ let rows = try await connection.execute(statement, logger: logger)
 - A `do` nests in one place: around a workflow's start, when its `catch` returns what the path built ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` is spelled in full: `throw BorrowBookUseCaseError.bookNotFound`.
 - `String(reflecting: error)` goes into the log line of an unknown error, never into a response.
-- A use case's typed error has no case for cancellation, so `CancellationError` reaches its final `catch` and leaves as `.unknown`. Everywhere else it propagates, and nothing catches it to carry on.
+- A use case's typed error has no case for cancellation, so `CancellationError` reaches its final `catch` and leaves as `.unknown`. Everywhere else it propagates, and nothing catches it to carry on, except where `temporal-developer` gives a workflow's wait for a deadline that form.
 
 ## Concurrency
 
@@ -71,7 +71,7 @@ Every package builds with [the Swift settings](packages.md#swift-settings). The 
 - Inside a service's package, what another target uses is `package`, the rest internal or `private`. `public` is for libraries other packages link: `<project>-core`, `<project>-protos`.
 - A `package` struct spells its `package init`, since the memberwise initializer is internal.
 - Imports are internal by default. A file imports a module `package` when the module's types appear in its `package` declarations, `public` when in `public` ones, and plainly otherwise.
-- A file imports every module whose members it uses, since `MemberImportVisibility` hides members of modules it doesn't import.
+- A file imports every module whose members it uses, since `MemberImportVisibility` hides members of modules it doesn't import: `SwiftProtobuf` for a message's `.with { … }`, `Persistence` or `PersistencePostgres` for `withTransaction`, `<Project>Authentication` for a `UserRole`'s `rawValue`, the Foundation block for `uuidString`.
 - Access levels go on members, never on an extension.
 
 ## Foundation
@@ -110,9 +110,10 @@ package import Foundation
 
 - Models, inputs, commands and outputs are structs of `let` properties. Closed sets are enums (`LoanStatus`); a set other services may extend is a `RawRepresentable` string struct with static members (`UserRole`), which a contract carries as its raw string ([contracts](grpc.md#contracts-in-the-protos-package)).
 - Foundation adds no `Duration` to a `Date`, so a `TimeInterval` appears only at a `Date`'s arithmetic, converted once in the policy or model method that owns the duration: `let loanSeconds = loanPeriod / .seconds(1)`, then `borrowedAt.addingTimeInterval(loanSeconds)`. Every other duration is a `Duration`.
+- A calendar date, such as a date of birth, is a Core value of year, month and day, a `DATE` column and an RFC 3339 full-date `string` (`1988-04-17`) in a contract, `format: date` over HTTP, never a `Date` at midnight.
 - Ids are `UUID` in owned Swift and lowercase strings on the wire, over gRPC and HTTP alike; the gateway's generated types hold them as `String`s ([OpenAPI types](gateway.md#openapi-types)). Instants are `Date`, durations `Duration`.
 - Absence is an optional, never a sentinel such as `""`, `-1` or `.distantPast`.
-- A value that can be invalid is validated where it's made, by a throwing or failable initializer, so a model never holds an invalid one.
+- A value that can be invalid is validated where it's made, by a failable initializer, so a model never holds an invalid one.
 - Protocols exist only where substitution is real: use cases, repositories, scopes, the database and ports. Models, commands, policies and configuration are concrete. There is no clock or id-generator protocol: ids and stored dates come from the database, and a use case that decides on time reads `Date.now`.
 - Stored dependencies are existentials (`any CatalogClient`), except `TemporalClient`, which Core holds as the concrete type; parameters are opaque where they can be (`some JWTAlgorithm`), and a type is generic where the compiler must check a constraint on it or it wraps a library's generic client: a use case over its database, `GRPCCatalogClient<Transport>`.
 - `logger` is the last parameter of every initializer and function that takes one, and the last stored dependency; only a trailing closure follows it.

@@ -54,6 +54,8 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
   - a use case's five files and body: `BorrowBook`; an administrators' use case: `ListAllLoans`
   - a workflow, its activities and options: `LoanWorkflow`, `LoanActivities`
   - a system use case, and the same effect for administrators: `MarkLoanOverdue`, `MarkLoanOverdueByAdministrator`
+  - an organization tenant and a role held at one: a branch, its librarians, `ListBranchLoans`
+  - a use case that reaches a run: `ExtendLoan`, which signals `LoanWorkflow`
   - the gateway: `BookshelfAPI`, `LoanController`, the request contexts, `ErrorMiddleware`
   - an internal service: Catalog's `BookInternalService`; paged lists: `ListAllLoans` by key, `ListLoans` by page number
   - a provider's webhook: Resend's notice events to Loans, `ResendWebhookController`, `NoticeEventVerifier`
@@ -66,7 +68,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - CI/CD guidance states what a repository declares (its files, inputs, secrets and settings) and what its code must pass (the flags, checks and toolchains the CI pipelines apply, so an agent can reproduce them). How swift-microservices/ci implements them is that repository's documentation, not the skill's.
 - The code style is `SKILL.md`'s Code style and `style.md`; every example follows it, and a change never weakens it.
 - Describe the current design only, with no dates, old names, renames, migrations of the skill or history. A library's version appears only in `Package.swift` lower bounds and `stack.md`.
-- One term per concept, from this list, with no synonyms: service, `<project>-core`, capability, area, use case, system use case, repository, command, port, scope, database role, tenant database, tenant table, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, activity container, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, CI pipeline (`library.yml`, `service.yml`), image.
+- One term per concept, from this list, with no synonyms: service, `<project>-core`, capability, area, use case, system use case, repository, command, port, scope, database role, tenant database, tenant table, organization tenant, audience, contract, `XService`, `XInternalService`, adapter target, composition root, the gateway, tier, workflow, activity, activity container, worker, page (by page number or by key), webhook, mock, package kind (public library, system library, service), CI workflow, CI pipeline (`library.yml`, `service.yml`), image.
 - A new rule mustn't contradict an existing one. When it replaces one, change every place the old rule appears.
 - Voice: plain declarative sentences in the present tense, lists over paragraphs, no "you", no all-caps emphasis, no hedging.
 

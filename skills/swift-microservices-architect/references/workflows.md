@@ -1,10 +1,11 @@
 # Workflows
 
-Durable processes on Temporal with swift-temporal-sdk: when work is a workflow, how a use case starts one, how workflows and activities read, and the worker that runs them. A workflow, its activity container and its named options are Core's, in `XCore/Workflows/<WorkflowName>/` ([the folder layout](packages.md#folder-layout)), and use the SDK directly, with no wrapper ([what Core may link](packages.md#what-core-may-link)).
+Durable processes on Temporal with swift-temporal-sdk: when work is a workflow, how a use case starts and reaches one, how workflows and activities read, and the worker that runs them. How one is written against the SDK follows `temporal-developer` and the SDK's documentation, never a form carried over from another language's SDK. A workflow, its activity container and its named options are Core's, in `XCore/Workflows/<WorkflowName>/` ([the folder layout](packages.md#folder-layout)), and use the SDK directly, with no wrapper ([what Core may link](packages.md#what-core-may-link)).
 
 ## Contents
 - When work is a workflow
 - Starting a workflow from a use case
+- Reaching a run from a use case
 - A workflow
 - Determinism
 - Activities
@@ -32,9 +33,36 @@ A use case that starts a workflow holds the concrete `TemporalClient` and the ta
   - `.rejectDuplicate` keeps a failed run from running again without a person. The error then propagates, since catching it would report unfinished work as done.
 - `catch is WorkflowAlreadyStartedError` joins the use case's one `do` when its answer needs nothing the `do` built, such as a webhook's. One that returns what the path built, as `BorrowBook` returns its loan, wraps the start in an inner `do` that ends the path.
 - The use case starts the workflow after its transaction commits; [transactions](use-cases.md#transactions) say how a lost start is recovered.
-- A start doesn't wait for the result. A use case reaches a run through `TemporalClient`: `temporalClient.workflowHandle(type: LoanWorkflow.self, id: workflowID)`, then `handle.signal(signalType:input:)`, `handle.query(queryType:input:)` or `handle.executeUpdate(updateType:input:)`. A fact that outlives the run, such as a return, stays in the database, where the activity that acts on it reads it (`markOverdue`).
+- A start doesn't wait for the result.
 
 A workflow a provider's [webhook](security.md#webhooks) starts takes ids, not the event's body, since events arrive more than once and out of order, and its id names the event. Started with the same two policies, a redelivery joins the run in flight, or runs again after a failure.
+
+## Reaching a run from a use case
+
+A person's action on what a run waits for is a use case like any other, on its audience's database. It reaches the run through `temporalClient.workflowHandle(type:id:)`, with the id the workflow declares. `ExtendLoan` moves a loan's due date, which its run is waiting for:
+
+```swift
+let loan = try await database.withTransaction { scope in
+    …  // the conditional write, with ExtendLoanCommand, or the use case's case when the loan can't be extended
+}
+
+let workflowID = LoanWorkflow.id(loanID: loan.id)
+let workflowHandle = temporalClient.workflowHandle(type: LoanWorkflow.self, id: workflowID)
+try await workflowHandle.signal(signalType: LoanWorkflow.ExtendDueDate.self)
+logger.info("Loan extended", metadata: ["loanID": "\(loan.id)"])
+return loan
+```
+
+The signal carries nothing: the run reads the new date through an activity. Its handler, and the wait it starts again, are `LoanWorkflow`'s, written with `temporal-developer`.
+
+- The use case makes the change itself, as its conditional write in its own transaction, then signals the run after the commit. The row is the record and the signal only wakes the run, whose next activity reads the row. The caller's write stays under row-level security, and the request's values stay out of the workflow's history, which keeps every payload for as long as the namespace retains it.
+- A fact that outlives the run, such as a return, needs no signal: it stays in the database, where the activity that acts on it reads it (`markOverdue`).
+- The signal follows every call that finds the row in the state it reports, a repeat included, so a retried request delivers a signal lost after the first commit. Its handler sets a property, so a second delivery changes nothing.
+- A use case whose run may never have started, its start lost after the commit, starts it with the same id and policies before signalling: `.useExisting` joins the run that's there.
+- An update is for the one case a signal can't serve: the answer must come from the run, which alone knows whether the step may happen now. The use case authorizes the caller before sending it, and its input names the user it acts for, since the worker binds no caller. Its handler refuses by the workflow's state first, runs the write as an activity over a system use case, and answers what the run decided, which the use case maps to its cases.
+- A handler whose activity fails leaves the workflow's state as it found it, and that activity's attempts are bounded ([activity options](#activity-options)).
+- Where a record's status and a run's stage are the same steps, the row holds them. The workflow keeps only what it waits on, and moves on from what an activity reports its use case found, never from its own count of the steps.
+- A query reads a run's state for a person. A screen people page through reads a table instead ([when work is a workflow](#when-work-is-a-workflow)).
 
 ## A workflow
 
@@ -189,7 +217,7 @@ package struct LoanActivities {
 }
 ```
 
-- An activity runs a [system use case](use-cases.md#system-use-cases) when the step reads or writes this service's data, on the worker's database, and calls a port when the step is one effect another system owns; a use case that would only forward to the port adds nothing. It makes no business decision: the use case decides, and the activity reports what it decided.
+- An activity runs a [system use case](use-cases.md#system-use-cases) when the step reads or writes this service's data, on the worker's database, and calls a port when the step is one effect another system owns; a use case that would only forward to the port adds nothing. It makes no business decision: the use case decides, and the activity reports what it decided, never discarding what the use case returned, since the workflow's next step depends on that answer.
 - Its input is a small struct nested in the container, named for the activity (`MarkOverdueInput`), holding ids and values, never commands; the activity builds what the use case or port takes.
 - It returns a primitive (`Bool`) or a small nested output holding only what the workflow reads, never a domain model, which isn't `Codable`.
 - It maps a permanent failure, a case no retry can change, to `ApplicationError(message:type:isNonRetryable: true)`, catching that case explicitly. Every other error propagates, and Temporal retries it.
@@ -198,7 +226,7 @@ package struct LoanActivities {
 
 ## Activity options
 
-Named once per target, in `ActivityOptions+X.swift` in the folder of the first workflow that needs them, and used by name in every workflow of the target:
+Named once per target, in `ActivityOptions+X.swift` in the folder of the first workflow that needs them, and used by name in every workflow of the target. A step a caller waits on, inside an update, takes options of its own with `maximumAttempts`; a background step retries until it lands:
 
 ```swift
 extension ActivityOptions {

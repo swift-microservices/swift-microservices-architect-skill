@@ -30,6 +30,7 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 |---|---|---|---|
 | [hummingbird](https://github.com/hummingbird-project/hummingbird) | `Hummingbird` | The HTTP server: router, request contexts, middleware, `Application` | The gateway |
 | [hummingbird-auth](https://github.com/hummingbird-project/hummingbird-auth) | `HummingbirdAuth`, `HummingbirdBcrypt` | `AuthRequestContext`, `IsAuthenticatedMiddleware`; bcrypt | The gateway; a password-hashing adapter |
+| [swift-http-types](https://github.com/apple/swift-http-types) | `HTTPTypes` | `HTTPField.Name` for a header the gateway reads or CORS allows | The gateway |
 | [swift-openapi-generator](https://github.com/apple/swift-openapi-generator), [swift-openapi-runtime](https://github.com/apple/swift-openapi-runtime) | `OpenAPIGenerator` plugin, `OpenAPIRuntime` | The gateway's types from `openapi.yaml` | The gateway |
 | [grpc-swift-2](https://github.com/grpc/grpc-swift-2) | `GRPCCore` | Servers, clients, interceptors, `RPCError`, `ServiceConfig` | XGRPC, executables, `<Project>Persistence`, `<Project>Transport`, the gateway |
 | [grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | `GRPCNIOTransportHTTP2` | HTTP/2 transports with TLS and mTLS | Executables, `<Project>Transport` |
@@ -47,8 +48,8 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 | [swift-nio-extras](https://github.com/apple/swift-nio-extras) | `NIOCertificateReloading` | `CertificateReloader`, `TimedCertificateReloader` | Executables, `<Project>Transport`, `<Project>Persistence` |
 | [swift-log](https://github.com/apple/swift-log) | `Logging` | `Logger`, `LoggingSystem`, metadata providers | Every target that logs |
 | [swift-async-algorithms](https://github.com/apple/swift-async-algorithms) | `AsyncAlgorithms` | Collecting a row sequence into an array | XPostgres |
-| [swift-crypto](https://github.com/apple/swift-crypto) | `Crypto` | Digests of secrets, signing keys | A Core that hashes secrets |
-| jwt-kit | `JWTKit` | `JWTPayload`, claims, EdDSA keys | `<Project>Authentication`, `<Project>Transport` |
+| [swift-crypto](https://github.com/apple/swift-crypto) | `Crypto` | Digests of secrets, signing keys, a key's thumbprint | A Core that hashes secrets, `<Project>Authentication` |
+| jwt-kit | `JWTKit` | `JWTPayload`, claims, EdDSA keys | `<Project>Authentication` |
 
 Hummingbird is the only HTTP framework, and AsyncHTTPClient the only HTTP client when an adapter calls an HTTP API that has no SDK.
 

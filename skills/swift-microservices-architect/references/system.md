@@ -39,6 +39,7 @@ A step that was atomic across the two becomes a workflow. Moving or dropping dat
 
 - A noun for the capability: `Identity`, `Catalog`, `Loans`. [Naming](conventions.md#naming) gives its package, repository and targets.
 - Module names are unique across the whole package graph. A service named `Authentication` collides twice, its executable with swift-authentication's `Authentication` and its gRPC target with `AuthenticationGRPC`. Check a name's targets against every product in the graph (`Logging`, `Configuration`, `Metrics`, `Tracing`, `Crypto`, `Temporal`, `Valkey`) and pick another name rather than an exception to the target scheme.
+- A model's name clashes the same way with a type every file sees: Swift Testing's `Test`, `Suite` and `Tag` in test files, the standard library's `Task` and `Result` everywhere. The model takes a fuller noun, and its repository, use cases and folders follow it.
 
 ## Contracts
 
@@ -46,7 +47,7 @@ Each service publishes one proto package, `<project>.<x>.v1`, with one `XService
 
 | Proto service | Called by | Admitted by |
 |---|---|---|
-| `XService` | People, through the gateway | Per RPC: anyone, the caller's own (the token names the user), or administrators |
+| `XService` | People, through the gateway | Per RPC: anyone, the caller's own (the token names the user), a role, or administrators |
 | `XInternalService` | Other services and workers | The peer's mTLS certificate alone; requests name the user they act on |
 
 - Inside `XService`, RPCs are grouped by audience. Anyone's RPCs carry their own proof when they need one (a password, a refresh token, a webhook signature). The caller's own RPCs name no user: the service takes the account from the token. Administrators' RPCs name the users they act on.
@@ -79,7 +80,7 @@ A service's data is its own wherever it lives: only the service reads and writes
 | The roles a process connects as | The owner for migrations, then a role per audience, `<x>_service`, `<x>_internal` and `<x>_worker`, each with its own policy and none with `BYPASSRLS` ([database roles](persistence.md#database-roles)) | One role, in a service with no tenant table. `<x>_internal` and `<x>_worker` as one role, in a small system |
 | How a process proves its role | Its client certificate from the environment's authority, the one its gRPC connections present, mapped to the roles its identity may use; no role has a password ([Postgres](security.md#postgres)) | SCRAM-SHA-256 passwords from the secret store, read as secrets, for a managed Postgres that takes no client certificates |
 
-- A table whose rows belong to a user is a tenant table under [row-level security](persistence.md#row-level-security).
+- A table whose rows belong to a user, or to an organization its callers act for, is a tenant table under [row-level security](persistence.md#row-level-security).
 - Short-lived values with an expiry live in [Valkey](persistence.md#valkey).
 
 ## The shared packages
@@ -113,7 +114,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 |---|---|---|---|---|
 
 ## Contracts
-| Proto service | RPC | Audience: anyone, own, administrators, or internal (callers) |
+| Proto service | RPC | Audience: anyone, own, a role, administrators, or internal (callers) |
 |---|---|---|
 
 ## Module maps

@@ -72,10 +72,10 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 | System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan |
 | Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
-| Persistence | Postgres roles proved by certificates, row-level security, statements, paging, migrations, Valkey |
+| Persistence | Postgres roles proved by certificates, row-level security for user and organization tenants, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details |
-| Workflows | Temporal workflows and activities in Core, how use cases start them, determinism, activity options, the worker |
+| Workflows | Temporal workflows and activities in Core, how use cases start and reach them, determinism, activity options, the worker |
 | Composition | Commands, configuration, logging, and graceful shutdown |
 | Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs, secrets, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
@@ -106,6 +106,7 @@ skills/swift-microservices-architect/
 ├── agents/openai.yaml          the skill's name in Codex
 ├── scripts/check_boundaries.sh the boundary checks for a service or the gateway
 ├── scripts/check_style.sh      the style checks for any package
+├── scripts/swift_ci.sh         swift build and swift test with CI's flags
 └── references/                 read when a task reaches their topic
     ├── system.md               services, contracts, shared packages, the plan
     ├── packages.md             targets, Package.swift, Swift settings, boundary checks
