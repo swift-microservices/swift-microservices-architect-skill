@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/refs/heads/main/marketplace/marketplace.schema.json",
   "name": "swift-microservices-architect-skill",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "owner": {
     "name": "Zaid Rahhawi"
   },
@@ -13,7 +13,7 @@
       "name": "swift-microservices-architect",
       "description": "Architects Swift server backends as gRPC microservices behind a Hummingbird gateway, one Swift package per service, with Postgres row-level security, Valkey and Temporal workflows. Use when planning a Swift backend or splitting it into services, adding a service, endpoint, use case, repository, migration, webhook, multi-tenant table, background job or durable Temporal workflow, drawing a Swift server's module boundaries or writing its Package.swift, wiring configuration, graceful shutdown, mTLS or JWT auth, naming server types and targets, setting up a server package's tests, CI/CD or deployment, or reviewing a Swift server's architecture or code style. Not for iOS, macOS or SwiftUI apps. Applies even when the user doesn't name the architecture.",
       "repository": "https://github.com/swift-microservices/swift-microservices-architect-skill",
-      "version": "2.0.0",
+      "version": "1.0.0",
       "author": {
         "name": "Zaid Rahhawi"
       },
