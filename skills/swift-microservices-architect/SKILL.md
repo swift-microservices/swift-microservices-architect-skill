@@ -14,7 +14,7 @@ In a backend built another way, keep its structure and conventions unless the us
 |---|---|
 | `bookshelf-identity` | Accounts, passwords, sessions; issues every access token; reset codes in Valkey; members for other services, internally |
 | `bookshelf-catalog` | Books: anyone reads, administrators edit; Loans looks books up internally |
-| `bookshelf-loans` | A member's loans, a tenant table; a workflow marks a loan overdue and sends a notice |
+| `bookshelf-loans` | A member's loans, a tenant table a branch's librarians read too; a workflow marks a loan overdue and sends a notice |
 | `bookshelf-gateway` | The public HTTP API, forwarding to the services' gRPC contracts |
 | `bookshelf-core` | `BookshelfAuthentication`, `BookshelfPersistence`, `BookshelfTransport`, `BookshelfTesting` |
 | `bookshelf-protos` | `IdentityProtos`, `CatalogProtos`, `LoansProtos` |
@@ -124,7 +124,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md)
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
 - [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer
-- [ ] X: commands, InMemoryProvider defaults, Migrations, Serve, and Run with a worker (composition.md)
+- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' list, Serve, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-expert
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)

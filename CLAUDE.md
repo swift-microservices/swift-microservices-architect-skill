@@ -54,6 +54,8 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
   - a use case's five files and body: `BorrowBook`; an administrators' use case: `ListAllLoans`
   - a workflow, its activities and options: `LoanWorkflow`, `LoanActivities`
   - a system use case, and the same effect for administrators: `MarkLoanOverdue`, `MarkLoanOverdueByAdministrator`
+  - an organization tenant and a role held at one: a branch, its librarians, `ListBranchLoans`
+  - a use case that reaches a run: `ExtendLoan`, which signals `LoanWorkflow`
   - the gateway: `BookshelfAPI`, `LoanController`, the request contexts, `ErrorMiddleware`
   - an internal service: Catalog's `BookInternalService`; paged lists: `ListAllLoans` by key, `ListLoans` by page number
   - a provider's webhook: Resend's notice events to Loans, `ResendWebhookController`, `NoticeEventVerifier`

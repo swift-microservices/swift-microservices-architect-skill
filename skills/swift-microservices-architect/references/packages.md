@@ -23,7 +23,7 @@ The targets inside a service's package, how they depend on each other, its `Pack
 | `XGRPC` | The service's proto services, `Protobuf/` conversions, gRPC clients for Core's ports | `XCore`, its own and its callees' `XProtos`, `GRPCCore`, `SwiftProtobuf`, `Authentication`, `OperationContext`, `<Project>Authentication` |
 | `XValkey` | Repositories over Valkey | `XCore`, `Valkey` |
 | `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK; `NIOPosix` for work on `NIOThreadPool` |
-| `X` | The executable: commands, configuration defaults and readers, the migration list, composition roots | Every target above, `<Project>Transport`, `<Project>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser`; `NIOSSL` with Valkey |
+| `X` | The executable: commands, configuration defaults and readers, applying the migrations, composition roots | Every target above, `<Project>Transport`, `<Project>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser`; `NIOSSL` with Valkey |
 
 A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC` and `Catalog`.
 
@@ -218,7 +218,7 @@ bookshelf-loans/
     │   ├── Statements/Loans/       CreateLoanStatement.swift, ActiveLoansByUserIDStatement.swift, LoansByUserIDStatement.swift,
     │   │                       CountLoansByUserIDStatement.swift, Loan+PostgresRow.swift
     │   ├── Extensions/             LoanStatus+PostgresCodable.swift
-    │   └── Migrations/             Role/CreateServiceRole.swift, …, Loans/CreateLoansTable.swift, Loans/CreateLoansRLSPolicy.swift
+    │   └── Migrations/             LoansMigrations.swift, Role/CreateServiceRole.swift, …, Loans/CreateLoansTable.swift, Loans/CreateLoansRLSPolicy.swift
     ├── LoansGRPC/
     │   ├── Loans/                  LoanService.swift, Protobuf/BorrowBookUseCaseInput+Protobuf.swift, Protobuf/Loan+Protobuf.swift
     │   └── Clients/                GRPCCatalogClient.swift, GRPCIdentityClient.swift, Protobuf/Book+Protobuf.swift

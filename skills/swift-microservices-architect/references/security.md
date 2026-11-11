@@ -144,6 +144,7 @@ public struct UserIdentity: JWTPayload, Equatable, Sendable {
 /// The standard library codes a `RawRepresentable` string as its raw value, so `Codable` needs no code.
 public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByStringLiteral, Sendable {
     public static let user: UserRole = "user"
+    public static let librarian: UserRole = "librarian"
     public static let admin: UserRole = "admin"
 
     public let rawValue: String

@@ -39,7 +39,21 @@ A workflow a provider's [webhook](security.md#webhooks) starts takes ids, not th
 
 ## Reaching a run from a use case
 
-A person's action on what a run waits for, such as confirming a reservation, is a use case like any other, on its audience's database. It reaches the run through `temporalClient.workflowHandle(type:id:)`, with the id the workflow declares.
+A person's action on what a run waits for is a use case like any other, on its audience's database. It reaches the run through `temporalClient.workflowHandle(type:id:)`, with the id the workflow declares. `ExtendLoan` moves a loan's due date, which its run is waiting for:
+
+```swift
+let loan = try await database.withTransaction { scope in
+    …  // the conditional write, with ExtendLoanCommand, or the use case's case when the loan can't be extended
+}
+
+let workflowID = LoanWorkflow.id(loanID: loan.id)
+let workflowHandle = temporalClient.workflowHandle(type: LoanWorkflow.self, id: workflowID)
+try await workflowHandle.signal(signalType: LoanWorkflow.ExtendDueDate.self)
+logger.info("Loan extended", metadata: ["loanID": "\(loan.id)"])
+return loan
+```
+
+The signal carries nothing: the run reads the new date through an activity. Its handler, and the wait it starts again, are `LoanWorkflow`'s, written with `temporal-developer`.
 
 - The use case makes the change itself, as its conditional write in its own transaction, then signals the run after the commit. The row is the record and the signal only wakes the run, whose next activity reads the row. The caller's write stays under row-level security, and the request's values stay out of the workflow's history, which keeps every payload for as long as the namespace retains it.
 - A fact that outlives the run, such as a return, needs no signal: it stays in the database, where the activity that acts on it reads it (`markOverdue`).

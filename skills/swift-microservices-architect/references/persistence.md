@@ -28,6 +28,8 @@ By default ([data placement](system.md#data-placement)), each service's database
 | `<x>_internal` | `serve`, for administrators' and internal RPCs, anyone's that reach tenant rows with no caller bound, such as a webhook, and a caller's that must reach rows outside the caller's tenant | Every row, through its own policy | `Postgres<X>InternalScope` |
 | `<x>_worker` | `worker run`, for [system use cases](use-cases.md#system-use-cases) | Every row, through its own policy | `Postgres<X>WorkerScope` |
 
+`internal` in a role's name says no single tenant is bound: the use case confines the work, where a policy can't. It isn't the `Internal` of `XInternalService`, which says who calls; an administrators' RPC and a webhook run on the internal role too.
+
 A service declares only the roles it uses: Catalog has no tenant table and runs everything as `catalog_service`, and a small system may merge `<x>_internal` and `<x>_worker` into one role with one scope. A use case runs on its role's `PostgresDatabase`: the tenant database (`<x>_service`), the internal database or the worker's database.
 
 Row-level security holds while the role a caller's transaction runs as isn't a superuser, has no `BYPASSRLS` and doesn't own the table, and the caller is bound with the transaction-local `set_config(…, true)`, Postgres's `SET LOCAL` ([binding the tenant](#binding-the-tenant)). `CreateServiceRole` creates such roles, and no process but the migrator connects as the owner.
@@ -106,14 +108,20 @@ A service without tenant tables applies no `UserSettingsInterceptor`.
 
 ## Organization tenants
 
-When rows belong to an organization the caller acts for, such as a company's staff working on the company's records, the organization is a second tenant beside the user:
+When rows belong to an organization the caller acts for, the organization is a second tenant beside the user. Bookshelf's librarians act for a branch, on the loans it made:
+
+```sql
+CREATE POLICY organization_isolation ON loans
+    USING (branch_id = NULLIF(current_setting('app.caller_organization_id', true), '')::uuid);
+```
+
 
 - The token names the organization its session acts for in `org`, an optional `organizationID` on `UserIdentity`; a session that acts for none carries none ([user tokens](security.md#user-tokens)). Acting for another organization takes a new token from Identity, proved by the refresh token.
 - `PostgresSettings.user(_:)` binds `app.caller_organization_id` beside `app.caller_user_id`, only when the identity names an organization.
-- The table's policy is `organization_isolation`, the tenant policy's predicate over `organization_id`. A table that users and organizations both own rows of carries both policies.
+- The table's policy is `organization_isolation`, the tenant policy's predicate over the column that names the organization (`branch_id`). A table that users and organizations both own rows of, as `loans` is a member's and a branch's, carries both policies.
 - A policy may reach its tenant through the table that links them, with the state that makes the link one: `USING (EXISTS (SELECT 1 FROM memberships WHERE … AND status = 'active'))`. It still reads no role.
 - `USING` alone also checks what a statement writes, so a tenant writes only its own rows. A policy that only lets a tenant read is `FOR SELECT`. A table every caller reads and one organization writes carries `everyone_read FOR SELECT USING (true)` beside its isolation policy.
-- A use case takes the organization from `subject.organizationID`, never from its input, and refuses a caller without one as `forbidden` ([authorization](use-cases.md#authorization)).
+- A use case takes the organization from `subject.organizationID`, never from its input, and refuses a caller without one as `forbidden`, as `ListBranchLoans` does ([authorization](use-cases.md#authorization)).
 - A caller's use case that must reach rows no policy shows it yet, such as adding someone who isn't a member, runs on the internal database, where every statement names the caller's organization itself ([database roles](#database-roles)).
 
 ## Repositories and statements
@@ -229,7 +237,22 @@ package struct CreateLoansTable: DatabaseMigration {
 - One SQL statement per `connection.query`: PostgresNIO sends every query as a prepared statement, and Postgres refuses several commands in one. `CreateLoansRLSPolicy` runs four.
 - A migration keeps the schema usable by the image before it, since a rollback runs that image on the current schema ([deployment](delivery.md#a-services-ci-workflows)): it expands now and contracts in a later deploy, and a change that renames or moves data ships with code that reads both shapes.
 - Migrations create the roles, since the database and its owner exist before the service first deploys; the owner has `CREATEROLE` for them. Role names are cluster-wide, so they carry the service's name (`loans_service`). `CreateServiceRole(role:database:)` creates the login role and grants it `CONNECT`, schema usage, `SELECT, INSERT, UPDATE, DELETE` on tables and `USAGE` on sequences, and the same for future tables through default privileges; never `ALL`, since `TRUNCATE` ignores row-level security. A role has no password: the process's certificate proves it ([Postgres](security.md#postgres)). With the password fallback, `Migrations.apply()` runs the list and then sets each role's password from configuration (`ALTER ROLE … PASSWORD`), since a migration runs once, and rotating one is a configuration change and a deploy. Role names, and the fallback's passwords, come from configuration and are quoted into `PostgresQuery(unsafeSQL:)`, since a statement that names a role takes no bindings.
-- The executable's `Database/Migrations.swift` lists them in applied order. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited or renamed.
+- XPostgres states the order once, in `Migrations/LoansMigrations.swift`, so the executable and `XPostgresTests` apply the same list:
+
+```swift
+/// Every migration of Loans' database, in applied order. Append only.
+package enum LoansMigrations {
+    package static func all(database: String, serviceRole: String, internalRole: String, workerRole: String) -> [any DatabaseMigration] {
+        let createServiceRole = CreateServiceRole(role: serviceRole, database: database)
+        …
+        let createLoansTable = CreateLoansTable()
+        let createLoansRLSPolicy = CreateLoansRLSPolicy(internalRole: internalRole, workerRole: workerRole)
+        return [createServiceRole, …, createLoansTable, createLoansRLSPolicy]
+    }
+}
+```
+
+- The executable's `Database/Migrations.swift` reads the names from configuration, adds the list with `add(contentsOf:)` and applies it. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited or renamed.
 - `serve --migrate-database` applies them as the owner, proved by the migrator's certificate, over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before the role clients and the `ServiceGroup` are built ([commands](composition.md#commands)).
 - One process migrates, before the serving replicas start: postgres-migrations takes no lock, so replicas that apply at once race and all but one fail. `serve --migrate-database` runs in one process, deployed first ([a service's CI workflows](delivery.md#a-services-ci-workflows)); every other serve replica runs without the flag.
 
