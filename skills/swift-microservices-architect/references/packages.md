@@ -338,6 +338,9 @@ It also lists each use of unchecked concurrency for review, without failing: eve
 - No `try` or `await` inside a call's arguments, across wrapped lines ([build, then call](style.md#build-then-call)).
 - A use case's `logger.error` line reads `<Activity> failed: unknown error` ([logging](use-cases.md#logging)).
 - One top-level type per file ([files](conventions.md#files)).
+- No sentinel stands for absence: `?? ""`, `?? -1`, `.distantPast`, `.distantFuture` or a column's `DEFAULT ''` ([types and values](style.md#types-and-values)).
+- No `ON CONFLICT` in a `Create…Statement` ([repositories and statements](persistence.md#repositories-and-statements)).
+- No policy reads a role from `current_setting` ([row-level security](persistence.md#row-level-security)).
 - Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, and a role's `user` and `password` ([configuration](composition.md#configuration)).
 
 It also lists for review, without failing: each Core repository method with two parameters or more that isn't named for what it returns and takes no command or page size, since a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)); and each test file named for no type in `Sources/` ([test targets](testing.md#test-targets)).
