@@ -2,7 +2,7 @@
 
 The Postgres adapter, database roles and row-level security, migrations, and Valkey.
 
-This file gives the shapes: the roles, how the caller is bound, scopes, repositories, statements and where migrations live. The SQL inside them follows `supabase-postgres-best-practices`: which policy and grants a table needs, the index under a policy's columns, a column's type, what a migration locks. Where that skill shows a platform's own roles, `auth.uid()`, a session-wide `SET`, a `SECURITY DEFINER` helper or a password login, the roles, binding and logins here stand.
+This file gives the shapes: the roles, how the caller is bound, scopes, repositories, statements, pages and where migrations live. The SQL inside them follows `supabase-postgres-best-practices`: the grants and policy a table needs, the index under a policy's or a filter's columns, a column's type, what a migration locks. Where that skill differs, this file stands: its roles and their logins, the transaction-local binding rather than `auth.uid()` or a session's `SET`, UUID ids, both kinds of page, and a retried create found by its key rather than upserted.
 
 ## Contents
 - The Postgres target
@@ -296,7 +296,6 @@ package struct ValkeyResetCodeRepository<Client: ValkeyClientProtocol>: ResetCod
 - Keys are as [naming](conventions.md#naming) gives them, so services sharing an instance never collide.
 - Every write sets its expiry, passed by the use case from its policy, never configured in the store.
 - A read that must happen once is atomic: `GETDEL`, not a read followed by a delete. Several commands that must apply together go in a transaction (`client.transaction(…)`); several independent ones in a pipeline (`client.execute(…)`).
-- A rate limit is `INCR` and `EXPIRE … NX` in one transaction, so the first increment opens the window and no counter outlives it.
 - A cache is never the source of truth and never holds a decision. Its expiry is the use case's staleness budget, and its read answers `nil` on a miss and on a Valkey error, which the repository logs as a warning, so the use case reads the database and carries on.
 - A value for one user is keyed by that user too, since Valkey has no row-level security.
 - The executable reads `ValkeyClientConfiguration(configReader:)` into a `var`, which leaves TLS off and connects unauthenticated unless both `authentication.username` and `authentication.password` are set. It sets `valkeyConfiguration.tls = try .enable(tlsConfiguration, tlsServerName: host)` from a NIOSSL `TLSConfiguration` with the environment's trust roots, builds one `ValkeyClient(.hostname(host, port: port), configuration: valkeyConfiguration, logger: logger)` from it, and runs it in the `ServiceGroup` ([lifecycle](composition.md#lifecycle)).
