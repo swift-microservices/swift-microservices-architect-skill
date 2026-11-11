@@ -162,6 +162,27 @@ report "Configuration is read in a reader in Configuration/, except a root's own
     run_awk "$configuration_reads" "$(swift_files ! -path '*/Configuration/*' ! -name '*+ConfigReader.swift')"
 )"
 
+# lines <pattern> <find arguments>: prints file:line: text for each matching line.
+lines() {
+    pattern=$1
+    shift
+    files=$(swift_files "$@")
+    [ -n "$files" ] || return 0
+    echo "$files" | tr '\n' '\0' | xargs -0 grep -nE "$pattern" /dev/null | sed -E 's/:[[:space:]]+/: /'
+}
+
+report "Absence is an optional or a nullable column, never \"\", -1, a distant date or DEFAULT ''" "$(
+    lines '\?\? *(""|-1([^0-9]|$))|\.distant(Past|Future)|DEFAULT '"''"
+)"
+
+report "A create's insert is plain, with no ON CONFLICT; a retry is found by its key first" "$(
+    lines '[Oo][Nn] +[Cc][Oo][Nn][Ff][Ll][Ii][Cc][Tt]' -path 'Sources/*Postgres/*' -name 'Create*Statement.swift'
+)"
+
+report "A policy is a predicate on the tenant and reads no role" "$(
+    lines "current_setting\\('[^']*role" -path 'Sources/*Postgres/*'
+)"
+
 # A repository method in Core with two parameters or more, none of them a command and none
 # a page size, printed as one line.
 repository_methods='

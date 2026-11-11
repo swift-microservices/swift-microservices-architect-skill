@@ -99,7 +99,7 @@ do {
 
 ## Checklists
 
-Copy the task's checklist into the response and check items off as they're done; each `.md` file it names is in `references/`.
+Copy the task's checklist into the response, its `Verify` item as the lines of **Verify**, and check items off as they're done; each `.md` file it names is in `references/`.
 
 **Plan a backend**
 
@@ -121,14 +121,14 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in
 - [ ] Package <project>-x from packages.md#packageswift-template, with only the targets the plan names
 - [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
-- [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md)
+- [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md), the SQL with supabase-postgres-best-practices
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
-- [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer
+- [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer, a Valkey command chosen with valkey
 - [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' list, Serve, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-expert
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
-- [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
+- [ ] Verify
 ```
 
 **Add an operation**
@@ -137,12 +137,12 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
 - [ ] Contract: the RPC under its audience in XService, or in XInternalService
 - [ ] XCore: the use case's files; its scope lists only what it touches (use-cases.md)
-- [ ] XPostgres: the scopes of the roles it may run as adopt its scope protocol
+- [ ] XPostgres: the scopes of the roles it may run as adopt its scope protocol; new SQL with supabase-postgres-best-practices
 - [ ] XGRPC: the handler and the input's conversion, every error case mapped
 - [ ] Executable: the use case on its role's database, passed to the service
 - [ ] Gateway: the route in its tier, if public
 - [ ] Tests: the use case's outcomes and the handler's statuses, over mocks, written with swift-testing-expert
-- [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
+- [ ] Verify
 ```
 
 **Add a durable process**
@@ -156,7 +156,15 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
 - [ ] Executable: TemporalClient and the task queue into Serve's use cases; the worker group and its Run root
 - [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks, written with swift-testing-expert
-- [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
+- [ ] Verify
+```
+
+**Verify**
+
+```
+- [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests); report any suite that can't run
+- [ ] scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries), and swift-format lint
+- [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency, never silenced
 ```
 
 **Set up CI/CD**
