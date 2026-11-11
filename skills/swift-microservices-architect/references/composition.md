@@ -34,6 +34,7 @@ struct Loans: AsyncParsableCommand {
 - `serve --migrate-database` applies pending migrations as the owner, proved by the migrator's certificate, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
 - A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
 - An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived command, a subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
+- A short-lived command's operands, such as whom it acts on, are its `@Option`s and go into the use case's input; only a value configuration also carries goes through the provider. It reports through its log line and exit status, and prints to standard output only a value the operator must read.
 - A short-lived command connects as `<x>_internal`, since no caller is bound, and reads a secret it needs through the `ConfigReader` with `isSecret: true`, never from a flag, which the process list shows.
 - Each command's `run()` is a composition root: the only code that reads configuration, constructs concrete types and runs them. Nothing below it reads configuration, builds a client or starts a task.
 
@@ -223,6 +224,7 @@ extension InMemoryProvider {
         .init(values: [
             "grpc.server.host": "0.0.0.0",
             "grpc.server.port": 50051,
+            "grpc.catalog.port": 50051,
             "tls.certificatePath": "/run/tls/cert.pem",
             "tls.privateKeyPath": "/run/tls/key.pem",
             "tls.trustRootsPath": "/run/tls/ca.pem",
@@ -250,7 +252,7 @@ extension InMemoryProvider {
 }
 ```
 
-- Defaults hold mount paths, ports, the database's name, role names, the Temporal namespace, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
+- Defaults hold mount paths, ports, an upstream's included, the database's name, role names, the Temporal namespace, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
 - A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes first: `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)`. Required keys and validation live in the reader, not in the root.
 - A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
 - A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)` ([with TLS set on it](persistence.md#valkey)), with the key names that library chose. A service's own readers are in the executable's `Configuration/`: its policies' (`LoanPolicy+ConfigReader.swift`), and its provider clients', as extensions on the provider target's types (`ResendNoticeEventVerifier+ConfigReader.swift`), since a provider target never reads configuration.
@@ -357,7 +359,8 @@ let api = BookshelfAPI(
 )
 
 // MARK: - Router
-let cors = CORSMiddleware<BasicRequestContext>(allowOrigin: .originBased, allowHeaders: [.contentType, .authorization], allowMethods: [.get, .post, .put, .delete])
+let allowedHeaders: [HTTPField.Name] = …  // content type, authorization, Idempotency-Key
+let cors = CORSMiddleware<BasicRequestContext>(allowOrigin: .originBased, allowHeaders: allowedHeaders, allowMethods: [.get, .post, .put, .delete])
 let requestLogging = LogRequestsMiddleware<BasicRequestContext>(logLevel)
 let router = Router(context: BasicRequestContext.self)
 router.add(middleware: cors)

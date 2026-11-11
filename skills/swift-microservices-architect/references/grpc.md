@@ -101,7 +101,7 @@ service LoanService {
 - The file and package are named as [naming](conventions.md#naming) gives them. Generated types take the package as a prefix: `Bookshelf_Loans_V1_Loan`, `Bookshelf_Loans_V1_LoanService`.
 - Comments in the contract say who calls each group of RPCs and what a request may name.
 - Fields are snake_case. swift-protobuf generates `book_id` as `bookID` but `book_ids` as `bookIds`, and code spells each as generated. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
-- Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`. Only a closed set is a proto enum; an open set, such as `UserRole`, is its raw `string`.
+- Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`. A scalar the domain may lack is `optional` (`optional string email`), read with its `has…` property; an empty string never stands for absence. Only a closed set is a proto enum; an open set, such as `UserRole`, is its raw `string`.
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
 - A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).
 - A field number is never reused or renumbered; a removed field's number and name are `reserved`. An incompatible change is a new `v2` package beside `v1` until no caller uses `v1`. Before a contract's first deploy it changes in place, with no `v2`, as a major release of `<project>-protos`.
@@ -153,13 +153,20 @@ package struct LoanService: Bookshelf_Loans_V1_LoanService.SimpleServiceProtocol
 
     /// The interceptor identifies a user without requiring one; the caller's own and
     /// administrators' RPCs require one.
-    private func requireUser() throws -> UserIdentity { … }
+    private func requireUser() throws -> UserIdentity {
+        guard let user = OperationContext.current.user else {
+            throw RPCError(code: .unauthenticated, message: "Authentication is required.")
+        }
+
+        return user.identity
+    }
 }
 ```
 
 - `SimpleServiceProtocol` gives each handler its messages; `ServiceProtocol` is only for a handler that reads request metadata or sets response metadata. A response-streaming handler runs after the interceptors have returned, so nothing they bound is visible in it: an RPC that needs the caller or the tenant answers with one message.
 - `XService` and `XInternalService` are separate structs ([an internal service](#an-internal-service)).
 - The service holds use cases only: no repositories, ports, databases or rules.
+- A role's RPCs get a `// MARK: -` of their own, as the contract groups them (`// MARK: - Librarians`); the role itself is the use case's to check ([authorization](use-cases.md#authorization)).
 
 ## A handler
 
@@ -232,7 +239,7 @@ package struct BookInternalService: Bookshelf_Catalog_V1_BookInternalService.Sim
 
 ## Conversions
 
-Conversions live in `Protobuf/`, one file per type, `Type+Protobuf.swift`, as unlabeled initializers on the type being made:
+Conversions live in `Protobuf/`, one file per type, `Type+Protobuf.swift`, as unlabeled initializers on the type being made, which also names the file:
 
 ```swift
 extension BorrowBookUseCaseInput {
@@ -258,7 +265,7 @@ extension Bookshelf_Loans_V1_Loan {
 }
 ```
 
-- Into Core, a conversion refuses what the wire allows and the domain doesn't: an id that isn't a UUID, an `…_UNSPECIFIED` or unrecognized enum value, an unset message field the domain needs, such as a `Timestamp` (`hasDueDate`).
+- Into Core, a conversion refuses what the wire allows and the domain doesn't: an id that isn't a UUID, an `…_UNSPECIFIED` or unrecognized enum value, an unset message field the domain needs, such as a `Timestamp` (`hasDueDate`). An unset `optional` field becomes `nil` in the input, and a `nil` going out leaves its field unset.
 - Out of Core, a conversion is total: every case of a Core enum maps to a proto value in an exhaustive `switch`, and an open set converts through its `rawValue`.
 - Conversions are the only code that sees both a generated type and a Core type.
 
@@ -273,7 +280,7 @@ A list that can grow large pages; one a rule keeps small, such as a member's act
 
 - By page number, a client can jump to any page, but rows added between requests shift the pages, and a deep page scans every row before it. Pages count from 1.
 - By key, the token is the page's last id, opaque to clients, and rows added between pages neither repeat nor go missing. A page carries a token only when another page follows.
-- `page_size` 0 asks for the service's default and more than its maximum gets the maximum, both constants in `Protobuf/PageSize.swift`; `page` 0, a field the client left out, asks for the first page. A negative size or page, or a token the service didn't issue, is `invalidArgument`.
+- `page_size` 0 asks for the service's default and more than its maximum gets the maximum, both constants in `PageSize.swift`, in the `Protobuf/` at the target's root that holds what several areas convert; `page` 0, a field the client left out, asks for the first page. A negative size or page, or a token the service didn't issue, is `invalidArgument`.
 - The input carries what the repository's read takes, the use case returns the repository's page, and the response conversion copies its metadata ([paged statements](persistence.md#paged-statements)):
 
 ```swift

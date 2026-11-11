@@ -158,9 +158,9 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 }
 ```
 
-- The token carries identity only: `sub`, `role`, `iss`, `iat`, `exp`, and `aud` where an audience is used. It carries no permissions, entitlements, business state or personal data; a use case reads those from the service that owns them.
+- The token carries identity only: `sub`, `role`, `iss`, `iat`, `exp`, `aud` where an audience is used, and `org` where callers act for an organization ([organization tenants](persistence.md#organization-tenants)). It carries no permissions, entitlements, business state or personal data; a use case reads those from the service that owns them.
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
-- `<Project>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`.
+- `<Project>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`. Each key is registered under its `kid`, the RFC 7638 thumbprint of the public key, which the issuer writes in the token's header, so rotating adds a public key file before the issuer changes keys.
 - Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes the `JWTIssuer`.
 - Access tokens are short-lived. A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh and sign-out RPCs, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)). Sign-out ends the one session that refresh token belongs to.
 - The gateway verifies the token to pick a tier and forwards the original with `BearerPropagationInterceptor`; each service's `BearerAuthenticationInterceptor` verifies it again. A token never travels on an internal RPC, into a workflow's input, or into a log.
@@ -194,7 +194,7 @@ Each layer refuses what it can see; the use case decides.
 
 | Layer | Checks |
 |---|---|
-| The gateway's tier | A valid token where the route needs a caller; the role where it needs an administrator |
+| The gateway's tier | A valid token where the route needs a caller; the role where it needs an administrator, and no other role |
 | The handler | `requireUser()` where the RPC acts for a caller, before converting the request |
 | The use case | The rule: the role, the resource's ownership and state ([authorization](use-cases.md#authorization)) |
 | Row-level security | The tenant: a caller's transaction sees only the caller's rows ([row-level security](persistence.md#row-level-security)) |

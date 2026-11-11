@@ -41,8 +41,8 @@ package enum LoanStatus: String, Equatable, Sendable {
 
 - A model is a `package struct` of `let` properties, `Equatable` and `Sendable`, with an explicit `package init`.
 - It's named for what it is in the service's language ([naming](conventions.md#naming)).
-- Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text. A validated value, such as an `EmailAddress`, travels as itself through models, commands and ports, never as the `String` it was made from.
-- A rule more than one use case applies lives on a model or a policy, never in a use case for another to copy: `LoanPolicy.dueDate(borrowedAt:)`, a throwing `EmailAddress(_:)` that normalizes and validates.
+- Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text. A validated value, such as an `EmailAddress`, travels as itself through models, commands and ports, never as the `String` it was made from. A field earns such a type once two use cases validate it: the input carries the raw value, and each use case makes the type in a `guard`, throwing its case (`invalidEmail`).
+- A rule more than one use case applies lives on a model or a policy, never in a use case for another to copy: `LoanPolicy.dueDate(borrowedAt:)`, a failable `EmailAddress(_:)` that normalizes and validates.
 - A value operators change is a policy value (`LoanPolicy`, with `maximumActiveLoans` and `loanPeriod`), passed to the use cases that apply it and read from configuration by the executable ([configuration](composition.md#configuration)). A limit the domain fixes, such as an email address's 254 characters, is a static on its model (`EmailAddress.maximumLength`).
 - What the service knows about another service's data is its own model, in `Ports/`, beside the port that returns it: Loans' `Book` holds an id and a title, not Catalog's whole book.
 
@@ -68,6 +68,7 @@ package enum BorrowBookUseCaseError: Error, Equatable {
 - Each error is an enum, `Error, Equatable`, with no associated values unless the caller acts on them, and without messages: a transport writes the message its caller reads ([status codes](grpc.md#status-codes)). Its file holds only the enum; what a state means for a caller, such as whether a loan can still be returned, is a method on the model (`loan.isReturnable`).
 - A case names an outcome in the domain's terms (`bookNotFound`, `loanLimitReached`), never the failure that caused it (`queryFailed`).
 - `unknown` is the use case's last case: everything it can't name, logged where it's thrown.
+- What an adapter can't report in Core's terms, such as an insert that returned no row, is an internal error of its own target, which reaches the use case's final `catch` ([repositories and statements](persistence.md#repositories-and-statements)).
 - A repository or port adapter raises only reasons it can detect, such as a constraint or a status code, and lets every other error propagate unchanged. A cache's read is the one exception ([Valkey](persistence.md#valkey)).
 
 ## Repositories and commands
@@ -184,10 +185,10 @@ package protocol BorrowBookUseCaseScope: Sendable {
 
 with the error above and the implementation below.
 
-- A use case is named like its RPC ([naming](conventions.md#naming)).
-- `callAsFunction` takes `subject: UserIdentity` first when it acts for a caller, then `input:` when the request carries values. A use case that needs neither takes neither.
+- A use case is named like its RPC ([naming](conventions.md#naming)). Two use cases that share steps each spell them out: what they share by rule is a model's or a policy's method, and what they share in storage is one repository method.
+- `callAsFunction` takes `subject: UserIdentity` first when its RPC requires a caller, even one it only needs to be present, then `input:` when the request carries values. A use case that needs neither takes neither.
 - It returns a domain model, an array of them, a page of them, or nothing. A result that combines values is a domain type named for what it is (`Session`), never `XUseCaseOutput`.
-- The input is a plain value of what the request carries. Wire validity, such as an id that isn't a UUID, is the conversion's to refuse ([conversions](grpc.md#conversions)); business validity is the use case's, as an error case.
+- The input is a plain value of what the request carries, with an optional for a value the request may leave out. Wire validity, such as an id that isn't a UUID, is the conversion's to refuse ([conversions](grpc.md#conversions)); business validity is the use case's, as an error case.
 - The implementation is generic over its database, `XUseCase<DatabaseType>` where `DatabaseType: Database` and `DatabaseType.Scope: XUseCaseScope`. It holds its ports as `any Port`, a `Logger`, and a policy when its rules are tunable.
 - One that starts a workflow also holds what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
 - Its scope protocol lists only what it uses. The scopes of the database roles it may run on adopt the protocol, so composing it on any other database doesn't compile ([database roles](persistence.md#database-roles)).
@@ -331,7 +332,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 }
 ```
 
-- A system use case takes no `subject`. Its input names what it acts on.
+- A system use case takes no `subject`. Its input names what it acts on, and the user a step is recorded for, such as who confirmed, when the use case that reached the run authorized that user first ([reaching a run](workflows.md#reaching-a-run-from-a-use-case)).
 - Activities call system use cases only, never user-facing ones. A use case that checks the caller (`ReturnBook`) is never invoked from an activity with an invented identity.
 - When a person and the system both need the same effect, each audience has its own use case: `MarkLoanOverdueUseCase` for the worker, and `MarkLoanOverdueByAdministratorUseCase`, which takes `subject` and checks the role. They share the domain rule, on a model or a policy, and the repository's conditional write (`markOverdue(id:)`), and neither calls the other.
 - The worker scope adopts the system use cases' scope protocols, so wiring one on the tenant database fails to compile ([database roles](persistence.md#database-roles)).
@@ -341,7 +342,9 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - A transaction holds a pooled connection until it ends, so it contains only database work. Remote calls go before it (the catalog lookup) or after it commits (the workflow start).
 - A decision that must be atomic with its write happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
 - A rule over a count, such as the loan limit, first locks what it counts (`lockLoans(userID:)`), since `SELECT … FOR UPDATE` locks only rows that already exist; the lock ends with the transaction. A rule a constraint can state, such as a unique index, is that constraint, mapped to a case.
-- A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue or returned, and throws `loanNotFound` only when there's no loan.
+- A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`), reading the row in the same transaction first when a missing row answers differently (`loanNotFound`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue or returned, and throws `loanNotFound` only when there's no loan.
+- An idempotent create with no count to guard follows the same order: lock the owner its key is unique with, or the key itself when it has no owner, look the key up, then insert. A unique constraint a concurrent request can still trip is mapped to its case, never left to `unknown`.
+- A closure that produces two values returns a labeled tuple.
 - Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
 
@@ -349,6 +352,8 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 
 - The caller reaches a use case as `subject: UserIdentity`. A use case never reads `OperationContext`.
 - **The caller's own.** The use case acts on `subject.userID`, never on a user id from its input, and runs on the tenant database, where row-level security confines it as well ([row-level security](persistence.md#row-level-security)).
+- **Any caller.** A use case any signed-in caller may run still takes `subject`, so its signature states the requirement the handler's `requireUser()` enforces.
+- **A role.** Where a role other than administrator may act, such as a librarian, the use case checks `subject.role` before anything else and throws `forbidden`, as an administrators' does. It runs on the tenant database when the rows it touches are its tenant's ([organization tenants](persistence.md#organization-tenants)), and on the internal database otherwise.
 - **Administrators.** The use case checks the role before anything else, then runs on the internal database in a service with tenant tables. The gateway's `AdministratorRequestContext` refuses earlier; the use case's check is the rule.
 - **Internal callers.** The use case takes the user it acts for in its input; mTLS admitted the calling process.
 - **The system.** A [system use case](#system-use-cases) acts for no caller and runs on the worker's database, or on the internal database when a short-lived command runs it ([commands](composition.md#commands)), whose scope then adopts its scope protocol too.
@@ -377,7 +382,8 @@ package func callAsFunction(
 ## Logging
 
 - Each use case logs through the `Logger` it's built with; the metadata provider adds the caller's `userID` to every line of a request ([user tokens](security.md#user-tokens)).
-- Levels: `info` for a completed change, `warning` for a refusal, `error` for `unknown`. Input refused before the `do`, such as an empty idempotency key, throws without a log line, and a successful read logs nothing.
+- Levels: `info` for a completed change, `warning` for a refusal, `error` for `unknown`. Input refused before the `do`, such as an empty idempotency key, throws without a log line, and a read logs nothing, whether it finds its row or not.
+- A refusal is logged where it's thrown, inside the transaction's closure included, so no `catch` exists only to log one. `info` follows the transaction's return: inside the closure the change can still roll back.
 - Messages are short sentences: `Book borrowed`, `Borrowing refused: no such book`, `Borrowing failed: unknown error`.
 - `error` holds `String(reflecting: error)`.
 - Never logged: tokens, passwords, secrets and their digests, email addresses, names, request bodies.

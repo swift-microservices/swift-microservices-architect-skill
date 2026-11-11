@@ -172,6 +172,7 @@ let package = Package(
 - `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's README.
 - Every target lists each module it imports, product by product. CI's `--explicit-target-dependency-import-check error` fails only an import the target can't reach ([delivery](delivery.md#tests)), so listing a module reached through another dependency, such as `GRPCCore` through `LoansCore`, is kept by review.
 - Each requirement follows [choosing versions](stack.md#choosing-versions).
+- A target joins `Package.swift` when its first source file is written: SPM refuses a target with no sources, so a package builds target by target, Core first.
 - A provider target (`LoansResend`) and test targets follow the same form, and the executable lists the provider target. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one.
 
 ## Swift settings
@@ -252,9 +253,9 @@ bookshelf-core/
 ```
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
-- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; only executables link it. `BookshelfTransport` adds grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
+- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. It adds swift-crypto for a key's thumbprint ([user tokens](security.md#user-tokens)). `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; executables link it, and `XPostgresTests` for the settings it binds. `BookshelfTransport` adds grpc-swift-2 for `ServiceConfig`, grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
 - Its API is `public`, with `public import` for every module whose types it exposes.
-- It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<project>-protos`, is released and tagged first; each service and the gateway then raise their requirement.
+- It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<project>-protos`, is released and tagged first; each service and the gateway then raise their requirement. Before the shared packages have a remote, each is a local repository with its releases tagged, and a dependent names it by its `file://` URL and the same `from:`, which resolves as a release does; the URL becomes the remote's in one change once it exists.
 
 ## The contracts package
 
@@ -309,7 +310,7 @@ with `grpc-swift-proto-generator-config.json`:
 
 ## The gateway package
 
-`bookshelf-gateway` has two targets, laid out in [the gateway's package](gateway.md#the-package): `GatewayHTTP`, the HTTP surface, and `Gateway`, the executable. `GatewayHTTP` links Hummingbird (`traits: ["ConfigurationSupport"]`), HummingbirdAuth, swift-openapi-runtime with the generator plugin, `Authentication`, `AuthenticationHummingbird`, `BookshelfAuthentication`, `GRPCCore`, `SwiftProtobuf` for the well-known types' members (`Google_Protobuf_Timestamp.date`), `Logging` for `ErrorMiddleware`'s log lines, and the `XProtos` of every upstream. It has no Core, Postgres or persistence target.
+`bookshelf-gateway` has two targets, laid out in [the gateway's package](gateway.md#the-package): `GatewayHTTP`, the HTTP surface, and `Gateway`, the executable. `GatewayHTTP` links Hummingbird (`traits: ["ConfigurationSupport"]`), HummingbirdAuth, swift-openapi-runtime with the generator plugin, `Authentication`, `AuthenticationHummingbird`, `BookshelfAuthentication`, `GRPCCore`, `SwiftProtobuf` for the well-known types' members (`Google_Protobuf_Timestamp.date`), `HTTPTypes` for the header names it reads, `Logging` for `ErrorMiddleware`'s log lines, and the `XProtos` of every upstream. It has no Core, Postgres or persistence target.
 
 ## Checking the boundaries
 
@@ -323,6 +324,7 @@ SPM checks that a target can reach what it imports, but not what a declaration s
 - Activities call system use cases only, so nothing in `Workflows/` names a caller.
 - Adapters import no sibling adapter, and only XGRPC imports the service's contract.
 - Generated contract types stay in XGRPC, the gateway's `GatewayHTTP` and the executable.
+- The gateway names no `XInternalService`.
 - Only the executable reads configuration.
 - Every Foundation import is the conditional one.
 - There are no unstructured tasks.
@@ -338,4 +340,6 @@ It also lists each use of unchecked concurrency for review, without failing: eve
 - One top-level type per file ([files](conventions.md#files)).
 - Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, and a role's `user` and `password` ([configuration](composition.md#configuration)).
 
-It also lists each Core repository method with two parameters or more and no command or page size for review: a read passes, and a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)).
+It also lists for review, without failing: each Core repository method with two parameters or more that isn't named for what it returns and takes no command or page size, since a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)); and each test file named for no type in `Sources/` ([test targets](testing.md#test-targets)).
+
+`scripts/swift_ci.sh build` and `scripts/swift_ci.sh test`, run from any package's root, pass CI's flags ([tests](delivery.md#tests)), with `--library` first for a library's.

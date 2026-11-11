@@ -126,7 +126,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer
 - [ ] X: commands, InMemoryProvider defaults, Migrations, Serve, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
-- [ ] A test target per module, over mocks (testing.md), written with swift-testing-expert
+- [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-expert
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
 - [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
 ```
@@ -136,7 +136,7 @@ Copy the task's checklist into the response and check items off as they're done;
 ```
 - [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
 - [ ] Contract: the RPC under its audience in XService, or in XInternalService
-- [ ] XCore: the use case's five files; its scope lists only what it touches (use-cases.md)
+- [ ] XCore: the use case's files; its scope lists only what it touches (use-cases.md)
 - [ ] XPostgres: the scopes of the roles it may run as adopt its scope protocol
 - [ ] XGRPC: the handler and the input's conversion, every error case mapped
 - [ ] Executable: the use case on its role's database, passed to the service
@@ -149,7 +149,8 @@ Copy the task's checklist into the response and check items off as they're done;
 
 ```
 - [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
-- [ ] Load temporal-developer, and design the workflow with it: signal or update, waiting, compensation, versioning
+- [ ] Load temporal-developer, and design the workflow with it: waiting, handlers, compensation, versioning; where it has no Swift reference, read the SDK's documentation before using an API
+- [ ] Each person's change is written by its use case, then signalled, unless only the run can decide (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
 - [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)
 - [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
@@ -171,7 +172,7 @@ Copy the task's checklist into the response and check items off as they're done;
 
 ```
 - [ ] Run this skill's scripts/check_boundaries.sh from each service's and the gateway's root, and scripts/check_style.sh from every package's (packages.md#checking-the-boundaries)
-- [ ] Each use case: its five files, typed throws, one catch per case, no helpers, the right database role
+- [ ] Each use case: its files, typed throws, one catch per case, no helpers, the right database role
 - [ ] Each adapter only converts and delegates; every error case is mapped
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
 - [ ] Where the backend has them: workflows checked with temporal-developer, tests with swift-testing-expert, and actors, Mutexes and the boundary script's unchecked concurrency with swift-concurrency
@@ -193,7 +194,7 @@ Read each reference when its row applies:
 | [persistence.md](references/persistence.md) | Writing a scope, statement, migration, policy, tenant table, Valkey repository or Valkey client |
 | [grpc.md](references/grpc.md) | Changing a contract, handler, conversion, client, paged list or transport |
 | [gateway.md](references/gateway.md) | Adding a route, request context, controller, webhook route or error mapping |
-| [workflows.md](references/workflows.md) | Writing or starting a workflow, activity container or worker |
+| [workflows.md](references/workflows.md) | Writing, starting or reaching a workflow, activity container or worker |
 | [composition.md](references/composition.md) | Wiring a command, composition root, configuration, logging or the ServiceGroup |
 | [security.md](references/security.md) | Touching TLS or mTLS, database logins, tokens, secrets, authorization layers or webhook verification |
 | [style.md](references/style.md) | Writing or reviewing any Swift |

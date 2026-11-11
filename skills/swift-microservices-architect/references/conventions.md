@@ -21,10 +21,10 @@
 | `<project>-core` products | `<Project>Authentication`, `<Project>Persistence`, `<Project>Transport`, `<Project>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |
 | Contract target, proto package and file | `XProtos`; `<project>.<x>.v1`; `<project>/<x>/v1/<x>.proto` | `LoansProtos`, `bookshelf.loans.v1` |
 | Proto services | `<Resource>Service` and `<Resource>InternalService`; the service's name when its RPCs aren't about one resource | `LoanService`, `BookInternalService`, `IdentityService` |
-| RPCs | Standard verbs, or a domain verb and noun; an administrators' list of everyone's is `ListAll…` | `GetBook`, `ListLoans`, `ListAllLoans`, `BorrowBook` |
-| Paging | Requests carry `page_size` and `page`, or `page_token`; responses `page_info` (`page`, `page_size`, `total_count`, `total_pages`) or `next_page_token`. Core has `Page<Item>` and `KeyedPage<Item>` (`nextCursor`) and reads `page:pageSize:` or `startingAfter:pageSize:`. Over HTTP the same names in camelCase | `loans(userID:page:pageSize:)`, `loans(startingAfter:pageSize:)`, `LoansByUserIDStatement`, `CountLoansByUserIDStatement` |
+| RPCs | The standard methods' verbs (`Get`, `List`, `Create`, `Update`, `Delete`), or a domain verb and noun; an administrators' list of everyone's is `ListAll…`; an internal read keyed differently from the public one of its name says its key (`Get…ByID`) | `GetBook`, `ListLoans`, `ListAllLoans`, `BorrowBook` |
+| Paging | Requests carry `page_size` and `page`, or `page_token`; responses `page_info` (`page`, `page_size`, `total_count`, `total_pages`) or `next_page_token`. Core has `Page<Item>` and `KeyedPage<Item>` (`nextCursor`) and reads `page:pageSize:` or `startingAfter:pageSize:`. A list the client orders carries `order_by`, a field and an optional ` desc`, which the conversion reads into a Core enum. Over HTTP the same names in camelCase | `loans(userID:page:pageSize:)`, `loans(startingAfter:pageSize:)`, `LoansByUserIDStatement`, `CountLoansByUserIDStatement` |
 | Webhooks | An anyone RPC `Receive<Event>`; the route `webhooks/<provider>`; `<Provider>WebhookController`; the port `<Event>Verifier` | `ReceiveNoticeEvent`, `ResendWebhookController`, `NoticeEventVerifier` |
-| Domain model | A plain noun in the service's language; never `DTO`, `Row`, `Entity`, `Response` or `Detail` | `Loan`, `LoanStatus` |
+| Domain model | A plain noun in the service's language, clashing with no type every file sees ([naming a service](system.md#naming-a-service)); never `DTO`, `Row`, `Entity`, `Response` or `Detail` | `Loan`, `LoanStatus` |
 | Another service's data, as this service knows it | A noun in this service's words, in `Ports/` | `Book`, `Member` |
 | Tunable rules | `XPolicy` | `LoanPolicy` |
 | Use case | Its RPC's verb and noun + `UseCase`; with `…UseCaseProtocol`, `…UseCaseInput`, `…UseCaseError`, `…UseCaseScope` | `BorrowBookUseCase`, `BorrowBookUseCaseError` |
@@ -45,11 +45,11 @@
 | Mock | `Mock` + the protocol's name, without `Protocol` | `MockCatalogClient`, `MockBorrowBookUseCase`, `MockDatabase` |
 | Statement | What it does + `Statement` | `CreateLoanStatement`, `ActiveLoansByUserIDStatement` |
 | Migration | What it changes | `CreateLoansTable`, `CreateLoansRLSPolicy`, `CreateServiceRole` |
-| Database, roles, policies | `<project>_<x>`; `<x>_owner`, `<x>_service`, `<x>_internal`, `<x>_worker`; `tenant_isolation`, `<role>_all` | `bookshelf_loans`, `loans_service`, `internal_all` |
+| Database, roles, policies | `<project>_<x>`; `<x>_owner`, `<x>_service`, `<x>_internal`, `<x>_worker`; `tenant_isolation`, `organization_isolation`, `everyone_read`, `<role>_all` | `bookshelf_loans`, `loans_service`, `internal_all` |
 | Process identity, a certificate's common name | `<x>` for serve, `<x>-worker`, `<x>-migrator` | `loans-migrator` |
 | Columns | The snake_case of the Swift property; a stored date is a noun, never `…At` | `creation_date` for `creationDate`, `due_date`; not `created_at` |
 | Indexes unique while active | `<table>_active_<columns>_key` | `loans_active_user_id_book_id_key` |
-| Tenant setting | `app.caller_user_id` | |
+| Tenant settings | `app.caller_user_id`; `app.caller_organization_id` for an organization tenant | |
 | gRPC service types | The proto service's name | `LoanService`, `BookInternalService` |
 | Gateway | Targets `GatewayHTTP`, `Gateway`; router builder `<Project>API`; `XController` per resource; `IdentityRequestContext`, `AdministratorRequestContext` | `BookshelfAPI`, `LoanController` |
 | Configuration keys | Dotted scopes with lowerCamelCase leaves; a duration names its unit | `grpc.server.port`, `postgres.service.user`, `tls.refreshIntervalSeconds` |
@@ -64,15 +64,16 @@
 | Target | Folders |
 |---|---|
 | XCore | A folder per area (`Loans/`) with its models and policy, `Repository/` (and `Repository/Commands/`), `UseCases/<Name>/`; `Workflows/<WorkflowName>/` with the workflow, its activity container and `ActivityOptions+X.swift`, and a shared container, or a payload type two workflows share, directly in `Workflows/`; `Ports/` for what the service needs from other systems, with the models they return; `Paging/` for the page types |
-| XPostgres | `Scopes/`, `Repositories/<Area>/`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/` for the area's own tables and policies, `Migrations/Role/` |
-| XGRPC | A folder per area with its proto services and `Protobuf/`; `Clients/` with `Clients/Protobuf/` |
+| XPostgres | `Scopes/`, `Repositories/<Area>/` and `Repositories/PostgresRepositoryError.swift`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/` for the area's own tables and policies, `Migrations/Role/` |
+| XGRPC | A folder per proto service's resource (`Loans/`) with `XService`, `XInternalService` and `Protobuf/`; a `Protobuf/` at the target's root for what several of them convert (`PageSize.swift`, `PageInfo+Protobuf.swift`); `Clients/` with `Clients/Protobuf/` |
 | XValkey, X<Provider> | Flat, one file per type |
 | X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift`, `Worker/Worker.swift`, `Worker/Run.swift`, `<Command>/<Command>.swift` for a short-lived command |
-| Test target | `Mocks/`, then a file per tested type: `BorrowBookUseCaseTests.swift` |
+| Test target | `Mocks/`, `Support/` for a harness or fixtures several suites share, then a file per tested type, never one per group of them: `BorrowBookUseCaseTests.swift` |
 | GatewayHTTP | `openapi.yaml`, `openapi-generator-config.yaml`, `<Project>API.swift`, `Contexts/`, `Controllers/`, `Middlewares/`, `Schemas/Requests/`, `Schemas/Responses/`, `Schemas/Shared/` |
 
 ## Files
 
 - One type per file, named for the type. A type's small nested types stay in its file: a workflow's `Input`, an activity container's inputs.
 - An extension that adds a concern to a type is `Type+Concern.swift`.
-- A use case's five files sit together in `UseCases/<Name>/`.
+- A use case's five files, four when it takes no input, sit together in `UseCases/<Name>/`.
+- An area is a resource of Core's with its own repository. XPostgres mirrors Core's areas, and a table that has no repository of its own sits in the area whose repository reads it.
