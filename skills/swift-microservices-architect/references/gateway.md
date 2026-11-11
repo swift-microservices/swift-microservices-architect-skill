@@ -89,8 +89,7 @@ components:
 
 - It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references, which the generator makes a `String`, so ids cross HTTP as the services write them, lowercase ([conversions](#conversions)).
 - `servers` ends in `/v1`, and paths are written without it.
-- A create a client may retry declares the IETF `Idempotency-Key` header as a required header parameter, declared once under `components/parameters`; the key is never a body field.
-- A calendar date is `type: string`, `format: date`; a value the resource may lack is left out of `required`, never sent as `""`.
+- A create a client may retry declares the `Idempotency-Key` header as a required parameter, once under `components/parameters` ([controllers](#controllers)).
 - A page's schema is `<Resource>PageResponse`, its items under the resource's plural beside `pageInfo` or `nextPageToken`.
 - Every operation has an `operationId` and a `security` entry for its tier: `[]` for no caller, `[{bearerAuth: []}]` for a caller or an administrator ([request contexts](#request-contexts-and-tiers)).
 
@@ -247,7 +246,7 @@ package struct LoanController: Sendable {
 - A handler is a `private func` with the signature `(Request, Context) async throws -> Response`: decode the body or parameters, call the client, convert the answer. Nothing else.
 - A handler makes one upstream call. An answer that needs another service's data is the owning service's to assemble, through its port, so the gateway never joins two services' answers.
 - A route belongs to the controller of the resource it answers with, whatever its path: `books/:id/loans` is `LoanController`'s, registered by the router under `books`.
-- A create reads its key with `requireIdempotencyKey()`, an extension on `HTTPFields` in `Schemas/Shared/` that answers `400` for a request without the `Idempotency-Key` header.
+- A create reads its key from the IETF `Idempotency-Key` header, never a body field, with `requireIdempotencyKey()`, an extension on `HTTPFields` in `Schemas/Shared/` that answers `400` for a request without it.
 - A query value that is present and malformed answers `400`, like a malformed body; only an absent one takes the service's default.
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
 - An action on a resource that isn't a create, read, update or delete is `POST :id/<verb>` (`:id/return`), as the RPC names it.

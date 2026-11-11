@@ -344,7 +344,6 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - A rule over a count, such as the loan limit, first locks what it counts (`lockLoans(userID:)`), since `SELECT … FOR UPDATE` locks only rows that already exist; the lock ends with the transaction. A rule a constraint can state, such as a unique index, is that constraint, mapped to a case.
 - A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`), reading the row in the same transaction first when a missing row answers differently (`loanNotFound`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue or returned, and throws `loanNotFound` only when there's no loan.
 - An idempotent create with no count to guard follows the same order: lock the owner its key is unique with, or the key itself when it has no owner, look the key up, then insert. A unique constraint a concurrent request can still trip is mapped to its case, never left to `unknown`.
-- A closure that produces two values returns a labeled tuple.
 - Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
 
@@ -352,7 +351,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 
 - The caller reaches a use case as `subject: UserIdentity`. A use case never reads `OperationContext`.
 - **The caller's own.** The use case acts on `subject.userID`, never on a user id from its input, and runs on the tenant database, where row-level security confines it as well ([row-level security](persistence.md#row-level-security)).
-- **Any caller.** A use case any signed-in caller may run still takes `subject`, so its signature states the requirement the handler's `requireUser()` enforces.
+- **Any caller.** A use case any caller with a token may run still takes `subject`, so its signature states the requirement the handler's `requireUser()` enforces.
 - **A role.** Where a role other than administrator may act, such as a librarian, the use case checks `subject.role` before anything else and throws `forbidden`, as an administrators' does. A role held at an organization unwraps it in the same `guard`, as `ListBranchLoans` begins: `guard subject.role == .librarian, let branchID = subject.organizationID else { … }`. It runs on the tenant database when the rows it touches are its tenant's ([organization tenants](persistence.md#organization-tenants)), and on the internal database otherwise.
 - **Administrators.** The use case checks the role before anything else, then runs on the internal database in a service with tenant tables. The gateway's `AdministratorRequestContext` refuses earlier; the use case's check is the rule.
 - **Internal callers.** The use case takes the user it acts for in its input; mTLS admitted the calling process.

@@ -39,7 +39,7 @@ A step that was atomic across the two becomes a workflow. Moving or dropping dat
 
 - A noun for the capability: `Identity`, `Catalog`, `Loans`. [Naming](conventions.md#naming) gives its package, repository and targets.
 - Module names are unique across the whole package graph. A service named `Authentication` collides twice, its executable with swift-authentication's `Authentication` and its gRPC target with `AuthenticationGRPC`. Check a name's targets against every product in the graph (`Logging`, `Configuration`, `Metrics`, `Tracing`, `Crypto`, `Temporal`, `Valkey`) and pick another name rather than an exception to the target scheme.
-- A model's name clashes the same way with a type every file sees: Swift Testing's `Test`, `Suite` and `Tag` in test files, the standard library's `Task` and `Result` everywhere. The model takes the fuller noun (`LabTest`), and its repository, use cases and folders follow it.
+- A model's name clashes the same way with a type every file sees: Swift Testing's `Test`, `Suite` and `Tag` in test files, the standard library's `Task` and `Result` everywhere. The model takes a fuller noun, and its repository, use cases and folders follow it.
 
 ## Contracts
 

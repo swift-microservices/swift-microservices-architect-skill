@@ -128,7 +128,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-expert
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
-- [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
+- [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
 ```
 
 **Add an operation**
@@ -142,7 +142,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] Executable: the use case on its role's database, passed to the service
 - [ ] Gateway: the route in its tier, if public
 - [ ] Tests: the use case's outcomes and the handler's statuses, over mocks, written with swift-testing-expert
-- [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
+- [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
 ```
 
 **Add a durable process**
@@ -156,7 +156,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
 - [ ] Executable: TemporalClient and the task queue into Serve's use cases; the worker group and its Run root
 - [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks, written with swift-testing-expert
-- [ ] swift build and swift test with CI's flags and POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
+- [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests), scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries) and swift-format lint; fix and repeat until all pass, a concurrency diagnostic through swift-concurrency, never silenced, and report any suite that can't run
 ```
 
 **Set up CI/CD**
@@ -165,7 +165,7 @@ Copy the task's checklist into the response and check items off as they're done;
 - [ ] The package's kind: public library, system library or service (delivery.md#package-kinds)
 - [ ] Its CI workflows, calling swift-microservices/ci at a release's commit; dependabot.yml; .swift-format, .license_header_template and .licenseignore; the secrets
 - [ ] A library: the semver labels and .github/release.yml; a service: its Containerfile
-- [ ] swift build and swift test with CI's flags (delivery.md#tests); fix and repeat until both pass
+- [ ] scripts/swift_ci.sh --library build and test (delivery.md#tests); fix and repeat until both pass
 ```
 
 **Review a backend**

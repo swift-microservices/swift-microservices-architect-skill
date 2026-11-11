@@ -25,7 +25,7 @@ By default ([data placement](system.md#data-placement)), each service's database
 |---|---|---|---|
 | Owner | `serve --migrate-database`, for migrations only, as the migrator ([Postgres](security.md#postgres)) | Everything; bypasses row-level security | none |
 | `<x>_service` | `serve`, for anyone's and the caller's own RPCs | Tenant tables narrowed to the bound caller; untenanted tables whole | `Postgres<X>Scope` |
-| `<x>_internal` | `serve`, for administrators' and internal RPCs, anyone's that reach tenant rows with no caller bound, such as a webhook, and a caller's that must reach rows outside the caller's tenant | Every row, through its own policy | `Postgres<X>InternalScope` |
+| `<x>_internal` | `serve`, for administrators' and internal RPCs, anyone's that reach tenant rows with no caller bound, such as a webhook, and a caller's that must reach rows outside the caller's tenant, such as adding someone who isn't a member yet | Every row, through its own policy | `Postgres<X>InternalScope` |
 | `<x>_worker` | `worker run`, for [system use cases](use-cases.md#system-use-cases) | Every row, through its own policy | `Postgres<X>WorkerScope` |
 
 `internal` in a role's name says no single tenant is bound: the use case confines the work, where a policy can't. It isn't the `Internal` of `XInternalService`, which says who calls; an administrators' RPC and a webhook run on the internal role too.
@@ -121,8 +121,7 @@ CREATE POLICY organization_isolation ON loans
 - The table's policy is `organization_isolation`, the tenant policy's predicate over the column that names the organization (`branch_id`). A table that users and organizations both own rows of, as `loans` is a member's and a branch's, carries both policies.
 - A policy may reach its tenant through the table that links them, with the state that makes the link one: `USING (EXISTS (SELECT 1 FROM memberships WHERE … AND status = 'active'))`. It still reads no role.
 - `USING` alone also checks what a statement writes, so a tenant writes only its own rows. A policy that only lets a tenant read is `FOR SELECT`. A table every caller reads and one organization writes carries `everyone_read FOR SELECT USING (true)` beside its isolation policy.
-- A use case takes the organization from `subject.organizationID`, never from its input, and refuses a caller without one as `forbidden`, as `ListBranchLoans` does ([authorization](use-cases.md#authorization)).
-- A caller's use case that must reach rows no policy shows it yet, such as adding someone who isn't a member, runs on the internal database, where every statement names the caller's organization itself ([database roles](#database-roles)).
+- The use case reads the organization from `subject`, never from its input ([authorization](use-cases.md#authorization)).
 
 ## Repositories and statements
 

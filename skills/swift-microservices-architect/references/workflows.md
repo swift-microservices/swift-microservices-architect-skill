@@ -1,6 +1,6 @@
 # Workflows
 
-Durable processes on Temporal with swift-temporal-sdk: when work is a workflow, how a use case starts and reaches one, how workflows and activities read, and the worker that runs them. This file places a workflow in the architecture; how one is written against the SDK, its handlers, waits, timeouts, cancellation and versioning, follows `temporal-developer` and the SDK's own documentation, never a form guessed from another language's SDK. A workflow, its activity container and its named options are Core's, in `XCore/Workflows/<WorkflowName>/` ([the folder layout](packages.md#folder-layout)), and use the SDK directly, with no wrapper ([what Core may link](packages.md#what-core-may-link)).
+Durable processes on Temporal with swift-temporal-sdk: when work is a workflow, how a use case starts and reaches one, how workflows and activities read, and the worker that runs them. How one is written against the SDK follows `temporal-developer` and the SDK's documentation, never a form carried over from another language's SDK. A workflow, its activity container and its named options are Core's, in `XCore/Workflows/<WorkflowName>/` ([the folder layout](packages.md#folder-layout)), and use the SDK directly, with no wrapper ([what Core may link](packages.md#what-core-may-link)).
 
 ## Contents
 - When work is a workflow
@@ -60,7 +60,7 @@ The signal carries nothing: the run reads the new date through an activity. Its 
 - The signal follows every call that finds the row in the state it reports, a repeat included, so a retried request delivers a signal lost after the first commit. Its handler sets a property, so a second delivery changes nothing.
 - A use case whose run may never have started, its start lost after the commit, starts it with the same id and policies before signalling: `.useExisting` joins the run that's there.
 - An update is for the one case a signal can't serve: the answer must come from the run, which alone knows whether the step may happen now. The use case authorizes the caller before sending it, and its input names the user it acts for, since the worker binds no caller. Its handler refuses by the workflow's state first, runs the write as an activity over a system use case, and answers what the run decided, which the use case maps to its cases.
-- An activity an update awaits has a caller waiting on it, so its options bound its attempts ([activity options](#activity-options)), and a handler whose activity fails leaves the workflow's state as it found it.
+- A handler whose activity fails leaves the workflow's state as it found it, and that activity's attempts are bounded ([activity options](#activity-options)).
 - Where a record's status and a run's stage are the same steps, the row holds them. The workflow keeps only what it waits on, and moves on from what an activity reports its use case found, never from its own count of the steps.
 - A query reads a run's state for a person. A screen people page through reads a table instead ([when work is a workflow](#when-work-is-a-workflow)).
 

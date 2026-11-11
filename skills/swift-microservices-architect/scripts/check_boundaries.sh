@@ -72,7 +72,7 @@ report "Activities call system use cases only, so nothing in Workflows/ names a 
 )"
 
 # The package's own modules: its targets and its contract. A project product whose name
-# starts with the service's, such as LablineAuthentication beside Lab, is neither.
+# starts with the service's, such as BookshelfAuthentication beside a service named Book, is neither.
 own_modules="$(ls Sources | tr '\n' '|')${service}Protos"
 
 # Lives in a function because macOS's bash 3.2 can't parse a case inside $(…).

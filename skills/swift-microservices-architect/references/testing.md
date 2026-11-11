@@ -32,7 +32,6 @@ Each module has a test target, except `<Project>Transport`, `<Project>Testing`, 
 | `GatewayHTTPTests` | Routes in their tiers, conversions, problem details | Mock upstream clients and `MockAuthenticator` |
 
 - A test runs only its module's code, over mocks of the rest: a handler's test doesn't build a use case, and a use case's test never reaches Postgres.
-- Each tested type has its own file, named for it ([folders](conventions.md#folders)); suites never share a file because their types share a resource.
 - A workflow's suite takes the trait `.temporalTimeSkippingTestServer` and reads `TemporalTestServer.timeSkippingTestServer`; a starting use case's takes `.temporalTestServer` and reads `.testServer`. `withConnectedClient(logger:_:)` gives it a `TemporalClient`, and `withConnectedWorker(configuration:activities:workflows:_:)` runs a worker, with `activities: loanActivities.allActivities`. An activity that reads `ActivityExecutionContext` runs inside `withActivityTestEnvironment(info:_:)`.
 - A run downloads the test server on first use, so the machine running `XCoreTests` needs network access.
 - The time-skipping server is shared by the suite's tests and holds one clock: a run a test starts and leaves open stalls the next test's clock, so every test sees each run it starts through to its end, and carries `.timeLimit` so a stalled clock fails rather than hangs.
