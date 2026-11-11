@@ -2,6 +2,8 @@
 
 The Postgres adapter, database roles and row-level security, migrations, and Valkey.
 
+This file gives the shapes: the roles, how the caller is bound, scopes, repositories, statements and where migrations live. The SQL inside them follows `supabase-postgres-best-practices`: which policy and grants a table needs, the index under a policy's columns, a column's type, what a migration locks. Where that skill shows a platform's own roles, `auth.uid()`, a session-wide `SET`, a `SECURITY DEFINER` helper or a password login, the roles, binding and logins here stand.
+
 ## Contents
 - The Postgres target
 - Database roles
@@ -257,7 +259,7 @@ package enum LoansMigrations {
 
 ## Valkey
 
-Valkey holds short-lived values with an expiry: one-time codes, challenges, rate counters, caches. It is never part of a database transaction, and never holds data that must survive a restart of the store.
+Valkey holds short-lived values with an expiry: one-time codes, challenges, rate counters, caches. It is never part of a database transaction, and never holds data that must survive a restart of the store. The repository's shape is this section's; which command an operation takes, with its expiry and atomicity, follows `valkey`.
 
 Identity keeps password reset codes there:
 

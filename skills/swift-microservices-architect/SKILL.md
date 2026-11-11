@@ -206,6 +206,8 @@ Read each reference when its row applies:
 
 These cover the code inside the shapes; where this skill states a shape, follow it. Load each when its task comes up, and always where a checklist names it. When one isn't among the installed skills, tell the user once, with its source, and carry on with this skill alone:
 - How a workflow is designed and behaves (its history, signals and updates, waiting, compensation, versioning): `temporal-developer` ([source](https://github.com/temporalio/skill-temporal-developer))
+- A table's policy, grants, indexes and column types, and what a migration locks: `supabase-postgres-best-practices` ([source](https://github.com/supabase/agent-skills))
+- The Valkey command for an operation, its expiry and atomicity: `valkey` ([source](https://github.com/valkey-io/valkey-skills))
 - Test code, with Swift Testing: `swift-testing-expert` ([source](https://github.com/AvdLee/Swift-Testing-Agent-Skill))
 - Actors, task groups, cancellation, `Sendable` diagnostics, Swift 6 migration: `swift-concurrency` ([source](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill))
 - Argument labels, method names, documentation comments: `swift-api-design-guidelines`, or another Swift API Design Guidelines skill ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
