@@ -99,7 +99,7 @@ do {
 
 ## Checklists
 
-Copy the task's checklist into the response, its `Verify` item as the lines of **Verify**, and check items off as they're done; each `.md` file it names is in `references/`.
+Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off as they're done; each `.md` file it names is in `references/`.
 
 **Plan a backend**
 
