@@ -93,6 +93,8 @@ The skill decides the shapes; these skills cover the code inside them. The agent
 - [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill): actors, task groups, `Sendable` diagnostics
 - [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
 - [Temporal Developer](https://github.com/temporalio/skill-temporal-developer): how a workflow is designed and behaves, from signals and updates to versioning
+- [Supabase Postgres Best Practices](https://github.com/supabase/agent-skills): the SQL inside the shapes, from policies and grants to indexes and migration locks
+- [Valkey](https://github.com/valkey-io/valkey-skills): which command fits an operation, with its expiry and atomicity
 - [Swift API Design Guidelines](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill): argument labels, method names, documentation comments
 
 ## Repository layout
