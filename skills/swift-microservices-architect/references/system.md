@@ -16,6 +16,8 @@ How a backend splits into services, how they talk, and the packages they share. 
 
 A service is a capability that owns its data and the rules over it. Identity owns accounts, credentials and sessions; Catalog owns books; Loans owns who has borrowed what. Only the owner reads and writes its tables and its cache; every other process reaches that data through the owner's contract.
 
+The organizations callers act for, and who belongs to each, are the token issuer's: it decides whether a caller may act for an organization before naming it in a token ([organization tenants](persistence.md#organization-tenants)). Identity owns Bookshelf's branches and their librarians, and Loans keeps only a loan's `branch_id`.
+
 Draw a boundary by data and change:
 - **One service** when one kind of change touches both parts, or one transaction must cover both. Borrowing checks a member's active loans and records the new one atomically, so both are Loans.
 - **Separate services** when each part has its own data, its own rules and its own reason to change: the catalog changes with how books are described, loans with lending policy.

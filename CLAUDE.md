@@ -50,7 +50,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - Examples come from Bookshelf, the lending library in `SKILL.md`'s table, and each idea is shown where it fits best:
   - a service with the most targets, a tenant table, a workflow and calls to other services: Loans
   - a service with no tenant table and an internal contract another service calls: Catalog
-  - the one token issuer, Valkey, and a provider target for hashing: Identity
+  - the one token issuer, which owns the organizations and who belongs to each, Valkey, and a provider target for hashing: Identity
   - a use case's five files and body: `BorrowBook`; an administrators' use case: `ListAllLoans`
   - a workflow, its activities and options: `LoanWorkflow`, `LoanActivities`
   - a system use case, and the same effect for administrators: `MarkLoanOverdue`, `MarkLoanOverdueByAdministrator`

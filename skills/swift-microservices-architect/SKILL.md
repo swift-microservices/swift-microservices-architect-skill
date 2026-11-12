@@ -12,7 +12,7 @@ In a backend built another way, keep its structure and conventions unless the us
 
 | Package | Holds |
 |---|---|
-| `bookshelf-identity` | Accounts, passwords, sessions; issues every access token; reset codes in Valkey; members for other services, internally |
+| `bookshelf-identity` | Accounts, passwords, sessions, branches and their librarians; issues every access token; reset codes in Valkey; members for other services, internally |
 | `bookshelf-catalog` | Books: anyone reads, administrators edit; Loans looks books up internally |
 | `bookshelf-loans` | A member's loans, a tenant table a branch's librarians read too; a workflow marks a loan overdue and sends a notice |
 | `bookshelf-gateway` | The public HTTP API, forwarding to the services' gRPC contracts |
@@ -99,8 +99,6 @@ do {
 - A plain or scoped `import Foundation` in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
 
 ## References
-
-Read each reference when its row applies:
 
 | Reference | Read when |
 |---|---|
