@@ -2,7 +2,7 @@
 type: llm
 focus: last_message
 ---
-- The gateway exposes the webhook route, verifies the provider's signature over the raw body before decoding it, and refuses an unverified request.
-- The gateway forwards the verified event to the service that sent the emails over that service's gRPC contract; the gateway holds no business rules or tables.
-- The service handles the event in a use case that runs without a signed-in caller, on a database role that isn't confined to one user.
-- A redelivered event changes nothing the first delivery didn't, such as by recording it under the provider's event id.
+- The gateway's webhook route sits in the tier with no caller and forwards the body unparsed, with the headers the provider signs, to the email-sending service's RPC for anyone; the gateway verifies nothing itself and holds no business rules or tables.
+- The service's use case verifies the signature and its timestamp before anything else, through a port that a provider-specific target implements, with the signing secret read as a secret, and refuses an event that fails as unauthenticated.
+- The use case runs without a signed-in caller, on a database role that isn't confined to one user.
+- A redelivered event changes nothing the first delivery didn't, because the transaction that acts records the provider's event id under a unique key.
