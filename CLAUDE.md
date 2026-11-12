@@ -75,8 +75,8 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 ## Making a change
 
 1. Decide whether it belongs: architecture, ownership, a shape or the style goes in; technique goes to the related skills; one system's detail stays out.
-2. Find every place the rule or name appears: `grep -rn "<term>" README.md CLAUDE.md .claude-plugin .codex-plugin .agents skills .github/scripts`.
-3. Edit the rule's home first, then its line in `SKILL.md`, then `conventions.md`, then `README.md` when what the skill covers changes. Keep the descriptions in `SKILL.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json` identical.
+2. Find every place the rule or name appears: `grep -rn "<term>" README.md CLAUDE.md .claude-plugin .codex-plugin .agents skills evals .github/scripts`.
+3. Edit the rule's home first, then its line in `SKILL.md`, then `conventions.md`, then `README.md` when what the skill covers changes, then each grader in `evals/` that checks it. Keep the descriptions in `SKILL.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json` identical.
 4. Run [the checks](#after-every-change).
 
 A new reference file gets a lowercase topic name, a Contents list once it passes 100 lines, a row in the References table in `SKILL.md`, and a line in the layout in `README.md`.
@@ -112,7 +112,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
   | `⚠️ semver/major` | A rule or shape changes so that code following the skill no longer conforms, such as a renamed target or a reversed rule |
   | `🆕 semver/minor` | New guidance that contradicts none: a shape, a rule, a gotcha, a reference |
   | `🔨 semver/patch` | A correction, clearer wording or a better example, with no rule changed |
-  | `semver/none` | Nothing the skill says changes: the README, this file, CI, `.github/scripts` |
+  | `semver/none` | Nothing the skill says changes: the README, this file, `evals/`, CI, `.github/scripts` |
 
 - The Validate workflow runs `.github/scripts/check_skill.py` on every pull request and push to `main`, with Claude Code installed so `claude plugin validate` runs too.
 - Dependabot checks the workflows' pinned actions weekly and opens a pull request labeled `semver/none` for each update. The Claude Code version Validate installs is a shell command Dependabot doesn't read, so it's raised by hand.
