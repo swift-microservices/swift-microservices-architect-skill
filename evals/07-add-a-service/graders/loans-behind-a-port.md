@@ -3,4 +3,4 @@ type: regex
 target: files
 weight: 0.5
 ---
-bookshelf-loans/Sources/LoansCore/Workflows/
+bookshelf-reviews/Sources/ReviewsCore/Ports/

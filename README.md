@@ -63,7 +63,7 @@ The agent loads the skill when a task matches it, or when asked: `/swift-microse
 - "Set up CI/CD for the loans service."
 - "Review this service's architecture and code style."
 
-To plan a backend, add a service, an operation or a durable process, set up CI/CD or review a backend, the agent follows the skill's checklist. One that adds a feature starts by looking up the established standard for it, such as an RFC or OWASP's guidance, and one that changes code ends with a build and a test run repeated until both pass.
+To plan a backend, add a service, an operation or a durable process, set up CI/CD or review a backend, the agent follows the skill's checklist. One that adds a feature starts by looking up the established standard for it, such as an RFC or OWASP's guidance, and one that changes code ends with a build and a test run repeated until both pass. A plan ends with the questions you answer before any code is written.
 
 ## What it covers
 
@@ -136,6 +136,8 @@ Issues and pull requests are welcome. [CLAUDE.md](CLAUDE.md) holds the rules eve
 ```bash
 python3 .github/scripts/check_skill.py
 ```
+
+A change that alters what the agent produces also runs the eval suite in `evals/`, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
 
 Each pull request carries one semver label, which sets the next release's version.
 
