@@ -28,8 +28,8 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 **Structure**
 
-- The skill folder holds only what agents read and run: `SKILL.md`, `references/`, `scripts/` for deterministic checks, and `agents/openai.yaml`, Codex's display name for the skill. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
-- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, code style, gotchas, checklists, references and related skills.
+- The skill folder holds only what agents read and run: `SKILL.md`, `references/`, `scripts/` for deterministic checks, and `agents/openai.yaml`, Codex's display name for the skill. Everything for people, such as `README.md`, this file, `evals/`, `.github/` and the license, stays outside it.
+- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, code style, gotchas, references, related skills and checklists. The checklists come last, since an agent copies the one for its task into its response.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
 - A script in `scripts/` runs on macOS's bash 3.2 and on Linux, and a change to one is tried on a service that passes and one that fails.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
@@ -101,7 +101,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - [ ] README.md still describes what the skill covers
    ```
 
-3. When the change alters what an agent produces, compare it against `main`. Check `main` out as the baseline (`git worktree add ../skill-baseline main`), give two fresh agents the same two or three realistic tasks (plan a backend, add a service, add an operation, add a durable process, set up CI/CD, review a service), one with each skill, on the models the skill runs on. A change to the description is compared on prompts that should and shouldn't invoke the skill. Fix whatever the edited skill still leaves them to guess, then remove the worktree.
+3. When the change alters what an agent produces, compare it against `main` on the suite in `evals/`: a case per kind of task, each with an outcome grader for the rules it tests, and cases that should and shouldn't invoke the skill. Check `main` out as the baseline (`git worktree add ../skill-baseline main`), run `claude plugin eval . --allow-tools Write Edit --judge-model sonnet --no-publish` in each, on the models the skill runs on, and compare each case's score with the skill. A change to the description is compared on the cases that should and shouldn't invoke it. Fix whatever the edited skill still leaves the agents to guess, then remove the worktree. A kind of task no case covers gets a case with the change that needs it.
 
 ## Pull requests and releases
 

@@ -127,4 +127,5 @@ package import Foundation
 ## Formatting
 
 - swift-format with the repository's `.swift-format`; `swift-format lint --strict --recursive Sources Package.swift` passes.
-- `.swift-format` sets four-space indentation and 400-column lines; a line break before each argument of a call or declaration that wraps, respecting existing line breaks; ordered imports; trailing commas in multi-element collections; and `indentConditionalCompilationBlocks: false`, so the `FoundationEssentials` block stays flush left.
+- `.swift-format` sets four-space indentation and 400-column lines; a line break before each argument of a call or declaration that wraps, respecting existing line breaks; trailing commas in multi-element collections; and `indentConditionalCompilationBlocks: false`, so the `FoundationEssentials` block stays flush left.
+- It sets no `rules`, so the default rules, ordered imports among them, stay on: a `rules` map turns off every rule it doesn't name.

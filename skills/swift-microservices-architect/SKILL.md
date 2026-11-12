@@ -92,102 +92,11 @@ do {
 
 - A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls wait until their deadline.
 - A process connected as the database owner bypasses row-level security, so every process connects as its roles and only `serve --migrate-database` as the owner.
+- Policies combine with `OR`: on a table with a user's and an organization's, a session acting for the organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
 - Every build and test of an XCore with workflows links the Temporal SDK and its prebuilt sdk-core binary target, so a machine that can't fetch that artifact can't build Core ([what Core may link](references/packages.md#what-core-may-link)).
 - A plain or scoped `import Foundation` in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
-
-## Checklists
-
-Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off as they're done; each `.md` file it names is in `references/`.
-
-**Plan a backend**
-
-```
-- [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
-- [ ] Name each service; check its target names against every module in the graph
-- [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, short-lived state
-- [ ] With workflows in the plan: load temporal-developer before shaping them
-- [ ] Per service: its targets and commands; whether it stores data, where, its roles and how processes prove them (system.md#data-placement)
-- [ ] <project>-core's products, <project>-protos' contracts, the gateway's routes by tier
-- [ ] Build order: <project>-core and <project>-protos, the token issuer, each service before its callers, the gateway
-- [ ] Write the plan from system.md#the-plan; check it against the hard rules before any code
-```
-
-**Add a service**
-
-```
-- [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
-- [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in
-- [ ] Package <project>-x from packages.md#packageswift-template, with only the targets the plan names
-- [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
-- [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md), the SQL with supabase-postgres-best-practices
-- [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
-- [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer, a Valkey command chosen with valkey
-- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' list, Serve, and Run with a worker (composition.md)
-- [ ] Gateway: routes for the public RPCs (gateway.md)
-- [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-expert
-- [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
-- [ ] Verify
-```
-
-**Add an operation**
-
-```
-- [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
-- [ ] Contract: the RPC under its audience in XService, or in XInternalService
-- [ ] XCore: the use case's files; its scope lists only what it touches (use-cases.md)
-- [ ] XPostgres: the scopes of the roles it may run as adopt its scope protocol; new SQL with supabase-postgres-best-practices
-- [ ] XGRPC: the handler and the input's conversion, every error case mapped
-- [ ] Executable: the use case on its role's database, passed to the service
-- [ ] Gateway: the route in its tier, if public
-- [ ] Tests: the use case's outcomes and the handler's statuses, over mocks, written with swift-testing-expert
-- [ ] Verify
-```
-
-**Add a durable process**
-
-```
-- [ ] Look up the standard approach for the feature and follow it within these rules (style.md#reading-like-the-requirement)
-- [ ] Load temporal-developer, and design the workflow with it: waiting, handlers, compensation, versioning; where it has no Swift reference, read the SDK's documentation before using an API
-- [ ] Each person's change is written by its use case, then signalled, unless only the run can decide (workflows.md#reaching-a-run-from-a-use-case)
-- [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
-- [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)
-- [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
-- [ ] Executable: TemporalClient and the task queue into Serve's use cases; the worker group and its Run root
-- [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks, written with swift-testing-expert
-- [ ] Verify
-```
-
-**Verify**
-
-```
-- [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests); report any suite that can't run
-- [ ] scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries), and swift-format lint
-- [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency, never silenced
-```
-
-**Set up CI/CD**
-
-```
-- [ ] The package's kind: public library, system library or service (delivery.md#package-kinds)
-- [ ] Its CI workflows, calling swift-microservices/ci at a release's commit; dependabot.yml; .swift-format, .license_header_template and .licenseignore; the secrets
-- [ ] A library: the semver labels and .github/release.yml; a service: its Containerfile
-- [ ] scripts/swift_ci.sh --library build and test (delivery.md#tests); fix and repeat until both pass
-```
-
-**Review a backend**
-
-```
-- [ ] Run this skill's scripts/check_boundaries.sh from each service's and the gateway's root, and scripts/check_style.sh from every package's (packages.md#checking-the-boundaries)
-- [ ] Each use case: its files, typed throws, one catch per case, no helpers, the right database role
-- [ ] Each adapter only converts and delegates; every error case is mapped
-- [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
-- [ ] Where the backend has them: workflows checked with temporal-developer, tests with swift-testing-expert, and actors, Mutexes and the boundary script's unchecked concurrency with swift-concurrency
-- [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), FoundationEssentials imports, package access, naming (conventions.md)
-- [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (the shapes), minor (naming, layout, logging), each citing a file and line or an empty grep, with the rule and the fix; then the user's decisions. Change code only when asked
-- [ ] swift build and swift test; report each result, or why it couldn't run
-```
 
 ## References
 
@@ -219,3 +128,96 @@ These cover the code inside the shapes; where this skill states a shape, follow 
 - Test code, with Swift Testing: `swift-testing-expert` ([source](https://github.com/AvdLee/Swift-Testing-Agent-Skill))
 - Actors, task groups, cancellation, `Sendable` diagnostics, Swift 6 migration: `swift-concurrency` ([source](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill))
 - Argument labels, method names, documentation comments: `swift-api-design-guidelines`, or another Swift API Design Guidelines skill ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
+
+## Checklists
+
+Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off as they're done; each `.md` file it names is in `references/`.
+
+**Plan a backend**
+
+```
+- [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
+- [ ] Name each service; check its target names against every module in the graph
+- [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, short-lived state
+- [ ] With workflows in the plan: load temporal-developer before shaping them
+- [ ] Per service: its targets and commands; whether it stores data, where, its roles and how processes prove them (system.md#data-placement)
+- [ ] <project>-core's products, <project>-protos' contracts, the gateway's routes by tier
+- [ ] Build order: <project>-core and <project>-protos, the token issuer, each service before its callers, the gateway
+- [ ] Write the plan from system.md#the-plan; check it against the hard rules and put its questions to the user before any code
+```
+
+**Add a service**
+
+```
+- [ ] Look up the feature's established approach (style.md#reading-like-the-requirement)
+- [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in
+- [ ] Package <project>-x from packages.md#packageswift-template, with only the targets the plan names
+- [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
+- [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md), the SQL with supabase-postgres-best-practices
+- [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
+- [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer, a Valkey command chosen with valkey
+- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' list, Serve, and Run with a worker (composition.md)
+- [ ] Gateway: routes for the public RPCs (gateway.md)
+- [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-expert
+- [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
+- [ ] Verify
+```
+
+**Add an operation**
+
+```
+- [ ] Look up the feature's established approach (style.md#reading-like-the-requirement)
+- [ ] Contract: the RPC under its audience in XService, or in XInternalService
+- [ ] XCore: the use case's files; its scope lists only what it touches (use-cases.md)
+- [ ] A workflow run it affects, reached from the use case (workflows.md#reaching-a-run-from-a-use-case)
+- [ ] XPostgres: the scopes of the roles it may run as adopt its scope protocol; new SQL with supabase-postgres-best-practices
+- [ ] XGRPC: the handler and the input's conversion, every error case mapped
+- [ ] Executable: the use case on its role's database, passed to the service
+- [ ] Gateway: the route in its tier, if public
+- [ ] Tests: the use case's outcomes and the handler's statuses, over mocks, written with swift-testing-expert
+- [ ] Verify
+```
+
+**Add a durable process**
+
+```
+- [ ] Look up the feature's established approach (style.md#reading-like-the-requirement)
+- [ ] Load temporal-developer, and design the workflow with it: waiting, handlers, compensation, versioning; where it has no Swift reference, read the SDK's documentation before using an API
+- [ ] Each person's change is written by its use case, then signalled if the run waits on it, or sent as an update if only the run can decide (workflows.md#reaching-a-run-from-a-use-case)
+- [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
+- [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)
+- [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
+- [ ] Executable: TemporalClient and the task queue into Serve's use cases; the worker group and its Run root
+- [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks, written with swift-testing-expert
+- [ ] Verify
+```
+
+**Verify**
+
+```
+- [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests); report any suite that can't run
+- [ ] scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries), and swift-format lint
+- [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency, never silenced
+```
+
+**Set up CI/CD**
+
+```
+- [ ] The package's kind: public library, system library or service (delivery.md#package-kinds)
+- [ ] Its CI workflows, calling swift-microservices/ci at a release's commit; dependabot.yml; .swift-format (style.md#formatting), .license_header_template and .licenseignore; the secrets
+- [ ] A library: the semver labels and .github/release.yml; a service: its Containerfile
+- [ ] scripts/swift_ci.sh build and test, with --library for a library and POSTGRES_* and VALKEY_* for a service (delivery.md#tests); fix and repeat until both pass
+```
+
+**Review a backend**
+
+```
+- [ ] Run this skill's scripts/check_boundaries.sh from each service's and the gateway's root, and scripts/check_style.sh from every package's (packages.md#checking-the-boundaries)
+- [ ] Each use case: its files, typed throws, one catch per case, no helpers, the right database role
+- [ ] Each adapter only converts and delegates; every error case is mapped
+- [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
+- [ ] Where the backend has them: workflows checked with temporal-developer, tests with swift-testing-expert, and actors, Mutexes and the boundary script's unchecked concurrency with swift-concurrency
+- [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), FoundationEssentials imports, package access, naming (conventions.md)
+- [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (the shapes), minor (naming, layout, logging), each citing a file and line or an empty grep, with the rule and the fix; then the user's decisions. Change code only when asked
+- [ ] swift build and swift test; report each result, or why it couldn't run
+```

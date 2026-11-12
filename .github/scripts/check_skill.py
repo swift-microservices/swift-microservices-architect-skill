@@ -158,7 +158,9 @@ def check_skill_size(skill_text: str) -> None:
 
 
 def check_references(skill_text: str, readme_text: str) -> None:
-    references_section = skill_text[skill_text.find("\n## References") :]
+    start = skill_text.find("\n## References")
+    end = skill_text.find("\n## ", start + 1)
+    references_section = skill_text[start:end] if end != -1 else skill_text[start:]
     for path in sorted(REFERENCES.glob("*.md")):
         link = f"references/{path.name}"
         if f"]({link})" not in references_section:

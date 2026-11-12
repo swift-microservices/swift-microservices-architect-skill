@@ -50,6 +50,7 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 | [swift-async-algorithms](https://github.com/apple/swift-async-algorithms) | `AsyncAlgorithms` | Collecting a row sequence into an array | XPostgres |
 | [swift-crypto](https://github.com/apple/swift-crypto) | `Crypto` | Digests of secrets, signing keys, a key's thumbprint | A Core that hashes secrets, `<Project>Authentication` |
 | jwt-kit | `JWTKit` | `JWTPayload`, claims, EdDSA keys | `<Project>Authentication` |
+| [async-http-client](https://github.com/swift-server/async-http-client) | `AsyncHTTPClient` | `HTTPClient` for an HTTP API that has no SDK | A provider target over such an API, executables |
 
 Hummingbird is the only HTTP framework, and AsyncHTTPClient the only HTTP client when an adapter calls an HTTP API that has no SDK.
 
