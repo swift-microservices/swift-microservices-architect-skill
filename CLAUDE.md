@@ -28,8 +28,8 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 **Structure**
 
-- The skill folder holds only what agents read and run: `SKILL.md`, `references/`, `scripts/` for deterministic checks, and `agents/openai.yaml`, Codex's display name for the skill. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
-- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, code style, gotchas, checklists, references and related skills.
+- The skill folder holds only what agents read and run: `SKILL.md`, `references/`, `scripts/` for deterministic checks, and `agents/openai.yaml`, Codex's display name for the skill. Everything for people, such as `README.md`, this file, `evals/`, `.github/` and the license, stays outside it.
+- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, code style, gotchas, references, related skills and checklists. The checklists come last, since an agent copies the one for its task into its response.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
 - A script in `scripts/` runs on macOS's bash 3.2 and on Linux, and a change to one is tried on a service that passes and one that fails.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
@@ -75,8 +75,8 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 ## Making a change
 
 1. Decide whether it belongs: architecture, ownership, a shape or the style goes in; technique goes to the related skills; one system's detail stays out.
-2. Find every place the rule or name appears: `grep -rn "<term>" README.md CLAUDE.md .claude-plugin .codex-plugin .agents skills .github/scripts`.
-3. Edit the rule's home first, then its line in `SKILL.md`, then `conventions.md`, then `README.md` when what the skill covers changes. Keep the descriptions in `SKILL.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json` identical.
+2. Find every place the rule or name appears: `grep -rn "<term>" README.md CLAUDE.md .claude-plugin .codex-plugin .agents skills evals .github/scripts`.
+3. Edit the rule's home first, then its line in `SKILL.md`, then `conventions.md`, then `README.md` when what the skill covers changes, then each grader in `evals/` that checks it. Keep the descriptions in `SKILL.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json` identical.
 4. Run [the checks](#after-every-change).
 
 A new reference file gets a lowercase topic name, a Contents list once it passes 100 lines, a row in the References table in `SKILL.md`, and a line in the layout in `README.md`.
@@ -101,7 +101,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - [ ] README.md still describes what the skill covers
    ```
 
-3. When the change alters what an agent produces, compare it against `main`. Check `main` out as the baseline (`git worktree add ../skill-baseline main`), give two fresh agents the same two or three realistic tasks (plan a backend, add a service, add an operation, add a durable process, set up CI/CD, review a service), one with each skill, on the models the skill runs on. A change to the description is compared on prompts that should and shouldn't invoke the skill. Fix whatever the edited skill still leaves them to guess, then remove the worktree.
+3. When the change alters what an agent produces, compare it against `main` on the suite in `evals/`: a case per kind of task, each with an outcome grader for the rules it tests, and cases that should and shouldn't invoke the skill. Check `main` out as the baseline (`git worktree add ../skill-baseline main`), run `claude plugin eval . --allow-tools Write Edit --judge-model sonnet --no-publish` in each, on the models the skill runs on, and compare each case's score with the skill. A change to the description is compared on the cases that should and shouldn't invoke it. Fix whatever the edited skill still leaves the agents to guess, then remove the worktree. A kind of task no case covers gets a case with the change that needs it.
 
 ## Pull requests and releases
 
@@ -112,7 +112,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
   | `⚠️ semver/major` | A rule or shape changes so that code following the skill no longer conforms, such as a renamed target or a reversed rule |
   | `🆕 semver/minor` | New guidance that contradicts none: a shape, a rule, a gotcha, a reference |
   | `🔨 semver/patch` | A correction, clearer wording or a better example, with no rule changed |
-  | `semver/none` | Nothing the skill says changes: the README, this file, CI, `.github/scripts` |
+  | `semver/none` | Nothing the skill says changes: the README, this file, `evals/`, CI, `.github/scripts` |
 
 - The Validate workflow runs `.github/scripts/check_skill.py` on every pull request and push to `main`, with Claude Code installed so `claude plugin validate` runs too.
 - Dependabot checks the workflows' pinned actions weekly and opens a pull request labeled `semver/none` for each update. The Claude Code version Validate installs is a shell command Dependabot doesn't read, so it's raised by hand.

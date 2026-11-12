@@ -124,6 +124,7 @@ skills/swift-microservices-architect/
     ├── testing.md              test targets and mocks
     ├── delivery.md             CI/CD for each kind of package
     └── conventions.md          names, folders, files
+evals/                          the cases claude plugin eval runs against the skill
 .github/                        validation, the semver label check, releases
 CLAUDE.md                       authoring rules for changing the skill
 ```

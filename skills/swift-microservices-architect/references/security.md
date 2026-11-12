@@ -97,7 +97,7 @@ bookshelf_loans   loans-migrator   loans_owner
 ```
 
 - The deployment provides these lines; the service names the identities and roles in them ([naming](conventions.md#naming)).
-- The migrator is an identity of its own, whose pair only the deployment running `serve --migrate-database` mounts, so no serving replica can connect as the owner.
+- The migrator is an identity of its own, whose pair only the one process running `serve --migrate-database` mounts, so no other replica can connect as the owner.
 - `PostgresClient.Configuration(config:role:certificateReloader:)` presents the reloader's pair over required TLS. Serve and the worker pass their `tls` reloader, so each new connection presents a renewed pair; `serve --migrate-database` passes a reloader of the migrator's pair, which its short-lived client uses before the `ServiceGroup` starts and which is never run.
 - Where a managed Postgres takes no client certificates, each role proves itself with a SCRAM-SHA-256 password from the secret store instead: `PostgresClient.Configuration(config:role:)` reads it as a secret, and migrations set it ([migrations](persistence.md#migrations)).
 
@@ -111,6 +111,7 @@ The token's payload is `<project>-core`'s `UserIdentity`:
 public struct UserIdentity: JWTPayload, Equatable, Sendable {
     public let userID: UUID
     public let role: UserRole
+    public let organizationID: UUID?
     public let issuer: String
     public let issueDate: Date
     public let expirationDate: Date
@@ -118,17 +119,20 @@ public struct UserIdentity: JWTPayload, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case userID = "sub"
         case role
+        case organizationID = "org"
         case issuer = "iss"
         case issueDate = "iat"
         case expirationDate = "exp"
     }
 
-    /// Writes `sub` lowercase, as every id on the wire is; `UUID`'s own encoding is uppercase.
+    /// Writes `sub` and `org` lowercase, as every id on the wire is; `UUID`'s own encoding is uppercase.
     public func encode(to encoder: any Encoder) throws {
         let subject = userID.uuidString.lowercased()
+        let organization = organizationID?.uuidString.lowercased()
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(subject, forKey: .userID)
         try container.encode(role, forKey: .role)
+        try container.encodeIfPresent(organization, forKey: .organizationID)
         try container.encode(issuer, forKey: .issuer)
         try container.encode(issueDate, forKey: .issueDate)
         try container.encode(expirationDate, forKey: .expirationDate)

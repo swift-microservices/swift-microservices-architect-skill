@@ -135,9 +135,15 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 
 ## Decisions
 - Each boundary and why it holds; each departure from a default or exception to a rule, with its reason
+
+## Build order
+1. <package>
+
+## Questions
+- Each question for the user, with the answer the plan assumes
 ```
 
-Review the plan against the hard rules in `SKILL.md` before writing code.
+Review the plan against the hard rules in `SKILL.md`, and put its questions to the user, before writing code.
 
 ## Out of scope
 

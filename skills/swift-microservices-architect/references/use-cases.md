@@ -65,7 +65,7 @@ package enum BorrowBookUseCaseError: Error, Equatable {
 }
 ```
 
-- Each error is an enum, `Error, Equatable`, with no associated values unless the caller acts on them, and without messages: a transport writes the message its caller reads ([status codes](grpc.md#status-codes)). Its file holds only the enum; what a state means for a caller, such as whether a loan can still be returned, is a method on the model (`loan.isReturnable`).
+- Each error is an enum, `Error, Equatable`, with no associated values unless the caller acts on them, and without messages: a transport writes the message its caller reads ([status codes](grpc.md#status-codes)). Its file holds only the enum; what a state means for a caller, such as whether a loan is past its due date, is a method on the model (`loan.isPastDue(at:)`).
 - A case names an outcome in the domain's terms (`bookNotFound`, `loanLimitReached`), never the failure that caused it (`queryFailed`).
 - `unknown` is the use case's last case: everything it can't name, logged where it's thrown.
 - What an adapter can't report in Core's terms, such as an insert that returned no row, is an internal error of its own target, which reaches the use case's final `catch` ([repositories and statements](persistence.md#repositories-and-statements)).
