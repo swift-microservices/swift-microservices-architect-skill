@@ -108,6 +108,7 @@ skills/swift-microservices-architect/
 ├── agents/openai.yaml          the skill's name in Codex
 ├── scripts/check_boundaries.sh the boundary checks for a service or the gateway
 ├── scripts/check_style.sh      the style checks for any package
+├── scripts/common.sh           what the two check scripts share
 ├── scripts/swift_ci.sh         swift build and swift test with CI's flags
 └── references/                 read when a task reaches their topic
     ├── system.md               services, contracts, shared packages, the plan

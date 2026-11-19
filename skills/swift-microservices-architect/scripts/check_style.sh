@@ -20,16 +20,7 @@ if [ ! -d Sources ] || [ ! -f Package.swift ]; then
     exit 2
 fi
 
-failed=0
-
-# report <rule> <violations>: prints the rule and its violations, if it has any.
-report() {
-    if [ -n "$2" ]; then
-        echo "FAIL $1"
-        echo "$2" | sed 's/^/  /'
-        failed=1
-    fi
-}
+. "$(dirname "$0")/common.sh"
 
 # swift_files <find arguments>: lists the Swift files under Sources/ that match, one per line.
 swift_files() {
