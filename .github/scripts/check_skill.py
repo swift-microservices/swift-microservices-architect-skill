@@ -26,9 +26,11 @@ REFERENCES = SKILL / "references"
 # Limits from the Agent Skills specification and Claude Code's skill loading.
 MAX_NAME = 64
 MAX_DESCRIPTION = 800  # below the specification's 1,024: the listing is paid on every turn
+TRIGGER_WINDOW = 60  # some harnesses list only a description's first 60 characters
+MAX_TAGS = 5
 MAX_SKILL_LINES = 500
-MAX_SKILL_TOKENS = 5000  # recommended for the SKILL.md body; also what compaction keeps
-CHARS_PER_TOKEN = 3.5  # a conservative estimate for English prose with code
+MAX_SKILL_TOKENS = 5000  # recommended for SKILL.md; also what compaction keeps
+CHARS_PER_TOKEN = 4  # SkillEvaluator's estimate, over the whole file with its frontmatter
 CONTENTS_AFTER_LINES = 100
 
 failures: list[str] = []
@@ -93,15 +95,26 @@ def check_frontmatter(skill_text: str) -> str:
         return ""
 
     fields = {}
+    metadata = {}
     for line in match.group(1).splitlines():
-        key, separator, value = line.partition(":")
-        if separator and re.fullmatch(r"[a-z][a-z0-9_-]*", key):
+        nested = line.startswith("  ")
+        key, separator, value = line.strip().partition(":")
+        if not separator or not re.fullmatch(r"[a-z][a-z0-9_-]*", key):
+            fail(f"frontmatter: keep each field on one line: {line[:60]}")
+        elif nested and "metadata" in fields:
+            metadata[key] = value.strip()
+        elif not nested:
             fields[key] = value.strip()
         else:
-            fail(f"frontmatter: keep each field on one line: {line[:60]}")
+            fail(f"frontmatter: only metadata holds nested fields: {line[:60]}")
 
-    if set(fields) != {"name", "description", "license"}:
-        fail(f"frontmatter: holds only name, description and license, found {sorted(fields)}")
+    if set(fields) != {"name", "description", "license", "metadata"}:
+        fail(f"frontmatter: holds only name, description, license and metadata, found {sorted(fields)}")
+    if set(metadata) != {"author", "tags"}:
+        fail(f"frontmatter: metadata holds only author and tags, found {sorted(metadata)}")
+    tags = [tag.strip() for tag in metadata.get("tags", "").split(",") if tag.strip()]
+    if not 1 <= len(tags) <= MAX_TAGS:
+        fail(f"frontmatter: metadata.tags is 1 to {MAX_TAGS} comma-separated tags, found {len(tags)}")
 
     name = fields.get("name", "")
     if len(name) > MAX_NAME or not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name):
@@ -118,8 +131,9 @@ def check_frontmatter(skill_text: str) -> str:
         fail("frontmatter: description may not contain angle brackets or XML tags")
     if re.match(r"(I|You|We|This skill)\b", description):
         fail("frontmatter: description is written in the third person, starting with what the skill does")
-    if "Use when" not in description:
-        fail("frontmatter: description says when to use the skill (Use when …)")
+    trigger = description.find("Use when")
+    if not 0 <= trigger <= TRIGGER_WINDOW - len("Use when"):
+        fail(f"frontmatter: description says when to use the skill (Use when …) within its first {TRIGGER_WINDOW} characters")
 
     if shutil.which("ruby"):
         script = 'require "yaml"; YAML.safe_load(File.read(ARGV[0], encoding: "UTF-8")[/\\A---\\n(.*?)\\n---\\n/m, 1])'
@@ -134,6 +148,9 @@ def check_frontmatter(skill_text: str) -> str:
     plugin = json.loads(read(ROOT / ".claude-plugin" / "plugin.json"))
     if fields.get("license") != plugin.get("license"):
         fail(f"frontmatter: license {fields.get('license')!r} must match plugin.json's {plugin.get('license')!r}")
+    author = plugin.get("author", {}).get("name")
+    if metadata.get("author") != author:
+        fail(f"frontmatter: metadata.author {metadata.get('author')!r} must match plugin.json's author {author!r}")
 
     return description
 

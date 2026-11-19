@@ -344,5 +344,3 @@ It also lists each use of unchecked concurrency for review, without failing: eve
 - Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, and a role's `user` and `password` ([configuration](composition.md#configuration)).
 
 It also lists for review, without failing: each Core repository method with two parameters or more that isn't named for what it returns and takes no command or page size, since a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)); and each test file named for no type in `Sources/` ([test targets](testing.md#test-targets)).
-
-`scripts/swift_ci.sh build` and `scripts/swift_ci.sh test`, run from any package's root, pass CI's flags ([tests](delivery.md#tests)), with `--library` first for a library's.

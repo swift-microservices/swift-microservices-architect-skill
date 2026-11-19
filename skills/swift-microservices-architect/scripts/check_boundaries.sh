@@ -28,16 +28,7 @@ grpc="${service}GRPC"
 executable="Sources/${service}"
 import_prefix='^(package |public )?import'
 temporal_import="${import_prefix} Temporal\$"
-failed=0
-
-# report <rule> <violations>: prints the rule and its violations, if it has any.
-report() {
-    if [ -n "$2" ]; then
-        echo "FAIL $1"
-        echo "$2" | sed 's/^/  /'
-        failed=1
-    fi
-}
+. "$(dirname "$0")/common.sh"
 
 report "Core imports no adapter technology or contract" "$(
     grep -rlE "${import_prefix} (GRPC[A-Za-z]*|Hummingbird[A-Za-z]*|PostgresNIO|PersistencePostgres|Valkey|Configuration|ServiceLifecycle|SwiftProtobuf|AsyncHTTPClient|[A-Za-z]+Protos)\$" "$core" 2>/dev/null
