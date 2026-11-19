@@ -12,7 +12,7 @@ Every change to the skill ends with [the checks](#after-every-change), repeated 
 
 ## Skill best practices
 
-These come from Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), [skills in Claude Code](https://code.claude.com/docs/en/skills), the [Agent Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) and the [Agent Skills specification](https://agentskills.io/specification), as this skill applies them, with [Codex's skills](https://learn.chatgpt.com/docs/build-skills) for what Codex reads. The guidance changes, so recheck the sources before changing the skill's structure or frontmatter.
+These come from Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), [skills in Claude Code](https://code.claude.com/docs/en/skills), the [Agent Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) and the [Agent Skills specification](https://agentskills.io/specification), as this skill applies them, with [Codex's skills](https://learn.chatgpt.com/docs/build-skills) for what Codex reads and NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) for the Tier 1 checks a skill passes before it's published. The guidance changes, so recheck the sources before changing the skill's structure or frontmatter.
 
 **How Claude loads a skill**, in three stages, each with its own limit:
 
@@ -22,14 +22,15 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 **Frontmatter**
 
-- Only `name`, `description` and `license`, in YAML that parses. claude.ai and the API accept only the specification's keys and reject any other, such as Claude Code's `when_to_use` or `paths`.
+- Only `name`, `description`, `license` and `metadata`, in YAML that parses. claude.ai and the API accept only the specification's keys and reject any other, such as Claude Code's `when_to_use` or `paths`.
+- `metadata` holds `author`, the name in `plugin.json`'s `author`, and `tags`, one to five comma-separated tags, since the specification's `metadata` maps strings to strings.
 - `name` is the folder's name: at most 64 characters of lowercase letters, digits and single hyphens, neither first nor last, without `anthropic` or `claude`.
-- `description` is at most 800 characters, under the specification's 1,024, since the listing is paid on every turn. It's in the third person, with no angle brackets or XML tags. It says what the skill does, its key use first, then when to use it in the words users type, then what it isn't for, and ends by claiming the tasks where the user doesn't name the architecture.
+- `description` is at most 800 characters, under the specification's 1,024, since the listing is paid on every turn. It's in the third person, with no angle brackets or XML tags. It says what the skill does in one short sentence, then when to use it in the words users type, starting with "Use when" inside the first 60 characters, since some harnesses list only that much, then the stack it builds on, then what it isn't for, and ends by claiming the tasks where the user doesn't name the architecture.
 
 **Structure**
 
 - The skill folder holds only what agents read and run: `SKILL.md`, `references/`, `scripts/` for deterministic checks, and `agents/openai.yaml`, Codex's display name for the skill. Everything for people, such as `README.md`, this file, `evals/`, `.github/` and the license, stays outside it.
-- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: the example system, the shape, a service's package with its hard rules, who owns what, code style, gotchas, references, related skills and checklists. The checklists come last, since an agent copies the one for its task into its response.
+- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: Purpose, Examples (the example system), the shape, a service's package with its hard rules, who owns what, code style, Troubleshooting (the gotchas), Prerequisites, Available Scripts (a table of `| Script | Purpose | Arguments |`), Limitations, References, Related skills and Instructions (the checklists). Purpose, Examples, Troubleshooting, Prerequisites, Available Scripts, Limitations and Instructions are the headings SkillEvaluator's quality check looks for. The Instructions come last, since an agent copies the checklist for its task into its response.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
 - A script in `scripts/` runs on macOS's bash 3.2 and on Linux, and a change to one is tried on a service that passes and one that fails.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
@@ -38,11 +39,11 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 **Content**
 
 - Only what Claude doesn't already know: a placement, an ownership rule, a shape, a style rule, a gotcha, or a reason that guides judgment. Cut explanations of Swift, SPM, Postgres or a library's basics.
-- One home per rule. A rule lives in one reference; `SKILL.md` carries at most one line for it (a hard rule, an ownership row, a style point, a gotcha or a checklist item), plus Code style's one error-mapping example, and a checklist item may name a rule without restating it; other references link to it instead of restating it. `conventions.md` holds only names and where files go. A rule stated twice drifts apart and costs tokens twice.
+- One home per rule. A rule lives in one reference; `SKILL.md` carries at most one line for it (a hard rule, an ownership row, a style point, a gotcha, a prerequisite, a script's row, a limitation or a checklist item), plus Code style's one error-mapping example, and a checklist item may name a rule without restating it; other references link to it instead of restating it. `conventions.md` holds only names and where files go. A rule stated twice drifts apart and costs tokens twice.
 - One home per example, too. Code shown in one reference is linked from the others: the composition root holds the transports, the gateway's root its upstream clients.
-- `SKILL.md`'s gotchas are mistakes that compile and then fail only at run time or silently, such as a component left out of the `ServiceGroup` or a nondeterministic workflow; a mistake the build catches is stated once, in its shape's reference. An environment fact that stops a build or test from running is a gotcha too.
+- `SKILL.md`'s Troubleshooting holds the gotchas: mistakes that compile and then fail only at run time or silently, such as a component left out of the `ServiceGroup` or a nondeterministic workflow; a mistake the build catches is stated once, in its shape's reference. An environment fact that stops a build or test from running is a prerequisite.
 - One term per concept, no time-sensitive statements, concrete examples, and one default rather than a menu of options.
-- A checklist is what the agent copies into its response for a task. One that changes code ends in `Verify`, the one build, test and script run those checklists share, repeated until all pass; a review runs the build and the tests and reports the results. `SKILL.md` calls them checklists, so "workflow" means only a Temporal workflow or a CI workflow.
+- A checklist is what the agent copies into its response for a task. One that changes code ends in `Verify`, the one build, test and script run those checklists share, repeated until all pass; a review runs the build and the tests and reports the results. `SKILL.md`'s Instructions hold them and call them checklists, so "workflow" means only a Temporal workflow or a CI workflow.
 
 ## What a change must respect
 
@@ -74,7 +75,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 ## The eval suite
 
-`evals/` holds the cases `claude plugin eval` runs against the skill, each a `prompt.md` and a file per grader in `graders/`. Step 3 of [the checks](#after-every-change) compares their scores.
+`evals/` holds the cases `claude plugin eval` runs against the skill, each a `prompt.md` and a file per grader in `graders/`. Step 4 of [the checks](#after-every-change) compares their scores.
 
 - **Focused.** One case per checklist in `SKILL.md`, one prompt that should invoke the skill without naming the architecture, and one that shouldn't. A case joins only for a rule or a kind of task no case reaches, and no rule is checked by two cases or two graders.
 - **Realistic.** A prompt is a request a user would make, in Bookshelf or, for a plan or a trigger case, in a domain of its own, never one from a system the skill is used on. It tells the agent not to stop for questions, since nobody answers during a run.
@@ -96,14 +97,21 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
 ## After every change
 
 1. `python3 .github/scripts/check_skill.py` passes. It checks:
-   - the frontmatter's keys, `name`, `description` and `license`, against the limits above, with `license` matching `plugin.json`'s
-   - `SKILL.md`'s lines and estimated tokens, at 3.5 characters a token
+   - the frontmatter's keys, `name`, `description`, `license` and `metadata`, against the limits above, with `license` and `metadata.author` matching `plugin.json`'s
+   - `SKILL.md`'s lines and estimated tokens, at 4 characters a token over the whole file, as SkillEvaluator estimates them
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
    - every link and anchor
    - that the descriptions and the four versions in `SKILL.md` and the Claude Code and Codex manifests agree, and that the Codex marketplace lists the plugin
    - that no Swift example builds a value inside an argument or declares a variable before a `do` for its catches to fill
    - `claude plugin validate .`, whose warnings about the missing icon, `CLAUDE.md` and untracked `.DS_Store` files are expected
-2. Review the diff for what no script checks:
+2. SkillEvaluator's Tier 1 passes, with SkillSpector's reviewed exceptions in `.github/skillspector-baseline.yaml`, kept outside the skill so the skill can't waive its own findings. A new security finding is fixed, or reviewed and added to the baseline as a rule matching one phrase in one file:
+
+   ```
+   uv tool install skillevaluator
+   skillevaluator tier1 skills/swift-microservices-architect --no-llm --skillspector-baseline .github/skillspector-baseline.yaml -o /tmp/skillevaluator
+   ```
+
+3. Review the diff for what no script checks:
 
    ```
    - [ ] Each rule has one home: SKILL.md carries at most one line for it, and other files link to it
@@ -113,7 +121,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - [ ] README.md still describes what the skill covers
    ```
 
-3. When the change alters what an agent produces, compare it against `main` on [the eval suite](#the-eval-suite). Check `main` out as the baseline (`git worktree add ../skill-baseline main`), run `claude plugin eval . --allow-tools Write Edit --judge-model sonnet --no-publish` in each, on the models the skill runs on, and compare each case's score with the skill; a change to the description is compared on the two trigger cases. Fix whatever the edited skill still leaves the agents to guess, then remove the worktree. A change that adds a rule or a kind of task no case reaches adds a grader or a case for it.
+4. When the change alters what an agent produces, compare it against `main` on [the eval suite](#the-eval-suite). Check `main` out as the baseline (`git worktree add ../skill-baseline main`), run `claude plugin eval . --allow-tools Write Edit --judge-model sonnet --no-publish` in each, on the models the skill runs on, and compare each case's score with the skill; a change to the description is compared on the two trigger cases. Fix whatever the edited skill still leaves the agents to guess, then remove the worktree. A change that adds a rule or a kind of task no case reaches adds a grader or a case for it.
 
 ## Pull requests and releases
 

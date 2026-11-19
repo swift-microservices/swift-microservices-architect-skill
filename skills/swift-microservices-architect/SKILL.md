@@ -1,12 +1,19 @@
 ---
 name: swift-microservices-architect
-description: Architects Swift server backends as gRPC microservices behind a Hummingbird gateway, one Swift package per service, with Postgres row-level security, Valkey and Temporal workflows. Use when planning a Swift backend or splitting it into services, adding a service, endpoint, use case, repository, migration, webhook, multi-tenant table, background job or durable Temporal workflow, drawing a Swift server's module boundaries or writing its Package.swift, wiring configuration, graceful shutdown, mTLS or JWT auth, naming server types and targets, setting up a server package's tests, CI/CD or deployment, or reviewing a Swift server's architecture or code style. Not for iOS, macOS or SwiftUI apps. Applies even when the user doesn't name the architecture.
+description: Architects Swift server backends. Use when planning a Swift backend or splitting it into services, adding a service, endpoint, use case, repository, migration, webhook, multi-tenant table, background job or durable Temporal workflow, drawing a Swift server's module boundaries or writing its Package.swift, wiring configuration, graceful shutdown, mTLS or JWT auth, naming server types and targets, setting up a server package's tests, CI/CD or deployment, or reviewing a Swift server's architecture or code style. Builds them as gRPC microservices behind a Hummingbird gateway, one Swift package per service, with Postgres row-level security, Valkey and Temporal workflows. Not for iOS, macOS or SwiftUI apps. Applies even when the user doesn't name the architecture.
 license: MIT
+metadata:
+  author: Zaid Rahhawi
+  tags: swift, server-side-swift, microservices, grpc, temporal
 ---
 
 # Swift Microservices Architect
 
-In a backend built another way, keep its structure and conventions unless the user asks to change them, and take a shape from this skill only for what the backend lacks.
+## Purpose
+
+Decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together, from Core's use cases to its adapters, composition roots, tests and deployment. In a backend built another way, keep its structure and conventions unless the user asks to change them, and take a shape from this skill only for what the backend lacks.
+
+## Examples
 
 `X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Project>` and `<project>` for the project. The examples are Bookshelf, a small lending library:
 
@@ -88,15 +95,35 @@ do {
 - Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault` and `NonisolatedNonsendingByDefault` ([Swift settings](references/packages.md#swift-settings)); `package` access across a service's targets.
 - Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows it.
 
-## Gotchas
+## Troubleshooting
 
 - A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls wait until their deadline.
 - A process connected as the database owner bypasses row-level security, so every process connects as its roles and only `serve --migrate-database` as the owner.
 - Policies combine with `OR`: on a table with a user's and an organization's, a session acting for the organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
-- Every build and test of an XCore with workflows links the Temporal SDK and its prebuilt sdk-core binary target, so a machine that can't fetch that artifact can't build Core ([what Core may link](references/packages.md#what-core-may-link)).
 - A plain or scoped `import Foundation` in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
+
+## Prerequisites
+
+- A Swift toolchain at the package's `swift-tools-version`, and for its `XPostgresTests` and `XValkeyTests` a real Postgres and Valkey reached through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
+- Every build and test of an XCore with workflows links the Temporal SDK and its prebuilt sdk-core binary target, so a machine that can't fetch that artifact can't build Core ([what Core may link](references/packages.md#what-core-may-link)).
+
+## Available Scripts
+
+Each runs from the package's root and exits non-zero on any failure:
+
+| Script | Purpose | Arguments |
+|---|---|---|
+| `scripts/swift_ci.sh` | `swift build` or `swift test` with the flags CI applies ([tests](references/delivery.md#tests)) | `[--library] <build\|test> [arguments…]` |
+| `scripts/check_boundaries.sh` | The boundaries SPM can't check, from a service's or the gateway's root ([checking the boundaries](references/packages.md#checking-the-boundaries)) | `<X> <Project>`: `Loans Bookshelf`, `Gateway Bookshelf` |
+| `scripts/check_style.sh` | The style rules a script can see in the sources | None |
+
+## Limitations
+
+- Not for iOS, macOS or SwiftUI apps, or Swift packages that aren't servers.
+- The code inside a shape that isn't architecture belongs to the [related skills](#related-skills).
+- Not covered: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends; ask the user rather than invent them.
 
 ## References
 
@@ -127,7 +154,7 @@ These cover the code inside the shapes; where this skill states a shape, follow 
 - Actors, task groups, cancellation, `Sendable` diagnostics, Swift 6 migration: `swift-concurrency` ([source](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill))
 - Argument labels, method names, documentation comments: `swift-api-design-guidelines`, or another Swift API Design Guidelines skill ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
 
-## Checklists
+## Instructions
 
 Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off as they're done; each `.md` file it names is in `references/`.
 

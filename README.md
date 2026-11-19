@@ -104,7 +104,7 @@ The skill decides the shapes; these skills cover the code inside them. The agent
 .codex-plugin/                  Codex plugin manifest
 .agents/plugins/                Codex marketplace
 skills/swift-microservices-architect/
-├── SKILL.md                    what every task needs: the shape, hard rules, style, gotchas, checklists
+├── SKILL.md                    what every task needs: the shape, hard rules, style, troubleshooting, scripts, checklists
 ├── agents/openai.yaml          the skill's name in Codex
 ├── scripts/check_boundaries.sh the boundary checks for a service or the gateway
 ├── scripts/check_style.sh      the style checks for any package
@@ -125,7 +125,7 @@ skills/swift-microservices-architect/
     ├── delivery.md             CI/CD for each kind of package
     └── conventions.md          names, folders, files
 evals/                          the cases claude plugin eval runs against the skill
-.github/                        validation, the semver label check, releases
+.github/                        validation, SkillSpector's reviewed exceptions, the semver label check, releases
 CLAUDE.md                       authoring rules for changing the skill
 ```
 
@@ -135,7 +135,10 @@ Issues and pull requests are welcome. [CLAUDE.md](CLAUDE.md) holds the rules eve
 
 ```bash
 python3 .github/scripts/check_skill.py
+skillevaluator tier1 skills/swift-microservices-architect --no-llm --skillspector-baseline .github/skillspector-baseline.yaml -o /tmp/skillevaluator
 ```
+
+The second is NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install skillevaluator`).
 
 A change that alters what the agent produces also runs the eval suite in `evals/`, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
 

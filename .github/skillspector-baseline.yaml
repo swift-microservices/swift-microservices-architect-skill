@@ -1,0 +1,30 @@
+# Reviewed SkillSpector exceptions for skills/swift-microservices-architect, passed to
+# SkillEvaluator with --skillspector-baseline. It lives outside the skill so that whoever edits the
+# skill can't also waive its findings. Each rule matches one phrase in one file; a new phrase or
+# file is reviewed before a rule joins.
+version: 2
+rules:
+  - id: "PE3"
+    path: "SKILL.md"
+    message: "access token"
+    reason: "Reviewed: names the JWTs Identity issues, not a credential file."
+  - id: "PE3"
+    path: "references/gateway.md"
+    message: "access token"
+    reason: "Reviewed: names the JWTs the gateway verifies, not a credential file."
+  - id: "PE3"
+    path: "references/security.md"
+    message: "access token*"
+    reason: "Reviewed: describes how Identity issues and verifiers check JWTs, not a credential file."
+  - id: "PE3"
+    path: "references/delivery.md"
+    message: "*.netrc"
+    reason: "Reviewed: mounts .netrc as a BuildKit secret and keeps it out of the build context, so the token never enters an image layer."
+  - id: "AR2"
+    path: "references/delivery.md"
+    message: "no warnings"
+    reason: "Reviewed: Swift compiler warnings, which CI treats as errors."
+  - id: "AR2"
+    path: "references/stack.md"
+    message: "don't warn"
+    reason: "Reviewed: generated Swift imports that raise no compiler warnings."
