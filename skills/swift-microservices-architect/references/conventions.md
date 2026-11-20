@@ -39,7 +39,7 @@
 | Workflow, activity container | `<Process>Workflow`, `<Process>Activities`; a container an activity several workflows share is named for its step, `<Step>Activities`; activities are verbs, inputs `<Activity>Input` | `LoanWorkflow`, `LoanActivities.markOverdue(input:)`, `MarkOverdueInput` |
 | A use case's Temporal properties | `temporalClient`, `taskQueue` | `private let temporalClient: TemporalClient` |
 | Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `currentState(input:)` |
-| Workflow id, task queue | `<x>-<workflow>-<id>`; `x` | `loans-loan-0193…`; `loans` |
+| Workflow id, task queue, Temporal namespace | `<x>-<workflow>-<id>`; `x`; `<project>-<x>` | `loans-loan-0193…`; `loans`; `bookshelf-loans` |
 | Schedule id, scheduled workflow | `<x>-<job>`; `<Job>Workflow` | `loans-purge-notice-events`; `PurgeNoticeEventsWorkflow` |
 | Named activity options | The kind of step, never where it's used | `ActivityOptions.database`, `.notification` |
 | Postgres scopes | `Postgres<X>Scope`, `Postgres<X>InternalScope`, `Postgres<X>WorkerScope` | `PostgresLoansScope` |

@@ -19,7 +19,7 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens,
 | Edge to the gateway | TLS between proxies, as the deployment chooses; plain HTTP on the gateway's private interface | Nothing more: the gateway trusts its private network for this hop only |
 | Gateway to a service's `XService` | gRPC over mTLS, with the caller's token | Both processes by certificate; the user by the token, verified again by the service |
 | A service or worker to another's `XInternalService` | gRPC over mTLS | Both processes by certificate; the request names the user it acts for |
-| A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate |
+| A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate; the authorizer admits the process to its service's namespace only ([the worker](workflows.md#the-worker)) |
 | A process to Postgres | TLS, required (`.require(…)`), against the environment's authority, with the process's certificate, as one of the service's roles | Both sides by certificate; the server's map admits the process to its roles only ([Postgres](#postgres)) |
 | A process to Valkey | TLS, required, against the environment's authority, with a username and password (`authentication.*`) | The server by certificate; the process by its password |
 | Inside the database | Row-level security | The tenant, by the setting bound to the transaction |

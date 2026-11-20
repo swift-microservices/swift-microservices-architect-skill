@@ -151,7 +151,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 ## Operations
 | Environment | Postgres `max_connections` | Each process's replicas and role pools, and their total | Collector endpoint | Stop timeout |
 |---|---|---|---|---|
-- Backups and point-in-time recovery of Postgres and Temporal's store, and the Temporal namespace's retention: the user's answers
+- Backups and point-in-time recovery of Postgres and Temporal's store, each service's Temporal namespace and its retention, and whether Temporal's authorizer confines each identity to its namespace: the user's answers
 
 ## Build order
 1. <package>
