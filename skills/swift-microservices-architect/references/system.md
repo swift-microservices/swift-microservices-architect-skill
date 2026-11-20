@@ -134,7 +134,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 | Target | Holds |
 |---|---|
 - Commands: `serve [--migrate-database]`, `worker run`
-- Data: where it lives, the database roles and the use cases each runs, how each process proves its roles, and each role client's maximum connections
+- Data: where it lives, the database roles and the use cases each runs, and how each process proves its roles
 - Calls out to: other services' internal RPCs, providers, Temporal, Valkey
 
 ## Shared packages
@@ -147,6 +147,11 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 
 ## Decisions
 - Each boundary and why it holds; each departure from a default or exception to a rule, with its reason
+
+## Operations
+| Environment | Postgres `max_connections` | Each process's replicas and role pools, and their total | Collector endpoint | Stop timeout |
+|---|---|---|---|---|
+- Backups and point-in-time recovery of Postgres and Temporal's store, and the Temporal namespace's retention: the user's answers
 
 ## Build order
 1. <package>

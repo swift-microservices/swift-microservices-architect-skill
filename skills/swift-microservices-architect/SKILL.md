@@ -35,8 +35,6 @@ Service, worker ── gRPC, mTLS ──► another service's XInternalService
 Service, worker ── mTLS ──► Temporal          Service, worker ──► its own data, wherever it lives
 ```
 
-Every service and the gateway depend on `<project>-core`, `<project>-protos` and the swift-microservices libraries ([stack](references/stack.md)).
-
 ## A service's package
 
 ```
@@ -51,7 +49,7 @@ Every service and the gateway depend on `<project>-core`, `<project>-protos` and
 
 A service has only the targets it needs, and each imports only what [its row](references/packages.md#the-targets-of-a-service) lists. Hard rules:
 - XCore imports no driver, transport, contract, configuration or lifecycle module ([what Core may link](references/packages.md#what-core-may-link)).
-- XCore imports Temporal only in `Workflows/` and the use cases that start, signal, query or update a workflow, and never builds its client or worker.
+- XCore imports Temporal only in `Workflows/` and the use cases that reach a workflow, and never builds its client or worker.
 - Adapter targets never import each other or Temporal; the executable hands one to another through Core's protocols.
 - Generated contract types never leave XGRPC, the gateway's HTTP target and executables.
 - Only an executable reads configuration, builds clients and runs the `ServiceGroup`.
@@ -65,7 +63,7 @@ A service has only the targets it needs, and each imports only what [its row](re
 | What a service knows about another's data | A model in its XCore `Ports/`, beside the port that returns it |
 | Protobuf ↔ domain, HTTP ↔ protobuf | XGRPC's `Protobuf/` conversions; the gateway's `Schemas/` |
 | Messages between processes; the public API | `<project>-protos`; the gateway's `openapi.yaml` |
-| Who the caller is | The gateway verifies and forwards the token; each service verifies it again |
+| Who the caller is | The token, verified by the gateway and again by each service |
 | Which processes may call an internal RPC | The callers the plan lists, admitted by certificate through `InternalCallerInterceptor`; never the gateway |
 | Tenant isolation | Row-level security; `<Project>Persistence` binds the caller to each transaction, and each audience's use cases run as [their database role](references/persistence.md#database-roles) |
 | Durable, delayed or multi-service work | A Temporal workflow in XCore's `Workflows/` |
@@ -97,9 +95,9 @@ do {
 
 ## Troubleshooting
 
-- A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls hang until the caller's deadline or the activity's timeout cancels them.
-- The Temporal SDK's worker reader leaves `gracefulShutdownPeriod` at zero, so every deploy cancels in-flight activities and repeats their effects on retry ([the worker's root](references/composition.md#the-workers-root)).
-- A process connected as the database owner bypasses row-level security, so every process connects as its roles and only `serve --migrate-database` as the owner.
+- A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls hang until a deadline or timeout cancels them.
+- The worker's `gracefulShutdownPeriod` defaults to zero, so every deploy cancels in-flight activities and repeats their effects ([the worker's root](references/composition.md#the-workers-root)).
+- The database owner bypasses row-level security, so only `serve --migrate-database` connects as the owner, and every other process as its roles.
 - Policies combine with `OR`: on a table with a user's and an organization's, a session acting for the organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
@@ -108,7 +106,7 @@ do {
 ## Prerequisites
 
 - A Swift toolchain at the package's `swift-tools-version`, and for its `XPostgresTests` and `XValkeyTests` a real Postgres, 18 or later for `uuidv7()`, and Valkey reached through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
-- Every build and test of an XCore with workflows links the Temporal SDK and its prebuilt sdk-core binary target, so a machine that can't fetch that artifact can't build Core ([what Core may link](references/packages.md#what-core-may-link)).
+- Building an XCore with workflows fetches the Temporal SDK's prebuilt sdk-core binary, so the machine needs access to it ([what Core may link](references/packages.md#what-core-may-link)).
 
 ## Available Scripts
 
@@ -125,23 +123,23 @@ Each runs from the package's root and exits non-zero on any failure:
 - Not for iOS, macOS or SwiftUI apps, or Swift packages that aren't servers.
 - The code inside a shape that isn't architecture belongs to the [related skills](#related-skills).
 - A workflow start or signal lost after its transaction commits is recovered only when the client retries the request ([transactions](references/use-cases.md#transactions)).
-- Not covered: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery of Postgres and Temporal's store, client SDKs and frontends; ask the user rather than invent them.
+- Not covered: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery, client SDKs and frontends; ask the user rather than invent them.
 
 ## References
 
 | Reference | Read when |
 |---|---|
 | [system.md](references/system.md) | Planning a backend, adding or splitting a service, deciding how services talk or where data lives |
-| [packages.md](references/packages.md) | Creating a package, changing a target's imports or dependencies, deciding what Core may link, running the boundary or style checks |
+| [packages.md](references/packages.md) | Creating a package, changing a target's dependencies, or deciding what Core may link |
 | [stack.md](references/stack.md) | Choosing a library or a version, or checking whether one links full Foundation |
-| [use-cases.md](references/use-cases.md) | Writing a model, error, repository, port or use case, including a system use case, or deciding a transaction or authorization |
-| [persistence.md](references/persistence.md) | Writing a scope, statement, migration, policy, tenant table, Valkey repository or Valkey client, or sizing a role's pool and timeouts |
+| [use-cases.md](references/use-cases.md) | Writing a model, error, repository, port or use case, or deciding a transaction or authorization |
+| [persistence.md](references/persistence.md) | Writing a scope, statement, migration, policy or tenant table, sizing a role's pool, or using Valkey |
 | [grpc.md](references/grpc.md) | Changing a contract, handler, conversion, client, paged list or transport |
 | [gateway.md](references/gateway.md) | Adding a route, request context, controller, webhook route or error mapping |
 | [workflows.md](references/workflows.md) | Writing, starting or reaching a workflow, activity container or worker |
 | [composition.md](references/composition.md) | Wiring a command, composition root, configuration, logging, health checks or the ServiceGroup |
-| [observability.md](references/observability.md) | Bootstrapping telemetry, or tracing a request across the gateway, services and Temporal |
-| [security.md](references/security.md) | Touching TLS or mTLS, database logins, tokens, secrets, authorization layers or webhook verification |
+| [observability.md](references/observability.md) | Bootstrapping telemetry or tracing a request across processes |
+| [security.md](references/security.md) | Touching mTLS, database logins, tokens, secrets, attempt limits or webhooks |
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |
 | [delivery.md](references/delivery.md) | Setting up CI, releases, deployment, the Containerfile or Dependabot |
@@ -149,13 +147,13 @@ Each runs from the package's root and exits non-zero on any failure:
 
 ## Related skills
 
-These cover the code inside the shapes; where this skill states a shape, follow it. Load each when its task comes up, and always where a checklist names it. When one isn't among the installed skills, tell the user once, with its source, and carry on with this skill alone:
+These cover the code inside the shapes; where this skill states a shape, follow it. Load each when its task comes up or a checklist names it; when one isn't installed, tell the user once, with its source, and carry on:
 - How a workflow is designed and behaves (its history, signals and updates, waiting, compensation, versioning): `temporal-developer` ([source](https://github.com/temporalio/skill-temporal-developer))
 - A table's policy, grants, indexes and column types, and what a migration locks: `supabase-postgres-best-practices` ([source](https://github.com/supabase/agent-skills))
 - The Valkey command for an operation, its expiry and atomicity: `valkey` ([source](https://github.com/valkey-io/valkey-skills))
 - Test code, with Swift Testing: `swift-testing-expert` ([source](https://github.com/AvdLee/Swift-Testing-Agent-Skill))
 - Actors, task groups, cancellation, `Sendable` diagnostics, Swift 6 migration: `swift-concurrency` ([source](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill))
-- Argument labels, method names, documentation comments: `swift-api-design-guidelines`, or another Swift API Design Guidelines skill ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
+- Argument labels, method names, documentation comments: `swift-api-design-guidelines` ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
 
 ## Instructions
 
@@ -220,6 +218,15 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] Verify
 ```
 
+**Prepare for production**
+
+```
+- [ ] Each role's pool and timeouts, within Postgres's max_connections (persistence.md#connections-and-timeouts)
+- [ ] Each root: health, observability, secrets from files, the worker's shutdown period (composition.md)
+- [ ] The plan's Operations, answered by the user (system.md#the-plan)
+- [ ] Verify
+```
+
 **Verify**
 
 ```
@@ -240,12 +247,12 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 **Review a backend**
 
 ```
-- [ ] Run this skill's scripts/check_boundaries.sh from each service's and the gateway's root, and scripts/check_style.sh from every package's (packages.md#checking-the-boundaries)
+- [ ] Run scripts/check_boundaries.sh from each service's and the gateway's root, and scripts/check_style.sh from every package's (packages.md#checking-the-boundaries)
 - [ ] Each use case: its files, typed throws, one catch per case, no helpers, the right database role
 - [ ] Each adapter only converts and delegates; every error case is mapped
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
 - [ ] Where the backend has them: workflows checked with temporal-developer, tests with swift-testing-expert, and actors, Mutexes and the boundary script's unchecked concurrency with swift-concurrency
 - [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), FoundationEssentials imports, package access, naming (conventions.md)
-- [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (the shapes), minor (naming, layout, logging), each citing a file and line or an empty grep, with the rule and the fix; then the user's decisions. Change code only when asked
+- [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (the shapes), minor (naming, layout, logging), each citing a file and line or an empty grep, with the rule and fix; change code only when asked
 - [ ] swift build and swift test; report each result, or why it couldn't run
 ```
