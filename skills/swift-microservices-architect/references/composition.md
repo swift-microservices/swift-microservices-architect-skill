@@ -448,7 +448,7 @@ let api = BookshelfAPI(
 )
 
 // MARK: - Router
-let allowedHeaders: [HTTPField.Name] = …  // content type, authorization, Idempotency-Key
+let allowedHeaders: [HTTPField.Name] = …  // content type, authorization, Idempotency-Key, If-Match
 let cors = CORSMiddleware<BasicRequestContext>(
     allowOrigin: .originBased,
     allowHeaders: allowedHeaders,

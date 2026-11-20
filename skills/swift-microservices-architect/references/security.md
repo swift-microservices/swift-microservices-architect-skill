@@ -89,6 +89,7 @@ extension TimedCertificateReloader.Configuration {
 - The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair, and servers bound connection age so every connection handshakes again ([transports](grpc.md#transports)); a failed reload keeps the last good pair and logs a warning.
 - One reloader per certificate pair: the process's pair under `tls` for gRPC and Postgres, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services', and the migrator's under `postgres.owner.tls`.
 - Issuing and renewing certificates is the deployment's job; the process only reads files. A new trust root needs a restart.
+- A local run uses the same mTLS, with a development authority and pairs whose common names are the production identities (`loans`, `loans-worker`, `loans-migrator`). No process has a plaintext or no-verification mode, so nothing that only works locally ships.
 - Internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.
 
 An internal RPC admits only the processes its service lists as callers. `<Project>Transport`'s `InternalCallerInterceptor`, applied to each `XInternalService` descriptor ([interceptors](grpc.md#interceptors)), reads the common name of the peer's certificate and refuses any identity not in `grpc.server.internalCallers` with `permissionDenied`:

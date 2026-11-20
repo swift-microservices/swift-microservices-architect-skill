@@ -146,8 +146,9 @@ jobs:
 A service's `Containerfile`, at its root, builds the image `service.yml` publishes:
 
 - A build stage on `swift:<tools version>-noble` resolves with `RUN --mount=type=secret,id=netrc,target=/root/.netrc swift package --disable-automatic-resolution resolve`, so the token never enters a layer, then runs `swift build --configuration release --disable-automatic-resolution --static-swift-stdlib --product loans`. It passes none of CI's flags: CI held the commit to them, and a warning a newer toolchain adds mustn't stop a deploy or a hotfix.
-- A runtime stage on `ubuntu:noble` installs only `ca-certificates` and `tzdata`, creates an unprivileged user, and copies the product, `swift-backtrace-static` and any resource bundles to `/app`.
-- It runs as that user from `WORKDIR /app`, with `ENTRYPOINT ["./loans"]` and `SWIFT_BACKTRACE` pointing at the static backtracer.
+- A runtime stage on `ubuntu:noble` installs only `ca-certificates` and `tzdata`, creates an unprivileged user with a fixed numeric id (`useradd --uid 10001 loans`), and copies the product, `swift-backtrace-static` and any resource bundles to `/app`.
+- It runs as `USER 10001:10001`, the numeric id, so the platform sees a non-root user without reading the image's `/etc/passwd`, from `WORKDIR /app`, with `ENTRYPOINT ["./loans"]` and `SWIFT_BACKTRACE` pointing at the static backtracer.
+- The process writes nothing inside the image, only to standard output and standard error, so the deployment may mount its root filesystem read-only.
 - A `.dockerignore` beside it keeps `.build`, `.swiftpm`, `.env*`, `.netrc`, secrets and key files out of the build context.
 
 ## Dependabot

@@ -401,4 +401,5 @@ The executable builds one `GRPCClient` per upstream service over mTLS, its trans
 
 - Clients reach the gateway over TLS, terminated by the edge in front of it (a CDN or reverse proxy, which may itself re-encrypt to the proxy beside the gateway). The gateway listens for plain HTTP on its private interface; it never configures TLS for clients.
 - Limits per client address are the edge proxy's, before a request reaches the gateway; limits per account are the owning service's ([attempt limits](security.md#attempt-limits)).
-- CORS is the gateway's, in `CORSMiddleware` first on the router, for the origins, methods and headers browsers use, `Idempotency-Key` among them ([the gateway's root](composition.md#the-gateways-root)).
+- CORS is the gateway's, in `CORSMiddleware` first on the router, for the origins, methods and headers browsers use, `Idempotency-Key` and `If-Match` among them ([the gateway's root](composition.md#the-gateways-root)).
+- It answers any origin (`.originBased`) and never allows credentials, since the API authenticates by bearer token alone, never a cookie: a page on another origin reaches only what a token it already holds allows. A session cookie would need an origin allowlist from configuration first.

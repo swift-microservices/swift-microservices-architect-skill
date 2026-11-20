@@ -18,12 +18,8 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 
 ## Later (P2)
 
-- **Draining status.** The health service reports `NOT_SERVING` once graceful shutdown starts, before the server drains. Home: `composition.md#health`.
 - **Temporal access per service.** Any process with a Temporal certificate can signal another service's workflows in the shared namespace; a namespace per service, or an authorizer, closes it. Home: `security.md`, `workflows.md#the-worker`.
 
-- **Cancellation.** A cancelled request leaves without an error-level log line, or as a `cancelled` case mapped to 499. Home: `style.md#errors`.
 - **Strict memory safety.** `.strictMemorySafety()` flags `nonisolated(unsafe)` and unsafe pointers, not `@unchecked Sendable`, and CI turns its warnings into errors. Build the package template with it, the Temporal macros and generated contracts included, before adding it to `swiftSettings`. Home: `packages.md#swift-settings`.
 - **Recurring jobs and retention.** Temporal Schedules with a stated creator; retention for webhook event ids, refresh tokens and expired rows. Home: `workflows.md`.
-- **Concurrent updates and caches.** Optimistic concurrency (`etag`, `If-Match`); invalidating a cache key after the commit that changes its source. Home: `use-cases.md#transactions`, `gateway.md`, `persistence.md#valkey`.
-- **Hardening.** CORS origins from configuration; SBOM, provenance attestation and image scanning; a numeric UID and a read-only root filesystem. Home: `gateway.md`, `delivery.md`.
-- **Local runs.** The same mTLS with a development CA, never a plaintext mode. Home: `system.md#out-of-scope`.
+- **Supply chain.** SBOM, provenance attestation and image scanning in `build_image.yml`. Needs a change in swift-microservices/ci first. Home: `delivery.md`.
