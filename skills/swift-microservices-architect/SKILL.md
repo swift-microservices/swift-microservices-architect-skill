@@ -139,7 +139,7 @@ Each runs from the package's root and exits non-zero on any failure:
 | [grpc.md](references/grpc.md) | Changing a contract, handler, conversion, client, paged list or transport |
 | [gateway.md](references/gateway.md) | Adding a route, request context, controller, webhook route or error mapping |
 | [workflows.md](references/workflows.md) | Writing, starting or reaching a workflow, activity container or worker |
-| [composition.md](references/composition.md) | Wiring a command, composition root, configuration, logging or the ServiceGroup |
+| [composition.md](references/composition.md) | Wiring a command, composition root, configuration, logging, health checks or the ServiceGroup |
 | [security.md](references/security.md) | Touching TLS or mTLS, database logins, tokens, secrets, authorization layers or webhook verification |
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |
@@ -183,7 +183,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md), the SQL with supabase-postgres-best-practices
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
 - [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer, a Valkey command chosen with valkey
-- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' list, Serve, and Run with a worker (composition.md)
+- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' list, Serve with its health service, Health, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-expert
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)

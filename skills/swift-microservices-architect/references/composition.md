@@ -8,6 +8,7 @@ The executable target: its commands, the composition root each command runs, con
 - Configuration
 - Logging
 - Lifecycle
+- Health
 - The worker's root
 - The gateway's root
 
@@ -24,6 +25,7 @@ struct Loans: AsyncParsableCommand {
         subcommands: [
             Serve.self,
             Worker.self,
+            Health.self,
         ],
         defaultSubcommand: Serve.self
     )
@@ -173,9 +175,11 @@ struct Serve: AsyncParsableCommand {
         )
         let bearerAuthentication = BearerAuthenticationInterceptor(authenticator: authenticator)
         let userSettings = UserSettingsInterceptor()
+        let healthService = HealthService()
+        healthService.provider.updateStatus(.serving, forService: "")
         let server = GRPCServer(
             transport: serverTransport,
-            services: [loanService],
+            services: [loanService, healthService],
             interceptorPipeline: [
                 .apply(bearerAuthentication, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
                 .apply(userSettings, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
@@ -224,6 +228,7 @@ extension InMemoryProvider {
         .init(values: [
             "grpc.server.host": "0.0.0.0",
             "grpc.server.port": 50051,
+            "grpc.server.hostname": "loans",
             "grpc.catalog.port": 50051,
             "tls.certificatePath": "/run/tls/cert.pem",
             "tls.privateKeyPath": "/run/tls/key.pem",
@@ -290,6 +295,16 @@ A root lists its long-lived components in one `ServiceGroup` and nothing else: n
 - `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. Running the group is the root's last line.
 - A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
 - A long-running component of the service's own is a `Service` whose `run()` returns on graceful shutdown: its loop iterates `sequence.cancelOnGracefulShutdown()`, or wraps its work in `withGracefulShutdownHandler`.
+
+## Health
+
+Each serve process reports its health over gRPC, and the gateway over HTTP, so the deployment sends traffic only to a process that's up:
+
+- Serve registers grpc-swift-extras' `HealthService` beside its services and marks the server serving before the group runs, as [the composition root](#the-composition-root) shows. No interceptor applies to its descriptor, so a probe needs no token.
+- The gateway answers `GET /health` with `200 OK`, outside `/v1` and every tier ([the gateway's root](#the-gateways-root)).
+- Health reports the process, never its dependencies: a status that followed Postgres or an upstream would mark every replica unhealthy when one dependency fails, and the platform would restart them all at once.
+- The image holds no probe tool, so each executable has a short-lived `health` command ([commands](#commands)), which the deployment runs as the health check of every serve application and of the gateway. A service's dials its own server on `127.0.0.1` with its own certificate pair, the client config's HTTP/2 `authority` set to its certificate's name from `grpc.server.hostname`, calls `Check`, and exits non-zero unless the status is `SERVING`. The gateway's sends `GET /health` with AsyncHTTPClient.
+- The worker serves nothing and has no health check; Temporal shows whether it polls.
 
 ## The worker's root
 
@@ -370,6 +385,7 @@ let router = Router(context: BasicRequestContext.self)
 router.add(middleware: cors)
 router.add(middleware: ErrorMiddleware())
 router.add(middleware: requestLogging)
+router.get("health") { _, _ in HTTPResponse.Status.ok }
 api.addRoutes(to: router.group("v1"))
 
 // MARK: - Hummingbird
