@@ -251,7 +251,10 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                 try await scope.loanRepository.lockLoans(userID: subject.userID)
 
                 // A retry returns the loan its first attempt created, before the limit counts it.
-                let existingLoan = try await scope.loanRepository.loan(userID: subject.userID, idempotencyKey: input.idempotencyKey)
+                let existingLoan = try await scope.loanRepository.loan(
+                    userID: subject.userID,
+                    idempotencyKey: input.idempotencyKey
+                )
                 if let existingLoan {
                     guard existingLoan.bookID == book.id else {
                         logger.warning("Borrowing refused: idempotency key reused for another book")
@@ -284,10 +287,19 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                 idReusePolicy: .allowDuplicateFailedOnly,
                 idConflictPolicy: .useExisting
             )
-            let workflowInput = LoanWorkflow.Input(loanID: loan.id, userID: loan.userID, bookID: loan.bookID, dueDate: loan.dueDate)
+            let workflowInput = LoanWorkflow.Input(
+                loanID: loan.id,
+                userID: loan.userID,
+                bookID: loan.bookID,
+                dueDate: loan.dueDate
+            )
 
             do {
-                _ = try await temporalClient.startWorkflow(type: LoanWorkflow.self, options: workflowOptions, input: workflowInput)
+                _ = try await temporalClient.startWorkflow(
+                    type: LoanWorkflow.self,
+                    options: workflowOptions,
+                    input: workflowInput
+                )
                 logger.info("Book borrowed", metadata: ["loanID": "\(loan.id)"])
                 return loan
             } catch is WorkflowAlreadyStartedError {

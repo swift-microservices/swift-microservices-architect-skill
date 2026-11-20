@@ -88,12 +88,13 @@ jobs:
     uses: swift-microservices/ci/.github/workflows/library.yml@<commit>  # <release>
     with:
       api_breakage_check_enabled: true
+      docs_check_targets: "BookshelfAuthentication BookshelfPersistence BookshelfTransport BookshelfTesting"
       foundation_linking_check_excluded_products: '["BookshelfPersistence"]'
 ```
 
 - `api_breakage_check_enabled` is `true` from 1.0, so a breaking change shows on its pull request, and `false` below 1.0, where a minor release may break the API.
 - A public library builds on every toolchain its users may have: `linux_swift_versions` from its tools version up through the newest release, then `nightly-main` and the next release's nightly; `linux_host_archs: '["x86_64", "aarch64"]'`; `enable_linux_static_sdk_build: true`.
-- A library with DocC catalogs lists their targets in `docs_check_targets`, and Soundness fails on any DocC warning in them.
+- A library with DocC catalogs lists their targets in `docs_check_targets`, and Soundness fails on any DocC warning in them. Each of `<project>-core`'s products has one (`Sources/BookshelfTransport/BookshelfTransport.docc`), since every service builds on its public API.
 - `<project>-protos` has no tests and only builds: its `ci.yml` passes `linux_build_command: swift build -c release`, and `swift build` stands in for `swift test`, which fails on a package with no tests.
 - `<project>-protos` also passes `protobuf_check_enabled: true`, so buf lints its `.proto` files and fails a pull request that breaks the wire, such as a renumbered field or a reused tag, which the Swift API breakage check can't see. Its `buf.yaml`, at the root, lists each target's folder as a module (`Sources/LoansProtos`), lints with `STANDARD` except `RPC_RESPONSE_STANDARD_NAME` and `RPC_REQUEST_RESPONSE_UNIQUE`, since an RPC returns its resource ([contracts](grpc.md#contracts-in-the-protos-package)), and checks `WIRE_JSON` for breaking changes.
 

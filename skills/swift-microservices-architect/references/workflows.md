@@ -107,7 +107,11 @@ package struct LoanWorkflow {
             return
         }
 
-        let noticeInput = LoanActivities.SendOverdueNoticeInput(loanID: input.loanID, userID: input.userID, bookID: input.bookID)
+        let noticeInput = LoanActivities.SendOverdueNoticeInput(
+            loanID: input.loanID,
+            userID: input.userID,
+            bookID: input.bookID
+        )
         try await context.executeActivity(
             LoanActivities.Activities.SendOverdueNotice.self,
             options: .notification,
@@ -209,7 +213,11 @@ package struct LoanActivities {
     @Activity
     package func sendOverdueNotice(input: SendOverdueNoticeInput) async throws {
         guard let member = try await identityClient.member(id: input.userID) else {
-            throw ApplicationError(message: "Identity has no such member.", type: "MemberNotFound", isNonRetryable: true)
+            throw ApplicationError(
+                message: "Identity has no such member.",
+                type: "MemberNotFound",
+                isNonRetryable: true
+            )
         }
 
         guard let book = try await catalogClient.book(id: input.bookID) else {
@@ -245,7 +253,12 @@ extension ActivityOptions {
     /// A message to a member: a few attempts, then the run fails and the loan stays as recorded.
     static let notification = ActivityOptions(
         startToCloseTimeout: .seconds(30),
-        retryPolicy: RetryPolicy(initialInterval: .seconds(1), backoffCoefficient: 2, maximumInterval: .seconds(30), maximumAttempts: 5)
+        retryPolicy: RetryPolicy(
+            initialInterval: .seconds(1),
+            backoffCoefficient: 2,
+            maximumInterval: .seconds(30),
+            maximumAttempts: 5
+        )
     )
 }
 ```

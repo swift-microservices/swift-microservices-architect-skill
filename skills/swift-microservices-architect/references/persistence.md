@@ -46,7 +46,9 @@ package import PersistencePostgres
 package import PostgresNIO
 
 /// A unit of work as `loans_service`, whose policy narrows `loans` to the bound caller's rows.
-package struct PostgresLoansScope: PostgresScope, BorrowBookUseCaseScope, ReturnBookUseCaseScope, ListLoansUseCaseScope {
+package struct PostgresLoansScope:
+    PostgresScope, BorrowBookUseCaseScope, ReturnBookUseCaseScope, ListLoansUseCaseScope
+{
     package let loanRepository: any LoanRepository
 
     package init(connection: PostgresConnection, logger: Logger) {
@@ -252,7 +254,12 @@ package struct CreateLoansTable: DatabaseMigration {
 ```swift
 /// Every migration of Loans' database, in applied order. Append only.
 package enum LoansMigrations {
-    package static func all(database: String, serviceRole: String, internalRole: String, workerRole: String) -> [any DatabaseMigration] {
+    package static func all(
+        database: String,
+        serviceRole: String,
+        internalRole: String,
+        workerRole: String
+    ) -> [any DatabaseMigration] {
         let createServiceRole = CreateServiceRole(role: serviceRole, database: database)
         …
         let createLoansTable = CreateLoansTable()

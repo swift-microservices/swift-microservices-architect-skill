@@ -62,10 +62,20 @@ extension TimedCertificateReloader.Configuration {
         let refreshInterval = config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))
         let certificatePath = try config.requiredString(forKey: "certificatePath")
         let privateKeyPath = try config.requiredString(forKey: "privateKeyPath")
-        let certificateSource = TimedCertificateReloader.CertificateSource(location: .file(path: certificatePath), format: .pem)
-        let privateKeySource = TimedCertificateReloader.PrivateKeySource(location: .file(path: privateKeyPath), format: .pem)
+        let certificateSource = TimedCertificateReloader.CertificateSource(
+            location: .file(path: certificatePath),
+            format: .pem
+        )
+        let privateKeySource = TimedCertificateReloader.PrivateKeySource(
+            location: .file(path: privateKeyPath),
+            format: .pem
+        )
 
-        self.init(refreshInterval: refreshInterval, certificateSource: certificateSource, privateKeySource: privateKeySource)
+        self.init(
+            refreshInterval: refreshInterval,
+            certificateSource: certificateSource,
+            privateKeySource: privateKeySource
+        )
         self.logger = logger
         self.onCertificateLoadFailed = { failure in
             logger.warning("TLS certificate reload failed", metadata: ["error": "\(failure.error)"])

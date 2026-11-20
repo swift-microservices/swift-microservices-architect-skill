@@ -85,25 +85,53 @@ struct Serve: AsyncParsableCommand {
 
         // MARK: - Infrastructure
         let tlsConfig = config.scoped(to: "tls")
-        let certificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: tlsConfig, logger: logger)
-        let certificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(configuration: certificateReloaderConfiguration)
-        let clientSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
+        let certificateReloaderConfiguration = try TimedCertificateReloader.Configuration(
+            config: tlsConfig,
+            logger: logger
+        )
+        let certificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
+            configuration: certificateReloaderConfiguration
+        )
+        let clientSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(
+            config: tlsConfig,
+            certificateReloader: certificateReloader
+        )
 
         let postgresConfig = config.scoped(to: "postgres")
         if migrateDatabase {
             let migratorTLSConfig = postgresConfig.scoped(to: "owner.tls")
-            let migratorCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: migratorTLSConfig, logger: logger)
-            let migratorCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(configuration: migratorCertificateReloaderConfiguration)
-            let ownerPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "owner", certificateReloader: migratorCertificateReloader)
+            let migratorCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(
+                config: migratorTLSConfig,
+                logger: logger
+            )
+            let migratorCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
+                configuration: migratorCertificateReloaderConfiguration
+            )
+            let ownerPostgresConfiguration = try PostgresClient.Configuration(
+                config: postgresConfig,
+                role: "owner",
+                certificateReloader: migratorCertificateReloader
+            )
             try await PostgresClient.withClient(configuration: ownerPostgresConfiguration, logger: logger) { client in
                 let migrations = Migrations(client: client, …, logger: logger)
                 try await migrations.apply()
             }
         }
-        let servicePostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "service", certificateReloader: certificateReloader)
-        let internalPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "internal", certificateReloader: certificateReloader)
+        let servicePostgresConfiguration = try PostgresClient.Configuration(
+            config: postgresConfig,
+            role: "service",
+            certificateReloader: certificateReloader
+        )
+        let internalPostgresConfiguration = try PostgresClient.Configuration(
+            config: postgresConfig,
+            role: "internal",
+            certificateReloader: certificateReloader
+        )
         let postgresClient = PostgresClient(configuration: servicePostgresConfiguration, backgroundLogger: logger)
-        let internalPostgresClient = PostgresClient(configuration: internalPostgresConfiguration, backgroundLogger: logger)
+        let internalPostgresClient = PostgresClient(
+            configuration: internalPostgresConfiguration,
+            backgroundLogger: logger
+        )
 
         let jwtConfig = config.scoped(to: "jwt")
         let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
@@ -120,15 +148,26 @@ struct Serve: AsyncParsableCommand {
             serviceConfig: catalogServiceConfig
         )
         let catalogTracing = ClientOTelTracingInterceptor(serverHostname: catalogHost, networkTransportMethod: "tcp")
-        let catalogGRPCClient = GRPCClient(transport: catalogTransport, interceptorPipeline: [.apply(catalogTracing, to: .all)])
+        let catalogGRPCClient = GRPCClient(
+            transport: catalogTransport,
+            interceptorPipeline: [.apply(catalogTracing, to: .all)]
+        )
 
         let temporalConfig = config.scoped(to: "temporal")
         let temporalTLSConfig = temporalConfig.scoped(to: "tls")
         let temporalHost = try temporalConfig.requiredString(forKey: "host")
         let temporalPort = try temporalConfig.requiredInt(forKey: "port")
-        let temporalCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: temporalTLSConfig, logger: logger)
-        let temporalCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(configuration: temporalCertificateReloaderConfiguration)
-        let temporalSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(config: temporalTLSConfig, certificateReloader: temporalCertificateReloader)
+        let temporalCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(
+            config: temporalTLSConfig,
+            logger: logger
+        )
+        let temporalCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
+            configuration: temporalCertificateReloaderConfiguration
+        )
+        let temporalSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(
+            config: temporalTLSConfig,
+            certificateReloader: temporalCertificateReloader
+        )
         let temporalClientConfiguration = try TemporalClient.Configuration(configReader: temporalConfig)
         let temporalClient = try TemporalClient(
             target: .dns(host: temporalHost, port: temporalPort),
@@ -141,7 +180,10 @@ struct Serve: AsyncParsableCommand {
         // transaction to the caller; administrators' reads, and Resend's events, which bind no
         // caller, run on the internal one.
         let database = PostgresDatabase<PostgresLoansScope>(client: postgresClient, logger: logger)
-        let internalDatabase = PostgresDatabase<PostgresLoansInternalScope>(client: internalPostgresClient, logger: logger)
+        let internalDatabase = PostgresDatabase<PostgresLoansInternalScope>(
+            client: internalPostgresClient,
+            logger: logger
+        )
         let catalogClient = GRPCCatalogClient(client: catalogGRPCClient)
         let taskQueue = try temporalConfig.requiredString(forKey: "worker.taskqueue")
         let loansConfig = config.scoped(to: "loans")
@@ -178,7 +220,10 @@ struct Serve: AsyncParsableCommand {
         let serverHost = try serverConfig.requiredString(forKey: "host")
         let serverPort = try serverConfig.requiredInt(forKey: "port")
         let serverHostname = try serverConfig.requiredString(forKey: "hostname")
-        let serverSecurity: HTTP2ServerTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
+        let serverSecurity: HTTP2ServerTransport.Posix.TransportSecurity = try .mTLS(
+            config: tlsConfig,
+            certificateReloader: certificateReloader
+        )
         let serverTransportConfig = HTTP2ServerTransport.Posix.Config(config: serverConfig)
         let serverTransport = HTTP2ServerTransport.Posix(
             address: .ipv4(host: serverHost, port: serverPort),
@@ -328,7 +373,11 @@ Each serve process reports its health over gRPC, and the gateway over HTTP, so t
 ```swift
 // MARK: - Infrastructure
 …  // tls, temporal, and each upstream's transport and traced GRPCClient, as in Serve
-let workerPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "worker", certificateReloader: certificateReloader)
+let workerPostgresConfiguration = try PostgresClient.Configuration(
+    config: postgresConfig,
+    role: "worker",
+    certificateReloader: certificateReloader
+)
 let workerPostgresClient = PostgresClient(configuration: workerPostgresConfiguration, backgroundLogger: logger)
 
 // MARK: - Composition
@@ -346,7 +395,10 @@ let loanActivities = LoanActivities(
 
 // MARK: - Worker
 var workerConfiguration = try TemporalWorker.Configuration(configReader: temporalConfig)
-workerConfiguration.gracefulShutdownPeriod = try temporalConfig.requiredInt(forKey: "worker.gracefulShutdownPeriodSeconds", as: Duration.self)
+workerConfiguration.gracefulShutdownPeriod = try temporalConfig.requiredInt(
+    forKey: "worker.gracefulShutdownPeriodSeconds",
+    as: Duration.self
+)
 let worker = try TemporalWorker(
     configuration: workerConfiguration,
     target: .dns(host: temporalHost, port: temporalPort),
@@ -356,7 +408,8 @@ let worker = try TemporalWorker(
 )
 
 // MARK: - Lifecycle
-// observability, certificateReloader, temporalCertificateReloader, workerPostgresClient, identityGRPCClient, catalogGRPCClient, worker
+// observability, certificateReloader, temporalCertificateReloader, workerPostgresClient,
+// identityGRPCClient, catalogGRPCClient, worker
 ```
 
 - The root builds each activity container from system use cases and port implementations, here XGRPC's and the provider target's, so no adapter target imports another, and registers the workflows. `activityContainers:` takes each container as its own argument.
@@ -396,7 +449,11 @@ let api = BookshelfAPI(
 
 // MARK: - Router
 let allowedHeaders: [HTTPField.Name] = …  // content type, authorization, Idempotency-Key
-let cors = CORSMiddleware<BasicRequestContext>(allowOrigin: .originBased, allowHeaders: allowedHeaders, allowMethods: [.get, .post, .put, .delete])
+let cors = CORSMiddleware<BasicRequestContext>(
+    allowOrigin: .originBased,
+    allowHeaders: allowedHeaders,
+    allowMethods: [.get, .post, .put, .delete]
+)
 let requestLogging = LogRequestsMiddleware<BasicRequestContext>(logLevel)
 let router = Router(context: BasicRequestContext.self)
 router.add(middleware: cors)
