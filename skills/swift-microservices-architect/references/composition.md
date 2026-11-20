@@ -56,8 +56,10 @@ struct Serve: AsyncParsableCommand {
 
     func run() async throws {
         // MARK: - Configuration
+        let secrets = try await DirectoryFilesProvider(directoryPath: "/run/secrets", allowMissing: true)
         let config = ConfigReader(providers: [
             EnvironmentVariablesProvider(),
+            secrets,
             InMemoryProvider.applicationDefaults,
         ])
 
@@ -230,7 +232,7 @@ struct Serve: AsyncParsableCommand {
 
 swift-configuration reads every value through one `ConfigReader`, built first in each root, except the OpenTelemetry variables swift-otel reads itself ([observability](observability.md#the-bootstrap)):
 
-- Providers in order: `EnvironmentVariablesProvider()` first, then `InMemoryProvider.applicationDefaults`. A value a command also takes as an option goes into an `InMemoryProvider` of the parsed options at the front.
+- Providers in order: `EnvironmentVariablesProvider()`, then `DirectoryFilesProvider` over `/run/secrets` for secrets ([secrets](security.md#secrets)), then `InMemoryProvider.applicationDefaults`. A value a command also takes as an option goes into an `InMemoryProvider` of the parsed options at the front.
 - `Configuration/InMemoryProvider+ApplicationDefaults.swift` holds the deployment's layout, which environment variables override key by key:
 
 ```swift
@@ -285,10 +287,10 @@ extension InMemoryProvider {
 | `HTTP2ClientTransport.Posix.Config(config:)`, `ServiceConfig(config:)` | `grpc.<upstream>` | `keepaliveTimeSeconds` (30), `keepaliveTimeoutSeconds` (10); `deadlineSeconds` (10) |
 | `InternalCallerInterceptor(config:)` | `grpc.server` | `internalCallers`, the common names of the processes that call `XInternalService` |
 | `JWTAuthenticator<UserIdentity>(config:)`, Identity's `JWTIssuer<UserIdentity>(config:)` | `jwt` | `publicKeysPath`, a directory of PEM files; `privateKeyPath` |
-| `PostgresClient.Configuration(config:role:certificateReloader:)` | `postgres` | `host`, `port`, `db`, `tls.trustRootsPath`, `<role>.user`; `<role>.maximumConnections` (10), `statementTimeoutSeconds` (5), `idleInTransactionTimeoutSeconds` (10), `lockTimeoutSeconds` (5) ([connections and timeouts](persistence.md#connections-and-timeouts)); the password fallback's `(config:role:)` adds `<role>.password`, a secret (`POSTGRES_SERVICE_PASSWORD`) |
+| `PostgresClient.Configuration(config:role:certificateReloader:)` | `postgres` | `host`, `port`, `db`, `tls.trustRootsPath`, `<role>.user`; `<role>.maximumConnections` (10), `statementTimeoutSeconds` (5), `idleInTransactionTimeoutSeconds` (10), `lockTimeoutSeconds` (5) ([connections and timeouts](persistence.md#connections-and-timeouts)); the password fallback's `(config:role:)` adds `<role>.password`, a secret (the file `postgres-service-password`) |
 
 - A `<project>-core` reader requires every value a deployment sets, such as a path, host, port or user, and defaults only tuning; the executable's defaults hold the deployment's values.
-- Keys are named as [naming](conventions.md#naming) gives them, and environment names derive from them: `postgres.service.user` is `POSTGRES_SERVICE_USER`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
+- Keys are named as [naming](conventions.md#naming) gives them, and environment and secret file names derive from them: `postgres.service.user` is `POSTGRES_SERVICE_USER`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`, and the secret `postgres.service.password` is the file `postgres-service-password`.
 - A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
 - Secrets and key material follow [secrets](security.md#secrets).
 - A reader's doc comment lists its keys, their types, defaults and whether they're secret.
