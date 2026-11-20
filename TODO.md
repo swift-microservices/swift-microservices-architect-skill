@@ -13,17 +13,9 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 
 ## Next (P1)
 
-- **Changing a workflow.** Patch it or register a new type; a `WorkflowReplayer` test over recorded histories in `XCoreTests`; what the build id does and doesn't do. Home: `workflows.md`, `testing.md`.
-- **Refresh tokens.** Rotate on every use and revoke the session on reuse; state the access token's lifetime; always verify `iss`. Home: `security.md#user-tokens`.
-- **Secrets from files.** `DirectoryFilesProvider` over `/run/secrets` instead of environment variables. Home: `security.md#secrets`, `composition.md#configuration`.
-- **Abuse limits.** Attempt counters in Valkey for sign-in and password reset; a `…Limited` case mapped to `resourceExhausted`, then 429 with `Retry-After`. Home: `security.md`, `grpc.md#status-codes`, `persistence.md#valkey`.
-- **Batch reads.** A `BatchGet…` internal RPC and a `books(ids:)` port for lists that need another service's data, never one call per item. Home: `grpc.md`, `system.md#how-services-talk`.
-- **Typed error mapping in handlers and activities.** `do throws(E)` with an exhaustive `switch`, so a new error case fails the build. Home: `style.md#errors`, `grpc.md#a-handler`, `workflows.md#activities`, SKILL.md's Code style, `check_skill.py` and graders.
-- **Wire-breaking checks for protos.** `buf breaking` and `buf lint` as a swift-microservices/ci input. Home: `delivery.md#a-librarys-ci-workflows`.
-- **Large-table migrations.** Indexes built `CONCURRENTLY` and backfills run outside the migration transaction, as a short-lived command. Home: `persistence.md#migrations`.
-- **Postgres floor and backups.** Postgres 18 as the stated minimum (for `uuidv7()`); backups, point-in-time recovery and Temporal's store as questions for the plan. Home: SKILL.md's Prerequisites and Limitations, `stack.md`, `system.md#out-of-scope`.
-- **Deleting a person's data.** A workflow from Identity to each consumer's internal RPC; Temporal retention as a privacy setting. Home: `system.md`, `workflows.md`.
-- **A "Prepare for production" checklist** and an Operations section in the plan. Home: SKILL.md's Instructions, `system.md#the-plan`.
+- **Wire-breaking checks for protos.** `buf breaking` and `buf lint` as a swift-microservices/ci input that `<project>-protos` enables. Needs a change in swift-microservices/ci first. Home: `delivery.md#a-librarys-ci-workflows`.
+- **A "Prepare for production" checklist** and an Operations section in the plan. `SKILL.md` is at its 5,000-token budget, so this needs room made first. Home: SKILL.md's Instructions, `system.md#the-plan`.
+- **Evals for the P1 rules.** Graders for typed error mapping, secrets from files, refresh-token reuse, attempt limits, batch reads, large-table migrations, workflow changes and data erasure.
 
 ## Later (P2)
 
