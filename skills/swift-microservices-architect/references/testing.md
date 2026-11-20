@@ -4,7 +4,7 @@ Tests follow the module map: each target is tested on its own, over mocks of the
 
 ## Test targets
 
-Each module has a test target, except `<Project>Transport`, `<Project>Testing`, `<project>-protos`' targets and an executable with no readers worth testing. It depends on the module, the modules whose types its tests name (`XCore` for an adapter's), and the mocks it needs, never another adapter or the executable:
+Each module has a test target, except `<Project>Testing`, `<project>-protos`' targets and an executable with no readers worth testing. It depends on the module, the modules whose types its tests name (`XCore` for an adapter's), and the mocks it needs, never another adapter or the executable:
 
 ```swift
 .testTarget(
@@ -46,8 +46,9 @@ Each module has a test target, except `<Project>Transport`, `<Project>Testing`, 
 |---|---|
 | `<Project>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip; refusal of an expired token and of a `sub` that isn't a UUID; the `.user` metadata provider |
 | `<Project>PersistenceTests` | Both branches of `UserSettingsInterceptor`: a bound user's setting, and nothing when none is bound |
+| `<Project>TransportTests` | `InternalCallerInterceptor` admits a listed common name and refuses an unlisted one and a call with no certificate |
 
-`<Project>Transport` and `<Project>Testing` have no test target: every service's startup proves the readers, and the tests that use them prove the mocks.
+`<Project>Testing` has no test target: the tests that use it prove the mocks, and every service's startup proves `<Project>Transport`'s readers.
 
 ```
 Tests/

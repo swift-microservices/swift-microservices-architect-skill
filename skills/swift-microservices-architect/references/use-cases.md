@@ -355,7 +355,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - **Any caller.** A use case any caller with a token may run still takes `subject`, so its signature states the requirement the handler's `requireUser()` enforces.
 - **A role.** Where a role other than administrator may act, such as a librarian, the use case checks `subject.role` before anything else and throws `forbidden`, as an administrators' does. A role held at an organization unwraps it in the same `guard`, as `ListBranchLoans` begins: `guard subject.role == .librarian, let branchID = subject.organizationID else { … }`. It runs on the tenant database when the rows it touches are its tenant's ([organization tenants](persistence.md#organization-tenants)), and on the internal database otherwise.
 - **Administrators.** The use case checks the role before anything else, then runs on the internal database in a service with tenant tables. The gateway's `AdministratorRequestContext` refuses earlier; the use case's check is the rule.
-- **Internal callers.** The use case takes the user it acts for in its input; mTLS admitted the calling process.
+- **Internal callers.** The use case takes the user it acts for in its input; `InternalCallerInterceptor` admitted the calling process by its certificate.
 - **The system.** A [system use case](#system-use-cases) acts for no caller and runs on the worker's database, or on the internal database when a short-lived command runs it ([commands](composition.md#commands)), whose scope then adopts its scope protocol too.
 
 ```swift

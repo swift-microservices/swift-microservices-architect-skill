@@ -66,7 +66,7 @@ A service has only the targets it needs, and each imports only what [its row](re
 | Protobuf ↔ domain, HTTP ↔ protobuf | XGRPC's `Protobuf/` conversions; the gateway's `Schemas/` |
 | Messages between processes; the public API | `<project>-protos`; the gateway's `openapi.yaml` |
 | Who the caller is | The gateway verifies and forwards the token; each service verifies it again |
-| Which processes may call an internal RPC | mTLS at the listener: every process the environment's authority signs |
+| Which processes may call an internal RPC | The callers the plan lists, admitted by certificate through `InternalCallerInterceptor`; never the gateway |
 | Tenant isolation | Row-level security; `<Project>Persistence` binds the caller to each transaction, and each audience's use cases run as [their database role](references/persistence.md#database-roles) |
 | Durable, delayed or multi-service work | A Temporal workflow in XCore's `Workflows/` |
 | What every service needs identically | `<project>-core`: identity, tenant binding, transport readers |

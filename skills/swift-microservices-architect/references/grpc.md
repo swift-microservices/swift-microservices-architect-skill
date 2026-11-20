@@ -233,7 +233,7 @@ package struct BookInternalService: Bookshelf_Catalog_V1_BookInternalService.Sim
 }
 ```
 
-- A handler requires no caller, and no interceptor runs on its descriptor ([interceptors](#interceptors)).
+- A handler requires no caller; only `InternalCallerInterceptor` runs on its descriptor ([interceptors](#interceptors)).
 - Its use cases take no `subject:`. One that acts for a user takes the user's id in its input, as Identity's `GetMember` takes `user_id` ([authorization](use-cases.md#authorization)).
 - The server registers it beside `XService`: `services: [bookService, bookInternalService]`.
 
@@ -322,7 +322,7 @@ The server's interceptors apply to the person-facing descriptors only, as [the c
 
 - `BearerAuthenticationInterceptor` proves a bearer token if there is one and binds the principal; an invalid token ends the call as `unauthenticated` before the handler runs, and a missing one continues unbound.
 - `UserSettingsInterceptor` follows it in a service with tenant tables ([binding the tenant](persistence.md#binding-the-tenant)).
-- `XInternalService` descriptors carry neither: the listener's mTLS trust admits their callers.
+- `XInternalService` descriptors carry neither. `InternalCallerInterceptor` admits their callers by certificate ([mutual TLS](security.md#mutual-tls)): `.apply(internalCallers, to: .services([Bookshelf_Catalog_V1_BookInternalService.descriptor]))`, built from the server's scoped configuration with `try InternalCallerInterceptor(config: serverConfig)`.
 - Clients a service uses to reach other services' internal RPCs carry no interceptor. Forwarding the caller's token with `BearerPropagationInterceptor` is the gateway's ([upstream clients](gateway.md#upstream-clients)).
 
 ## Clients for Core's ports

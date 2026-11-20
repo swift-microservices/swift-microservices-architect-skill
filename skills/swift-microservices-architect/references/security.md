@@ -78,7 +78,43 @@ extension TimedCertificateReloader.Configuration {
 - The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair, and servers bound connection age so every connection handshakes again ([transports](grpc.md#transports)); a failed reload keeps the last good pair and logs a warning.
 - One reloader per certificate pair: the process's pair under `tls` for gRPC and Postgres, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services', and the migrator's under `postgres.owner.tls`.
 - Issuing and renewing certificates is the deployment's job; the process only reads files. A new trust root needs a restart.
-- An internal RPC is admitted by the listener's trust alone, so every peer the authority signs may call it; internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.
+- Internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.
+
+An internal RPC admits only the processes its service lists as callers. `<Project>Transport`'s `InternalCallerInterceptor`, applied to each `XInternalService` descriptor ([interceptors](grpc.md#interceptors)), reads the common name of the peer's certificate and refuses any identity not in `grpc.server.internalCallers` with `permissionDenied`:
+
+```swift
+public import Configuration
+public import GRPCCore
+import GRPCNIOTransportHTTP2
+import X509
+
+/// Admits to an internal service only the processes whose certificates name a listed caller.
+///
+/// ## Configuration keys
+/// - `internalCallers` (string array, required): the common names of the processes that may call.
+public struct InternalCallerInterceptor: ServerInterceptor {
+    private let callers: Set<String>
+
+    public init(config: ConfigReader) throws {
+        …
+    }
+
+    public func intercept<Input: Sendable, Output: Sendable>(
+        request: StreamingServerRequest<Input>,
+        context: ServerContext,
+        next:
+            @concurrent @Sendable (
+                _ request: StreamingServerRequest<Input>,
+                _ context: ServerContext
+            ) async throws -> StreamingServerResponse<Output>
+    ) async throws -> StreamingServerResponse<Output> {
+        …  // the common name of `HTTP2ServerTransport.Posix.Context`'s `peerCertificate`, or `permissionDenied`
+    }
+}
+```
+
+- Catalog lists `loans` and `loans-worker`, the identities of the processes that call `BookInternalService`, as the plan's contracts name its callers ([the plan](system.md#the-plan)).
+- The gateway is never a caller: it faces the internet, and an internal RPC takes the user it acts for in its input, past tokens and row-level security.
 
 ### Postgres
 
