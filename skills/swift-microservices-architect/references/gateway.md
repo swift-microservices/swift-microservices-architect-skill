@@ -244,7 +244,7 @@ package struct LoanController: Sendable {
 
 - A controller registers its routes in `addPublicRoutes(to:)`, `addAuthenticatedRoutes(to:)` and `addAdministratorRoutes(to:)`, each taking the group of its tier; the router decides the paths.
 - A handler is a `private func` with the signature `(Request, Context) async throws -> Response`: decode the body or parameters, call the client, convert the answer. Nothing else.
-- A handler makes one upstream call. An answer that needs another service's data is the owning service's to assemble, through its port, so the gateway never joins two services' answers.
+- A handler makes one upstream call. An answer that needs another service's data is the owning service's to assemble, through its port and a batch read for a list ([clients for Core's ports](grpc.md#clients-for-cores-ports)), so the gateway never joins two services' answers.
 - A route belongs to the controller of the resource it answers with, whatever its path: `books/:id/loans` is `LoanController`'s, registered by the router under `books`.
 - A create reads its key from the IETF `Idempotency-Key` header, never a body field, with `requireIdempotencyKey()`, an extension on `HTTPFields` in `Schemas/Shared/` that answers `400` for a request without it.
 - A query value that is present and malformed answers `400`, like a malformed body; only an absent one takes the service's default.

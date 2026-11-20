@@ -361,6 +361,7 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 ```
 
 - It translates only the statuses a use case acts on; any other error propagates unchanged, so the use case that logs it logs its cause.
+- A list that shows another service's data for each item reads it in one call, never a call per item. The owner's internal contract offers a batch read, `BatchGetBooks`, which takes `ids` up to the list's maximum page size and returns the books it found; the port reads `books(ids: Set<UUID>) async throws -> [UUID: Book]`, and an id with no book is absent from the dictionary.
 - `notFound` on a lookup becomes `nil`, matching the port's optional.
 - The response conversion (`Book+Protobuf.swift` in `Clients/Protobuf/`) throws on a malformed message, such as an id that isn't a UUID or an unset field the domain needs, rather than inventing a value.
 - Every call has a deadline: the client's `ServiceConfig` sets one for all methods, and a port that needs a tighter bound passes `CallOptions` with its own `timeout`.
