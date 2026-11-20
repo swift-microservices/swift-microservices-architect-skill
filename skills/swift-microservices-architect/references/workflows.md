@@ -181,12 +181,17 @@ package struct LoanActivities {
     /// Reports whether the loan is overdue now: one returned in the meantime stays returned.
     @Activity
     package func markOverdue(input: MarkOverdueInput) async throws -> Bool {
-        do {
+        do throws(MarkLoanOverdueUseCaseError) {
             let markLoanOverdueInput = MarkLoanOverdueUseCaseInput(loanID: input.loanID)
             let loan = try await markLoanOverdueUseCase(input: markLoanOverdueInput)
             return loan.status == .overdue
-        } catch MarkLoanOverdueUseCaseError.loanNotFound {
-            throw ApplicationError(message: "The loan does not exist.", type: "LoanNotFound", isNonRetryable: true)
+        } catch {
+            switch error {
+            case .loanNotFound:
+                throw ApplicationError(message: "The loan does not exist.", type: "LoanNotFound", isNonRetryable: true)
+            case .unknown:
+                throw error
+            }
         }
     }
 
@@ -220,7 +225,7 @@ package struct LoanActivities {
 - An activity runs a [system use case](use-cases.md#system-use-cases) when the step reads or writes this service's data, on the worker's database, and calls a port when the step is one effect another system owns; a use case that would only forward to the port adds nothing. It makes no business decision: the use case decides, and the activity reports what it decided, never discarding what the use case returned, since the workflow's next step depends on that answer.
 - Its input is a small struct nested in the container, named for the activity (`MarkOverdueInput`), holding ids and values, never commands; the activity builds what the use case or port takes.
 - It returns a primitive (`Bool`) or a small nested output holding only what the workflow reads, never a domain model, which isn't `Codable`.
-- It maps a permanent failure, a case no retry can change, to `ApplicationError(message:type:isNonRetryable: true)`, catching that case explicitly. Every other error propagates, and Temporal retries it.
+- It maps its use case's error as a handler does, with `do throws(E)` and an exhaustive `switch` ([errors](style.md#errors)): a permanent failure, a case no retry can change, becomes `ApplicationError(message:type:isNonRetryable: true)`, and every other case is rethrown, so Temporal retries it.
 - It's safe to run twice: writes are conditional or keyed, and external effects carry an idempotency key derived from the workflow's subject (`loans-overdue-notice-<loan id>`). When one subject gets the effect more than once, such as a member's successive reset codes, the key adds the effect's own stored id: never a value made at send time, which a retry wouldn't repeat, and never a secret or part of one.
 - Activities are registered by name, the method's name capitalized (`MarkOverdue`).
 

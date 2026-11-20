@@ -73,7 +73,7 @@ A service has only the targets it needs, and each imports only what [its row](re
 
 ## Code style
 
-Code reads like the requirement it implements, with Apple's WWDC sample code as the bar ([style](references/style.md)). Use cases map errors this way; adapters keep one `catch` per case and add no final `catch` ([errors](references/style.md#errors)):
+Code reads like the requirement it implements, with Apple's WWDC sample code as the bar ([style](references/style.md)). Use cases map errors this way; a handler or activity maps a use case's error with `do throws(XUseCaseError)` and an exhaustive `switch` ([errors](references/style.md#errors)):
 
 ```swift
 do {

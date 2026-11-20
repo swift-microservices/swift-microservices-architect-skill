@@ -178,29 +178,32 @@ package func borrowBook(
     let subject = try requireUser()
     let input = try BorrowBookUseCaseInput(request)
 
-    do {
+    do throws(BorrowBookUseCaseError) {
         let loan = try await borrowBookUseCase(subject: subject, input: input)
         return Bookshelf_Loans_V1_Loan(loan)
-    } catch BorrowBookUseCaseError.invalidIdempotencyKey {
-        throw RPCError(code: .invalidArgument, message: "A valid idempotency key is required.")
-    } catch BorrowBookUseCaseError.bookNotFound {
-        throw RPCError(code: .notFound, message: "The book was not found.")
-    } catch BorrowBookUseCaseError.loanLimitReached {
-        throw RPCError(code: .failedPrecondition, message: "The loan limit has been reached.")
-    } catch BorrowBookUseCaseError.idempotencyConflict {
-        throw RPCError(code: .failedPrecondition, message: "The idempotency key was used to borrow another book.")
-    } catch BorrowBookUseCaseError.catalogUnavailable {
-        throw RPCError(code: .unavailable, message: "The catalog is unavailable.")
-    } catch BorrowBookUseCaseError.unknown {
-        throw RPCError(code: .internalError, message: "The book could not be borrowed.")
+    } catch {
+        switch error {
+        case .invalidIdempotencyKey:
+            throw RPCError(code: .invalidArgument, message: "A valid idempotency key is required.")
+        case .bookNotFound:
+            throw RPCError(code: .notFound, message: "The book was not found.")
+        case .loanLimitReached:
+            throw RPCError(code: .failedPrecondition, message: "The loan limit has been reached.")
+        case .idempotencyConflict:
+            throw RPCError(code: .failedPrecondition, message: "The idempotency key was used to borrow another book.")
+        case .catalogUnavailable:
+            throw RPCError(code: .unavailable, message: "The catalog is unavailable.")
+        case .unknown:
+            throw RPCError(code: .internalError, message: "The book could not be borrowed.")
+        }
     }
 }
 ```
 
 1. Require a caller for the caller's own and administrators' RPCs (`requireUser()`); anyone's require nothing.
 2. Convert the request before the `do`: a malformed request is refused as `invalidArgument` by the conversion.
-3. The `do` holds the use case call and the response's conversion; one `catch` per case of the use case's error, in the order the enum declares them.
-4. No catch-all, and no logging: the use case logged what happened. Because the handler `throws`, the compiler doesn't flag a case left out; a case added to an error is added to every handler that maps it, and one that slips through reaches the client as `unknown`.
+3. The `do` declares the use case's error, `do throws(BorrowBookUseCaseError)`, and holds the use case call and the response's conversion, which doesn't throw. Its one `catch` switches over the error, a `case` per case in the order the enum declares them.
+4. No `default`, and no logging: the use case logged what happened. The `switch` is exhaustive, so a case added to the error fails the build of every handler that maps it.
 
 ## An internal service
 
@@ -221,13 +224,16 @@ package struct BookInternalService: Bookshelf_Catalog_V1_BookInternalService.Sim
     ) async throws -> Bookshelf_Catalog_V1_Book {
         let input = try GetBookUseCaseInput(request)
 
-        do {
+        do throws(GetBookUseCaseError) {
             let book = try await getBookUseCase(input: input)
             return Bookshelf_Catalog_V1_Book(book)
-        } catch GetBookUseCaseError.bookNotFound {
-            throw RPCError(code: .notFound, message: "The book was not found.")
-        } catch GetBookUseCaseError.unknown {
-            throw RPCError(code: .internalError, message: "The book could not be read.")
+        } catch {
+            switch error {
+            case .bookNotFound:
+                throw RPCError(code: .notFound, message: "The book was not found.")
+            case .unknown:
+                throw RPCError(code: .internalError, message: "The book could not be read.")
+            }
         }
     }
 }

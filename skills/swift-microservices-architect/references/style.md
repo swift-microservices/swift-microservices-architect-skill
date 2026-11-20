@@ -47,7 +47,8 @@ let rows = try await connection.execute(statement, logger: logger)
 ## Errors
 
 - A use case declares its error with typed throws: `async throws(BorrowBookUseCaseError) -> Loan`. Repositories, ports, clients and handlers use untyped `throws`.
-- Errors are mapped with `do` and one `catch` per case: `catch CatalogClientError.unavailable { throw .catalogUnavailable }`. The order and the final `catch` are in [the body of a use case](use-cases.md#the-body-of-a-use-case); a handler maps every case and has no final `catch` ([a handler](grpc.md#a-handler)).
+- A use case maps the errors of its repositories and ports with `do` and one `catch` per case: `catch CatalogClientError.unavailable { throw .catalogUnavailable }`. The order and the final `catch` are in [the body of a use case](use-cases.md#the-body-of-a-use-case).
+- An adapter that calls a use case, a handler or an activity, maps the use case's typed error with `do throws(XUseCaseError)` and one `catch` that switches over every case, with no `default`, so a case added to the error fails its build ([a handler](grpc.md#a-handler)).
 - In a use case, a handler and an activity, the `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
 - There, each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
 - A `do` nests in one place: around a workflow's start, when its `catch` returns what the path built ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
