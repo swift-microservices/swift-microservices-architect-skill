@@ -13,7 +13,7 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 
 ## Next (P1)
 
-- **Wire-breaking checks for protos.** `buf breaking` and `buf lint` as a swift-microservices/ci input that `<project>-protos` enables. Needs a change in swift-microservices/ci first. Home: `delivery.md#a-librarys-ci-workflows`.
+- **Wire-breaking checks for protos.** `delivery.md` states them; they hold once [swift-microservices/ci#18](https://github.com/swift-microservices/ci/pull/18) is released and `<project>-protos` pins that release.
 - **A "Prepare for production" checklist** and an Operations section in the plan. `SKILL.md` is at its 5,000-token budget, so this needs room made first. Home: SKILL.md's Instructions, `system.md#the-plan`.
 - **Evals for the P1 rules.** Graders for typed error mapping, secrets from files, refresh-token reuse, attempt limits, batch reads, large-table migrations, workflow changes and data erasure.
 

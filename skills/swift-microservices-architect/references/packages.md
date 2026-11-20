@@ -267,6 +267,7 @@ bookshelf-core/
 ```
 bookshelf-protos/
 ├── Package.swift
+├── buf.yaml                                          buf's modules, lint and breaking rules (delivery.md)
 └── Sources/
     ├── CatalogProtos/
     │   ├── CatalogProtos.swift                       empty: the generated files are the sources
