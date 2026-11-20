@@ -8,7 +8,7 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 
 ## Before production (P0)
 
-- **Deploy order.** The migrator application must be healthy before the worker and the other replicas deploy. Waits on an input in swift-microservices/ci that makes `deploy_dokploy.yml` deploy the first application and wait for its health check before the rest. Home: `delivery.md#a-services-ci-workflows`.
+- **Deploy order.** `delivery.md` states it; it holds once [swift-microservices/ci#17](https://github.com/swift-microservices/ci/pull/17) is released and services pin that release.
 - **Evals for the production rules.** Graders for the rules added with the pool budget and timeouts, `InternalCallerInterceptor`, health checks and observability, per `CLAUDE.md`'s eval suite, then a comparison against `main`.
 
 ## Next (P1)
