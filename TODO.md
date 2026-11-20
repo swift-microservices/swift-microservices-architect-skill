@@ -21,5 +21,4 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 - **Temporal access per service.** Any process with a Temporal certificate can signal another service's workflows in the shared namespace; a namespace per service, or an authorizer, closes it. Home: `security.md`, `workflows.md#the-worker`.
 
 - **Strict memory safety.** `.strictMemorySafety()` flags `nonisolated(unsafe)` and unsafe pointers, not `@unchecked Sendable`, and CI turns its warnings into errors. Build the package template with it, the Temporal macros and generated contracts included, before adding it to `swiftSettings`. Home: `packages.md#swift-settings`.
-- **Recurring jobs and retention.** Temporal Schedules with a stated creator; retention for webhook event ids, refresh tokens and expired rows. Home: `workflows.md`.
 - **Supply chain.** SBOM, provenance attestation and image scanning in `build_image.yml`. Needs a change in swift-microservices/ci first. Home: `delivery.md`.

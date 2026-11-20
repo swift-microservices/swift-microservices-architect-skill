@@ -11,6 +11,7 @@ Durable processes on Temporal with swift-temporal-sdk: when work is a workflow, 
 - Activities
 - Activity options
 - Changing a workflow
+- Recurring work
 - The worker
 
 ## When work is a workflow
@@ -272,6 +273,14 @@ A deploy replaces the code under every run in flight, and `LoanWorkflow`'s runs 
 - A change to an activity's body alone, or to a payload's optional field, replays without a patch.
 - `temporal.worker.buildid`, the image's commit, labels which code a worker ran. The worker doesn't version by build id, so every worker polls every run, which is why a change must replay.
 - `XCoreTests` replays each workflow's recorded histories, so a change that breaks a run in flight fails its build before it deploys ([test targets](testing.md#test-targets)).
+
+## Recurring work
+
+Work on a calendar, such as deleting rows whose retention has ended, is a workflow a Temporal Schedule starts: never a timer loop in serve, a cron container, or a workflow that sleeps forever.
+
+- A service declares its schedules once, in `XCore/Workflows/XSchedules.swift`: each one's id, calendar, workflow and input, with `overlap: .skip`, so a run that outlasts its interval isn't joined by a second.
+- `worker run` applies them before its `ServiceGroup` starts, the way `serve --migrate-database` applies migrations ([the worker's root](composition.md#the-workers-root)): inside `TemporalClient.connect(transport:configuration:_:)`, it creates each schedule by its id, and on `ScheduleAlreadyRunningError` updates it to the declared one, so every replica converges on the same schedules.
+- A table whose rows stop mattering has a retention period, a policy value, and a scheduled workflow whose activity runs a system use case that deletes the expired rows in batches by id: the webhook event ids Loans keeps against redelivery (`PurgeNoticeEventsWorkflow`), and Identity's ended sessions and their refresh tokens.
 
 ## The worker
 
