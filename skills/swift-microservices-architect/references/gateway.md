@@ -371,6 +371,7 @@ package struct Problem: HTTPResponseError {
 - An upstream's server error answers its status alone, since a transport's message can name internal hosts. It's logged with its cause, as is anything that isn't an HTTP or RPC error, which answers `500`.
 - Hummingbird's other `HTTPResponseError`s keep their status, such as `413` for a body over the upload limit. Router middleware also wraps the not-found responder, so an unmatched path's `404` is a problem too.
 - `RPCError` gets no retroactive `HTTPResponseError` conformance: the middleware is the one place it becomes a status.
+- A problem's `instance` is the request's id, `urn:bookshelf:request:<context.id>`. It's the `hb.request.id` on every log line the request writes, beside its trace id ([observability](observability.md#the-bootstrap)), so a client that reports a problem names the trace to read.
 - `openapi.yaml` declares the `Problem` schema once and references it from every error response a route documents.
 
 `HTTPResponse.Status.init(_ code: RPCError.Code)`, a `switch` with a `default`, maps the codes:
