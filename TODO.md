@@ -8,12 +8,10 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 
 ## Before production (P0)
 
-- **Deploy order.** `delivery.md` states it; it holds once [swift-microservices/ci#17](https://github.com/swift-microservices/ci/pull/17) is released and services pin that release.
 - **Evals for the production rules.** Graders for the rules added with the pool budget and timeouts, `InternalCallerInterceptor`, health checks and observability, per `CLAUDE.md`'s eval suite, then a comparison against `main`.
 
 ## Next (P1)
 
-- **Wire-breaking checks for protos.** `delivery.md` states them; they hold once [swift-microservices/ci#18](https://github.com/swift-microservices/ci/pull/18) is released and `<project>-protos` pins that release.
 - **Evals for the P1 rules.** Graders for typed error mapping, secrets from files, refresh-token reuse, attempt limits, batch reads, large-table migrations, workflow changes and data erasure.
 
 ## Later (P2)
