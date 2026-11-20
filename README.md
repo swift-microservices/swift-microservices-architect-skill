@@ -84,7 +84,7 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 
 It builds on [Hummingbird](https://github.com/hummingbird-project/hummingbird), [gRPC Swift 2](https://github.com/grpc/grpc-swift-2), the [Temporal Swift SDK](https://github.com/apple/swift-temporal-sdk), [PostgresNIO](https://github.com/vapor/postgres-nio), [valkey-swift](https://github.com/valkey-io/valkey-swift), [Swift Configuration](https://github.com/apple/swift-configuration), [Swift Service Lifecycle](https://github.com/swift-server/swift-service-lifecycle) and the [swift-microservices](https://github.com/swift-microservices) libraries.
 
-Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, client SDKs and frontends.
+Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, backups, client SDKs and frontends.
 
 ### Works well with
 

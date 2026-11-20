@@ -107,7 +107,7 @@ do {
 
 ## Prerequisites
 
-- A Swift toolchain at the package's `swift-tools-version`, and for its `XPostgresTests` and `XValkeyTests` a real Postgres and Valkey reached through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
+- A Swift toolchain at the package's `swift-tools-version`, and for its `XPostgresTests` and `XValkeyTests` a real Postgres, 18 or later for `uuidv7()`, and Valkey reached through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
 - Every build and test of an XCore with workflows links the Temporal SDK and its prebuilt sdk-core binary target, so a machine that can't fetch that artifact can't build Core ([what Core may link](references/packages.md#what-core-may-link)).
 
 ## Available Scripts
@@ -125,7 +125,7 @@ Each runs from the package's root and exits non-zero on any failure:
 - Not for iOS, macOS or SwiftUI apps, or Swift packages that aren't servers.
 - The code inside a shape that isn't architecture belongs to the [related skills](#related-skills).
 - A workflow start or signal lost after its transaction commits is recovered only when the client retries the request ([transactions](references/use-cases.md#transactions)).
-- Not covered: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends; ask the user rather than invent them.
+- Not covered: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery of Postgres and Temporal's store, client SDKs and frontends; ask the user rather than invent them.
 
 ## References
 
