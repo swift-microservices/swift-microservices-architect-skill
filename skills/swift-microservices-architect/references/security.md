@@ -8,6 +8,7 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens,
 - User tokens
 - Authorization
 - Secrets
+- Attempt limits
 - Webhooks
 
 ## The trust model
@@ -252,6 +253,16 @@ Each layer refuses what it can see; the use case decides.
 - A secret value reaches the process as a file in `/run/secrets` named for its key, which `DirectoryFilesProvider` reads ([configuration](composition.md#configuration)), never as an environment variable: `docker inspect` and `/proc/<pid>/environ` show those to anyone who can read the container's configuration.
 - Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres stores their SHA-256 digest (`Crypto`), never the secret; Valkey stores a short-lived one with its expiry.
 - Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), on `NIOThreadPool.singleton.runIfActive { … }`, so the hash never blocks the cooperative pool.
+
+## Attempt limits
+
+A request that proves a secret someone could guess, signing in with a password or redeeming a reset code, is limited per account: Identity counts the account's failures in Valkey and refuses once the policy's limit is reached, before checking the secret.
+
+- The count is an XValkey repository behind a Core port, `SignInFailureRepository`, keyed by the account's id (`identity:sign-in-failures:<user id>`): `failures(userID:)`, `recordFailure(userID:window:)`, which increments and sets the window's expiry on the first failure, and `clear(userID:)` after a success ([Valkey](persistence.md#valkey)).
+- The limit and the window are policy values, `SessionPolicy.maximumSignInFailures` and `signInFailureWindow`.
+- The use case's case is `tooManyAttempts`, which maps to `resourceExhausted` and the gateway's `429` ([status codes](grpc.md#status-codes)).
+- Unlike a cache's read, a failed read of the count fails the request: a limit that Valkey's outage turned off would let guessing through.
+- Limits per address, against many accounts at once, are the edge's ([the edge](gateway.md#the-edge)).
 
 ## Webhooks
 
