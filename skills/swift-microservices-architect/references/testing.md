@@ -25,6 +25,7 @@ Each module has a test target, except `<Project>Testing`, `<project>-protos`' ta
 |---|---|---|
 | `XCoreTests` | Each use case: its result and every case of its error | `MockDatabase` with a scope of mock repositories, and mocks of its ports; `TemporalTestKit`'s test server for one that starts a workflow, since `TemporalClient` is a concrete type |
 | `XCoreTests`, for workflows | Each workflow's path | `TemporalTestKit`'s time-skipping test server, running the activity container over mocks |
+| `XCoreTests`, for workflow changes | Each workflow replays the histories recorded from its runs | `WorkflowReplayer` over the JSON histories in `Histories/<WorkflowName>/`, each exported with `temporal workflow show --output json` from a run of the workflow's previous release |
 | `XCoreTests`, for activity containers | Each activity's mapping, calling its method directly | Mocks of the container's use case and port protocols |
 | `XGRPCTests` | Each handler: the caller it requires, its conversions, every error case's status; each client for a port: its request, its conversion, the statuses it translates | Mock use cases, and a principal bound in `OperationContext`; a stub of the other service's contract over `GRPCInProcessTransport` |
 | `XPostgresTests` | Statements, repositories, row-level security as each role, migrations | A real Postgres, which no mock can stand in for |

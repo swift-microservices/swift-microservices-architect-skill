@@ -210,7 +210,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 
 ```
 - [ ] Look up the feature's established approach (style.md#reading-like-the-requirement)
-- [ ] Load temporal-developer, and design the workflow with it: waiting, handlers, compensation, versioning; where it has no Swift reference, read the SDK's documentation before using an API
+- [ ] Load temporal-developer, and design the workflow with it: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow); where it has no Swift reference, read the SDK's documentation before using an API
 - [ ] Each person's change is written by its use case, then signalled if the run waits on it, or sent as an update if only the run can decide (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
 - [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)

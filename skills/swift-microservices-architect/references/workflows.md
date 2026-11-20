@@ -10,6 +10,7 @@ Durable processes on Temporal with swift-temporal-sdk: when work is a workflow, 
 - Determinism
 - Activities
 - Activity options
+- Changing a workflow
 - The worker
 
 ## When work is a workflow
@@ -248,6 +249,16 @@ extension ActivityOptions {
     )
 }
 ```
+
+## Changing a workflow
+
+A deploy replaces the code under every run in flight, and `LoanWorkflow`'s runs last a loan's whole period, so every change to a workflow replays the histories those runs have already written. How a change is patched follows `temporal-developer`; these rules hold around it:
+
+- A change to the commands a workflow issues, such as an activity added, removed or reordered, or a wait changed, takes the new path behind `context.patch("<change>")` and keeps the old one. Once no run that started before the change remains, `context.deprecatePatch("<change>")` replaces the branch in one deploy, and a later deploy removes it.
+- A change too large to patch is a new workflow type, which new runs start; the worker registers it beside the old one until the old one's runs have ended.
+- A change to an activity's body alone, or to a payload's optional field, replays without a patch.
+- `temporal.worker.buildid`, the image's commit, labels which code a worker ran. The worker doesn't version by build id, so every worker polls every run, which is why a change must replay.
+- `XCoreTests` replays each workflow's recorded histories, so a change that breaks a run in flight fails its build before it deploys ([test targets](testing.md#test-targets)).
 
 ## The worker
 
