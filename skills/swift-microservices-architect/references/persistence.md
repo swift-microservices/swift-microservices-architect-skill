@@ -7,6 +7,7 @@ This file gives the shapes: the roles, how the caller is bound, scopes, reposito
 ## Contents
 - The Postgres target
 - Database roles
+- Connections and timeouts
 - Row-level security
 - Binding the tenant
 - Organization tenants
@@ -57,6 +58,14 @@ package struct PostgresLoansScope: PostgresScope, BorrowBookUseCaseScope, Return
 - A scope adopts exactly the scope protocols of the use cases that may run as its role. `PostgresLoansInternalScope` adopts `ListAllLoansUseCaseScope` and `ReceiveNoticeEventUseCaseScope`; `PostgresLoansWorkerScope` adopts `MarkLoanOverdueUseCaseScope`. Composing `ListAllLoansUseCase` on the tenant database then fails to compile, so which role a use case runs as is checked by the compiler.
 - Several scopes hold the same repository types; each is built on its own role's connection.
 - PostgresNIO declares a protocol named `PostgresDatabase` too, so a type annotation in a file that imports both modules, such as a test's, spells `PersistencePostgres.PostgresDatabase<PostgresLoansScope>`.
+
+## Connections and timeouts
+
+Every role's `PostgresClient` is built from `<Project>Persistence`'s reader, `PostgresClient.Configuration(config:role:certificateReloader:)`, which bounds its pool and its sessions from configuration ([configuration](composition.md#configuration)):
+
+- The pool opens at most `<role>.maximumConnections`. One Postgres server serves every service of an environment by default ([data placement](system.md#data-placement)), so the plan sizes the pools: the maximums of every role client, times each process's replicas, add up to less than the server's `max_connections`, with room left for the migrator and administration.
+- A role that serves requests or runs activities starts each connection with `statement_timeout` and `idle_in_transaction_session_timeout`, sent as startup parameters. A slow statement fails before the caller's deadline instead of holding its connection, and a transaction a stalled process left open ends and releases its locks.
+- The owner starts its connection with `lock_timeout` and no statement timeout: a migration waits at most that long for a table's lock, rather than queueing every query behind it, and then runs as long as it needs. A migration refused by the timeout fails `serve --migrate-database`, and the platform restarts it.
 
 ## Row-level security
 

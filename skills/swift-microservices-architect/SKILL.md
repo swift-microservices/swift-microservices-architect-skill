@@ -135,7 +135,7 @@ Each runs from the package's root and exits non-zero on any failure:
 | [packages.md](references/packages.md) | Creating a package, changing a target's imports or dependencies, deciding what Core may link, running the boundary or style checks |
 | [stack.md](references/stack.md) | Choosing a library or a version, or checking whether one links full Foundation |
 | [use-cases.md](references/use-cases.md) | Writing a model, error, repository, port or use case, including a system use case, or deciding a transaction or authorization |
-| [persistence.md](references/persistence.md) | Writing a scope, statement, migration, policy, tenant table, Valkey repository or Valkey client |
+| [persistence.md](references/persistence.md) | Writing a scope, statement, migration, policy, tenant table, Valkey repository or Valkey client, or sizing a role's pool and timeouts |
 | [grpc.md](references/grpc.md) | Changing a contract, handler, conversion, client, paged list or transport |
 | [gateway.md](references/gateway.md) | Adding a route, request context, controller, webhook route or error mapping |
 | [workflows.md](references/workflows.md) | Writing, starting or reaching a workflow, activity container or worker |

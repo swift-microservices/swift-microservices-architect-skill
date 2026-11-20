@@ -124,7 +124,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 | Target | Holds |
 |---|---|
 - Commands: `serve [--migrate-database]`, `worker run`
-- Data: where it lives, the database roles and the use cases each runs, and how each process proves its roles
+- Data: where it lives, the database roles and the use cases each runs, how each process proves its roles, and each role client's maximum connections
 - Calls out to: other services' internal RPCs, providers, Temporal, Valkey
 
 ## Shared packages
