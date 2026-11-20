@@ -7,6 +7,7 @@ How a backend splits into services, how they talk, and the packages they share. 
 - Naming a service
 - Contracts
 - How services talk
+- Erasing a person's data
 - Data placement
 - The shared packages
 - The plan
@@ -71,6 +72,15 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 - Durable work is a workflow, not a message on a queue: Temporal holds the retries, the timers and the history.
 - Calls between services form no cycle. Break one by moving ownership, extracting a third capability, or making one direction a workflow.
 - What each hop proves, and where a user's token may travel: [the trust model](security.md#the-trust-model).
+
+## Erasing a person's data
+
+A person's data lives in every service that keeps rows about them, so erasing it is a workflow of the service that owns the person:
+
+- Identity's `CloseAccount` use case closes the account and starts `AccountErasureWorkflow` after its commit. One activity per service that keeps rows about members calls that service's internal `Erase…` RPC with the user's id: Loans' `EraseMemberLoans`. A service that starts keeping rows about members adds its RPC and its activity in the same change.
+- Each `Erase…` use case deletes what the service owns about the person, or replaces it where a record must stay, such as a loan a branch accounts for, and answers the same when run again.
+- The workflow's calls run against the usual direction, Identity to Loans, which a workflow may do without forming a call cycle ([how services talk](#how-services-talk)).
+- Workflow payloads and log lines carry ids, never personal data ([reaching a run](workflows.md#reaching-a-run-from-a-use-case), [logging](use-cases.md#logging)), so a history and a log hold nothing to erase; the namespace's retention bounds how long histories keep those ids.
 
 ## Data placement
 
