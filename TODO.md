@@ -17,4 +17,3 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 ## Later (P2)
 
 - **Strict memory safety.** `.strictMemorySafety()` flags `nonisolated(unsafe)` and unsafe pointers, not `@unchecked Sendable`, and CI turns its warnings into errors. Build the package template with it, the Temporal macros and generated contracts included, before adding it to `swiftSettings`. Home: `packages.md#swift-settings`.
-- **Supply chain.** `delivery.md` states it; it holds once [swift-microservices/ci#19](https://github.com/swift-microservices/ci/pull/19) is released and services pin that release.
