@@ -35,7 +35,7 @@ struct Loans: AsyncParsableCommand {
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
 - `serve --migrate-database` applies pending migrations as the owner, proved by the migrator's certificate, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
 - A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
-- An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived command, a subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
+- An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived command, a subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections, no Observability and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
 - A short-lived command's operands, such as whom it acts on, are its `@Option`s and go into the use case's input; only a value configuration also carries goes through the provider. It reports through its log line and exit status, and prints to standard output only a value the operator must read.
 - A short-lived command connects as `<x>_internal`, since no caller is bound, and reads a secret it needs through the `ConfigReader` with `isSecret: true`, never from a flag, which the process list shows.
 - Each command's `run()` is a composition root: the only code that reads configuration, constructs concrete types and runs them. Nothing below it reads configuration, builds a client or starts a task.
@@ -63,15 +63,23 @@ struct Serve: AsyncParsableCommand {
 
         // MARK: - Logging
         let logLevel = config.string(forKey: "logLevel", default: Logger.Level.info)
+        let traceMetadataProvider = OTel.makeLoggingMetadataProvider()
+        let metadataProvider = Logger.MetadataProvider.multiplex([.user, traceMetadataProvider])
         LoggingSystem.bootstrap(
             { label, metadataProvider in
                 var handler = StreamLogHandler.standardOutput(label: label, metadataProvider: metadataProvider)
                 handler.logLevel = logLevel
                 return handler
             },
-            metadataProvider: .user
+            metadataProvider: metadataProvider
         )
         let logger = Logger(label: "bookshelf-loans")
+
+        // MARK: - Observability
+        var otelConfiguration = OTel.Configuration.default
+        otelConfiguration.serviceName = "bookshelf-loans"
+        otelConfiguration.logs.enabled = false
+        let observability = try OTel.bootstrap(configuration: otelConfiguration)
 
         // MARK: - Infrastructure
         let tlsConfig = config.scoped(to: "tls")
@@ -109,7 +117,8 @@ struct Serve: AsyncParsableCommand {
             config: catalogTransportConfig,
             serviceConfig: catalogServiceConfig
         )
-        let catalogGRPCClient = GRPCClient(transport: catalogTransport)
+        let catalogTracing = ClientOTelTracingInterceptor(serverHostname: catalogHost, networkTransportMethod: "tcp")
+        let catalogGRPCClient = GRPCClient(transport: catalogTransport, interceptorPipeline: [.apply(catalogTracing, to: .all)])
 
         let temporalConfig = config.scoped(to: "temporal")
         let temporalTLSConfig = temporalConfig.scoped(to: "tls")
@@ -166,6 +175,7 @@ struct Serve: AsyncParsableCommand {
         let serverConfig = config.scoped(to: "grpc.server")
         let serverHost = try serverConfig.requiredString(forKey: "host")
         let serverPort = try serverConfig.requiredInt(forKey: "port")
+        let serverHostname = try serverConfig.requiredString(forKey: "hostname")
         let serverSecurity: HTTP2ServerTransport.Posix.TransportSecurity = try .mTLS(config: tlsConfig, certificateReloader: certificateReloader)
         let serverTransportConfig = HTTP2ServerTransport.Posix.Config(config: serverConfig)
         let serverTransport = HTTP2ServerTransport.Posix(
@@ -173,6 +183,7 @@ struct Serve: AsyncParsableCommand {
             transportSecurity: serverSecurity,
             config: serverTransportConfig
         )
+        let serverTracing = ServerOTelTracingInterceptor(serverHostname: serverHostname, networkTransportMethod: "tcp")
         let bearerAuthentication = BearerAuthenticationInterceptor(authenticator: authenticator)
         let userSettings = UserSettingsInterceptor()
         let healthService = HealthService()
@@ -181,6 +192,7 @@ struct Serve: AsyncParsableCommand {
             transport: serverTransport,
             services: [loanService, healthService],
             interceptorPipeline: [
+                .apply(serverTracing, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
                 .apply(bearerAuthentication, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
                 .apply(userSettings, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
             ]
@@ -189,6 +201,7 @@ struct Serve: AsyncParsableCommand {
         // MARK: - Lifecycle
         let serviceGroup = ServiceGroup(
             services: [
+                observability,
                 certificateReloader,
                 temporalCertificateReloader,
                 postgresClient,
@@ -207,7 +220,7 @@ struct Serve: AsyncParsableCommand {
 }
 ```
 
-- **Configuration, Logging, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order, and a short-lived command's the first four ([commands](#commands)).
+- **Configuration, Logging, Observability, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order ([observability](observability.md)), and a short-lived command has Configuration, Logging, Infrastructure and Composition ([commands](#commands)).
 - Infrastructure builds what talks to the outside: certificate reloaders, database clients per role, the authenticator, upstream clients, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
 - The use cases that start workflows take what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
@@ -215,7 +228,7 @@ struct Serve: AsyncParsableCommand {
 
 ## Configuration
 
-swift-configuration reads every value through one `ConfigReader`, built first in each root:
+swift-configuration reads every value through one `ConfigReader`, built first in each root, except the OpenTelemetry variables swift-otel reads itself ([observability](observability.md#the-bootstrap)):
 
 - Providers in order: `EnvironmentVariablesProvider()` first, then `InMemoryProvider.applicationDefaults`. A value a command also takes as an option goes into an `InMemoryProvider` of the parsed options at the front.
 - `Configuration/InMemoryProvider+ApplicationDefaults.swift` holds the deployment's layout, which environment variables override key by key:
@@ -282,7 +295,7 @@ extension InMemoryProvider {
 
 ## Logging
 
-- `LoggingSystem.bootstrap` runs once, first after configuration, with `metadataProvider: .user` from `<Project>Authentication` ([user tokens](security.md#user-tokens)).
+- `LoggingSystem.bootstrap` runs once, first after configuration, with a metadata provider that multiplexes `.user` from `<Project>Authentication` ([user tokens](security.md#user-tokens)) and swift-otel's, which adds the trace and span ids.
 - The level comes from `logLevel`, defaulting to `info`; the label is as [naming](conventions.md#naming) gives it.
 - The root's `logger` is passed to every client, database, use case and server that takes one, and bound around the group's run with `withLogger(logger)` for the libraries that log through `Logger.current`, such as swift-temporal-sdk. Nothing creates a logger of its own.
 
@@ -291,7 +304,7 @@ extension InMemoryProvider {
 A root lists its long-lived components in one `ServiceGroup` and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
 
 - Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `TemporalClient`, `TemporalWorker`.
-- Order is dependency order: certificate reloaders, database clients, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
+- Order is dependency order: the observability service first, so it flushes last, then certificate reloaders, database clients, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
 - `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. Running the group is the root's last line.
 - A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
 - A long-running component of the service's own is a `Service` whose `run()` returns on graceful shutdown: its loop iterates `sequence.cancelOnGracefulShutdown()`, or wraps its work in `withGracefulShutdownHandler`.
@@ -312,11 +325,9 @@ Each serve process reports its health over gRPC, and the gateway over HTTP, so t
 
 ```swift
 // MARK: - Infrastructure
-…  // tls, temporal and each client's transport, as in Serve
+…  // tls, temporal, and each upstream's transport and traced GRPCClient, as in Serve
 let workerPostgresConfiguration = try PostgresClient.Configuration(config: postgresConfig, role: "worker", certificateReloader: certificateReloader)
 let workerPostgresClient = PostgresClient(configuration: workerPostgresConfiguration, backgroundLogger: logger)
-let identityGRPCClient = GRPCClient(transport: identityTransport)
-let catalogGRPCClient = GRPCClient(transport: catalogTransport)
 
 // MARK: - Composition
 let workerDatabase = PostgresDatabase<PostgresLoansWorkerScope>(client: workerPostgresClient, logger: logger)
@@ -343,7 +354,7 @@ let worker = try TemporalWorker(
 )
 
 // MARK: - Lifecycle
-// certificateReloader, temporalCertificateReloader, workerPostgresClient, identityGRPCClient, catalogGRPCClient, worker
+// observability, certificateReloader, temporalCertificateReloader, workerPostgresClient, identityGRPCClient, catalogGRPCClient, worker
 ```
 
 - The root builds each activity container from system use cases and port implementations, here XGRPC's and the provider target's, so no adapter target imports another, and registers the workflows. `activityContainers:` takes each container as its own argument.
@@ -360,9 +371,13 @@ let jwtConfig = config.scoped(to: "jwt")
 let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
 let propagation = BearerPropagationInterceptor<UserIdentity>()
 …  // each upstream's transport, as in a service's Serve
+let loansTracing = ClientOTelTracingInterceptor(serverHostname: loansHost, networkTransportMethod: "tcp")
 let loansGRPCClient = GRPCClient(
     transport: loansTransport,
-    interceptorPipeline: [.apply(propagation, to: .services([Bookshelf_Loans_V1_LoanService.descriptor]))]
+    interceptorPipeline: [
+        .apply(loansTracing, to: .all),
+        .apply(propagation, to: .services([Bookshelf_Loans_V1_LoanService.descriptor])),
+    ]
 )
 …  // identityGRPCClient and catalogGRPCClient the same way
 
@@ -383,6 +398,8 @@ let cors = CORSMiddleware<BasicRequestContext>(allowOrigin: .originBased, allowH
 let requestLogging = LogRequestsMiddleware<BasicRequestContext>(logLevel)
 let router = Router(context: BasicRequestContext.self)
 router.add(middleware: cors)
+router.add(middleware: TracingMiddleware())
+router.add(middleware: MetricsMiddleware())
 router.add(middleware: ErrorMiddleware())
 router.add(middleware: requestLogging)
 router.get("health") { _, _ in HTTPResponse.Status.ok }
@@ -394,7 +411,7 @@ let applicationConfiguration = ApplicationConfiguration(reader: httpServerConfig
 let application = Application(router: router, configuration: applicationConfiguration, logger: logger)
 
 // MARK: - Lifecycle
-// certificateReloader, every upstream client, application
+// observability, certificateReloader, every upstream client, application
 ```
 
-The gateway's defaults hold `http.server.host` and `http.server.port`; Hummingbird's configuration reader comes from its `ConfigurationSupport` trait.
+The gateway's root has the same Logging and Observability sections as a service's. Its defaults hold `http.server.host` and `http.server.port`; Hummingbird's configuration reader comes from its `ConfigurationSupport` trait.

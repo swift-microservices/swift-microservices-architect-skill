@@ -8,12 +8,8 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 
 ## Before production (P0)
 
-- **Instrumentation, without backends.** Bootstrap `MetricsSystem` and `InstrumentationSystem` in every root; structured logs that carry the trace id; tracing interceptors and middleware on every hop, including Temporal's header propagation; RPC and connection pool metrics; names for spans and metrics. Home: a new `observability.md`, a section in `composition.md`, names in `conventions.md`. Split SKILL.md's "observability backends" out-of-scope line so only the backends stay out.
-- **Health and readiness.** `GRPCHealthService` on serve processes, NOT_SERVING at graceful shutdown; `GET /health` on the gateway, outside `/v1`; an `x health` subcommand as the container health check, since the image has no probe tool. Home: `composition.md#lifecycle`, `gateway.md`, `delivery.md#the-containerfile`.
-- **Deploy order.** The migrator application must be healthy before the worker and the other replicas deploy. Needs an input in swift-microservices/ci. Home: `delivery.md#a-services-ci-workflows`.
-- **Connection budget.** Pool size per role client from configuration, sized so replicas × clients × pool size stays under Postgres's `max_connections`; the worker's activity slots no larger than its pool. Home: `composition.md#configuration`, `persistence.md#database-roles`.
-- **Database timeouts.** `statement_timeout` and `idle_in_transaction_session_timeout` per role through `PostgresDatabase(settings:)`; `lock_timeout` for migrations. Home: `persistence.md`.
-- **Least-privilege internal RPCs.** A peer-identity interceptor in `<Project>Transport` that admits only the listed certificate names to each `XInternalService`, never the gateway. Home: `security.md#mutual-tls`, `grpc.md#interceptors`, SKILL.md's "Who owns what".
+- **Deploy order.** The migrator application must be healthy before the worker and the other replicas deploy. Waits on an input in swift-microservices/ci that makes `deploy_dokploy.yml` deploy the first application and wait for its health check before the rest. Home: `delivery.md#a-services-ci-workflows`.
+- **Evals for the production rules.** Graders for the rules added with the pool budget and timeouts, `InternalCallerInterceptor`, health checks and observability, per `CLAUDE.md`'s eval suite, then a comparison against `main`.
 
 ## Next (P1)
 
@@ -30,6 +26,9 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 - **A "Prepare for production" checklist** and an Operations section in the plan. Home: SKILL.md's Instructions, `system.md#the-plan`.
 
 ## Later (P2)
+
+- **Draining status.** The health service reports `NOT_SERVING` once graceful shutdown starts, before the server drains. Home: `composition.md#health`.
+- **Temporal access per service.** Any process with a Temporal certificate can signal another service's workflows in the shared namespace; a namespace per service, or an authorizer, closes it. Home: `security.md`, `workflows.md#the-worker`.
 
 - **Cancellation.** A cancelled request leaves without an error-level log line, or as a `cancelled` case mapped to 499. Home: `style.md#errors`.
 - **Compiler checks and readability.** `.strictMemorySafety()` in the package template; lines of about 120 columns; DocC catalogs for `<project>-core`. Home: `packages.md#swift-settings`, `style.md#formatting`, `delivery.md`.

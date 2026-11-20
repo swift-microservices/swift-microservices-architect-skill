@@ -140,6 +140,7 @@ Each runs from the package's root and exits non-zero on any failure:
 | [gateway.md](references/gateway.md) | Adding a route, request context, controller, webhook route or error mapping |
 | [workflows.md](references/workflows.md) | Writing, starting or reaching a workflow, activity container or worker |
 | [composition.md](references/composition.md) | Wiring a command, composition root, configuration, logging, health checks or the ServiceGroup |
+| [observability.md](references/observability.md) | Bootstrapping telemetry, or tracing a request across the gateway, services and Temporal |
 | [security.md](references/security.md) | Touching TLS or mTLS, database logins, tokens, secrets, authorization layers or webhook verification |
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |

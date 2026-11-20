@@ -318,12 +318,12 @@ A refusal that turns on who the caller is, such as approving a request the calle
 
 ## Interceptors
 
-The server's interceptors apply to the person-facing descriptors only, as [the composition root](composition.md#the-composition-root) wires them:
+`ServerOTelTracingInterceptor` comes first on every `XService` and `XInternalService` descriptor, and `ClientOTelTracingInterceptor` first in every client ([observability](observability.md#a-trace-across-processes)). The others apply to the person-facing descriptors only, as [the composition root](composition.md#the-composition-root) wires them:
 
 - `BearerAuthenticationInterceptor` proves a bearer token if there is one and binds the principal; an invalid token ends the call as `unauthenticated` before the handler runs, and a missing one continues unbound.
 - `UserSettingsInterceptor` follows it in a service with tenant tables ([binding the tenant](persistence.md#binding-the-tenant)).
 - `XInternalService` descriptors carry neither. `InternalCallerInterceptor` admits their callers by certificate ([mutual TLS](security.md#mutual-tls)): `.apply(internalCallers, to: .services([Bookshelf_Catalog_V1_BookInternalService.descriptor]))`, built from the server's scoped configuration with `try InternalCallerInterceptor(config: serverConfig)`.
-- Clients a service uses to reach other services' internal RPCs carry no interceptor. Forwarding the caller's token with `BearerPropagationInterceptor` is the gateway's ([upstream clients](gateway.md#upstream-clients)).
+- Clients a service uses to reach other services' internal RPCs carry only the tracing interceptor. Forwarding the caller's token with `BearerPropagationInterceptor` is the gateway's ([upstream clients](gateway.md#upstream-clients)).
 
 ## Clients for Core's ports
 

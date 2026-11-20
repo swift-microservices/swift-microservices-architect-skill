@@ -119,7 +119,8 @@ skills/swift-microservices-architect/
     ├── grpc.md                 contracts, handlers, conversions, clients, transports
     ├── gateway.md              the Hummingbird gateway
     ├── workflows.md            Temporal workflows, activities, the worker
-    ├── composition.md          commands, composition roots, configuration, lifecycle
+    ├── composition.md          commands, composition roots, configuration, lifecycle, health
+    ├── observability.md        swift-otel, and one request's trace across processes
     ├── security.md             mTLS, tokens, authorization, secrets, webhooks
     ├── style.md                how the code reads
     ├── testing.md              test targets and mocks

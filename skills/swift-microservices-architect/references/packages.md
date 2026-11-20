@@ -92,6 +92,7 @@ let package = Package(
         .package(url: "https://github.com/grpc/grpc-swift-extras.git", from: "2.2.2"),
         .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
         .package(url: "https://github.com/hummingbird-project/postgres-migrations.git", from: "1.2.0"),
+        .package(url: "https://github.com/swift-otel/swift-otel.git", from: "1.6.1", traits: ["OTLPGRPC"]),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.13.0"),
         .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.33.2"),
     ],
@@ -148,12 +149,15 @@ let package = Package(
                 .product(name: "CatalogProtos", package: "bookshelf-protos"),
                 .product(name: "Configuration", package: "swift-configuration"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
+                .product(name: "GRPCHealthService", package: "grpc-swift-extras"),
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
+                .product(name: "GRPCOTelTracingInterceptors", package: "grpc-swift-extras"),
                 .product(name: "GRPCServiceLifecycle", package: "grpc-swift-extras"),
                 .product(name: "IdentityProtos", package: "bookshelf-protos"),
                 .product(name: "LoansProtos", package: "bookshelf-protos"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCertificateReloading", package: "swift-nio-extras"),
+                .product(name: "OTel", package: "swift-otel"),
                 .product(name: "PersistencePostgres", package: "swift-persistence-postgres"),
                 .product(name: "PostgresMigrations", package: "postgres-migrations"),
                 .product(name: "PostgresNIO", package: "postgres-nio"),
@@ -189,6 +193,7 @@ On Linux, full Foundation brings `FoundationInternationalization` and ICU's data
 | swift-openapi-runtime | `FullFoundation`* | `traits: []` |
 | swift-configuration | `JSON`*, `YAML`, `PropertyList` | `traits: []`, plus `Reloading` or `CommandLineArguments` when used |
 | swift-protobuf | `BinaryDelimitedStreams`* | `traits: []`, plus `FieldMaskUtilities` when a contract uses field masks |
+| swift-otel | `OTLPHTTP`*, `OTLPGRPC`* | `traits: ["OTLPGRPC"]`: one exporter, over the gRPC stack every process links |
 
 - Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<project>-core`, `<project>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the template's lower bounds are releases that do.
 - A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
