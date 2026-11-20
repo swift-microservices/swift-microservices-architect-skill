@@ -304,7 +304,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                 "Borrowing failed: unknown error",
                 metadata: [
                     "bookID": "\(input.bookID)",
-                    "error": "\(String(reflecting: error))",
+                    "error": "\(error)",
                 ]
             )
             throw .unknown
@@ -313,7 +313,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 }
 ```
 
-The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; and a final `catch` that logs an error with `String(reflecting: error)` and throws `.unknown`. The rest follows [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
+The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; and a final `catch` that logs an error with the error's description and throws `.unknown`. The rest follows [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
 
 ## System use cases
 
@@ -345,6 +345,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`), reading the row in the same transaction first when a missing row answers differently (`loanNotFound`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue or returned, and throws `loanNotFound` only when there's no loan.
 - An idempotent create with no count to guard follows the same order: lock the owner its key is unique with, or the key itself when it has no owner, look the key up, then insert. A unique constraint a concurrent request can still trip is mapped to its case, never left to `unknown`.
 - Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
+- That retry is the only recovery: a start or signal lost after the commit, such as when the process stops or Temporal is down, stays lost unless the client retries the request with the same key ([transports](grpc.md#transports)). A plan whose runs must exist without a client's retry puts that to the user as a question.
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
 
 ## Authorization
@@ -372,7 +373,7 @@ package func callAsFunction(
             try await scope.loanRepository.loans(startingAfter: input.startingAfter, pageSize: input.pageSize)
         }
     } catch {
-        logger.error("Loan list failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
+        logger.error("Loan list failed: unknown error", metadata: ["error": "\(error)"])
         throw .unknown
     }
 }
@@ -384,5 +385,5 @@ package func callAsFunction(
 - Levels: `info` for a completed change, `warning` for a refusal, `error` for `unknown`. Input refused before the `do`, such as an empty idempotency key, throws without a log line, and a read logs nothing, whether it finds its row or not.
 - A refusal is logged where it's thrown, inside the transaction's closure included, so no `catch` exists only to log one. `info` follows the transaction's return: inside the closure the change can still roll back.
 - Messages are short sentences: `Book borrowed`, `Borrowing refused: no such book`, `Borrowing failed: unknown error`.
-- `error` holds `String(reflecting: error)`.
+- `error` holds the error's description ([errors](style.md#errors)).
 - Never logged: tokens, passwords, secrets and their digests, email addresses, names, request bodies.

@@ -29,7 +29,7 @@ package struct ReturnBookUseCase: ReturnBookUseCaseProtocol {
         } catch let error as ReturnBookUseCaseError {
             throw error
         } catch {
-            logger.error("Returning failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
+            logger.error("Returning failed: unknown error", metadata: ["error": "\(error)"])
         }
         try? await notifyBranch(returnedLoan)
         guard let returnedLoan else {

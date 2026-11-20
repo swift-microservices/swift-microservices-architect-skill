@@ -245,6 +245,7 @@ extension InMemoryProvider {
             "temporal.client.namespace": "bookshelf",
             "temporal.worker.namespace": "bookshelf",
             "temporal.worker.taskqueue": "loans",
+            "temporal.worker.gracefulShutdownPeriodSeconds": 30,
             "loans.maximumActiveLoans": 5,
             "loans.loanPeriodDays": 21,
         ])
@@ -315,7 +316,8 @@ let loanActivities = LoanActivities(
 )
 
 // MARK: - Worker
-let workerConfiguration = try TemporalWorker.Configuration(configReader: temporalConfig)
+var workerConfiguration = try TemporalWorker.Configuration(configReader: temporalConfig)
+workerConfiguration.gracefulShutdownPeriod = try temporalConfig.requiredInt(forKey: "worker.gracefulShutdownPeriodSeconds", as: Duration.self)
 let worker = try TemporalWorker(
     configuration: workerConfiguration,
     target: .dns(host: temporalHost, port: temporalPort),
@@ -329,6 +331,7 @@ let worker = try TemporalWorker(
 ```
 
 - The root builds each activity container from system use cases and port implementations, here XGRPC's and the provider target's, so no adapter target imports another, and registers the workflows. `activityContainers:` takes each container as its own argument.
+- The SDK's reader leaves `gracefulShutdownPeriod` at zero, which cancels in-flight activities at every deploy and retries them, repeating their effects. The root sets it from `temporal.worker.gracefulShutdownPeriodSeconds`, defaulting to the longest activity's `startToCloseTimeout` (30), and the deployment's stop timeout exceeds it.
 - The worker builds no server and no authenticator: it serves no RPCs, and the users it acts for are named in workflow inputs.
 
 ## The gateway's root

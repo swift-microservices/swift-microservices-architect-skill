@@ -67,7 +67,7 @@ extension TimedCertificateReloader.Configuration {
         self.init(refreshInterval: refreshInterval, certificateSource: certificateSource, privateKeySource: privateKeySource)
         self.logger = logger
         self.onCertificateLoadFailed = { failure in
-            logger.warning("TLS certificate reload failed", metadata: ["error": "\(String(reflecting: failure.error))"])
+            logger.warning("TLS certificate reload failed", metadata: ["error": "\(failure.error)"])
         }
     }
 }
@@ -165,7 +165,7 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 
 - The token carries identity only: `sub`, `role`, `iss`, `iat`, `exp`, `aud` where an audience is used, and `org` where callers act for an organization ([organization tenants](persistence.md#organization-tenants)). It carries no permissions, entitlements, business state or personal data; a use case reads those from the service that owns them.
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
-- `<Project>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`. Each key is registered under its `kid`, the RFC 7638 thumbprint of the public key, which the issuer writes in the token's header, so rotating adds a public key file before the issuer changes keys.
+- `<Project>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`. Each key is registered under its `kid`, the RFC 7638 thumbprint of the public key, which the issuer writes in the token's header. Every process loads its keys once, at startup, so a rotation runs in order: add the new public key file and restart every process that verifies tokens; switch Identity's private key; once the last token the old key signed has expired, remove its public key file and restart again.
 - Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes the `JWTIssuer`.
 - Access tokens are short-lived. A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh and sign-out RPCs, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)). Sign-out ends the one session that refresh token belongs to.
 - The gateway verifies the token to pick a tier and forwards the original with `BearerPropagationInterceptor`; each service's `BearerAuthenticationInterceptor` verifies it again. A token never travels on an internal RPC, into a workflow's input, or into a log.

@@ -279,7 +279,7 @@ A list that can grow large pages; one a rule keeps small, such as a member's act
 | By key | Large or fast-growing lists: every member's loans (`ListAllLoans`) | `page_size`, `page_token` | `next_page_token`, empty after the last page | `loans(startingAfter:pageSize:)` → `KeyedPage<Loan>` |
 
 - By page number, a client can jump to any page, but rows added between requests shift the pages, and a deep page scans every row before it. Pages count from 1.
-- By key, the token is the page's last id, opaque to clients, and rows added between pages neither repeat nor go missing. A page carries a token only when another page follows.
+- By key, the token is the page's last id, opaque to clients, and rows added between pages don't shift them, so none repeats. A page carries a token only when another page follows.
 - `page_size` 0 asks for the service's default and more than its maximum gets the maximum, both constants in `PageSize.swift`, in the `Protobuf/` at the target's root that holds what several areas convert; `page` 0, a field the client left out, asks for the first page. A negative size or page, or a token the service didn't issue, is `invalidArgument`.
 - The input carries what the repository's read takes, the use case returns the repository's page, and the response conversion copies its metadata ([paged statements](persistence.md#paged-statements)):
 

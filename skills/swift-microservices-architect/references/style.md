@@ -42,7 +42,7 @@ let rows = try await connection.execute(statement, logger: logger)
 
 - Arguments are names, literals, properties, closures, static members built from those (`.seconds(30)`, `.dns(host: host, port: port)`) and initializers over constants (`ErrorMiddleware()`, `RetryPolicy(initialInterval: .seconds(1), …)`).
 - Anything else is a `let` first: an initializer that takes a variable, a conversion, a method's result, a `try` or an `await`. That holds for statements, requests, inputs, commands, configurations, transports, clients and use cases alike.
-- Two forms stay inline: interpolation in a log line (`"\(String(reflecting: error))"`), and Hummingbird's route builder (`loanController.addAuthenticatedRoutes(to: authenticated.group("loans"))`).
+- Two forms stay inline: interpolation in a log line (`"\(error)"`), and Hummingbird's route builder (`loanController.addAuthenticatedRoutes(to: authenticated.group("loans"))`).
 
 ## Errors
 
@@ -52,7 +52,7 @@ let rows = try await connection.execute(statement, logger: logger)
 - There, each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
 - A `do` nests in one place: around a workflow's start, when its `catch` returns what the path built ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` is spelled in full: `throw BorrowBookUseCaseError.bookNotFound`.
-- `String(reflecting: error)` goes into the log line of an unknown error, never into a response.
+- An unknown error's log line holds its description, `"\(error)"`, never `String(reflecting: error)`, whose debug description of a `PSQLError` prints the row values Postgres reports, such as an email address. Neither goes into a response.
 - A use case's typed error has no case for cancellation, so `CancellationError` reaches its final `catch` and leaves as `.unknown`. Everywhere else it propagates, and nothing catches it to carry on, except where `temporal-developer` gives a workflow's wait for a deadline that form.
 
 ## Concurrency

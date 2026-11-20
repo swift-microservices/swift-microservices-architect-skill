@@ -84,7 +84,7 @@ do {
     logger.warning("Borrowing failed: the catalog is unavailable")
     throw .catalogUnavailable
 } catch {
-    logger.error("Borrowing failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
+    logger.error("Borrowing failed: unknown error", metadata: ["error": "\(error)"])
     throw .unknown
 }
 ```
@@ -97,7 +97,8 @@ do {
 
 ## Troubleshooting
 
-- A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls wait until their deadline.
+- A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls hang until the caller's deadline or the activity's timeout cancels them.
+- The Temporal SDK's worker reader leaves `gracefulShutdownPeriod` at zero, so every deploy cancels in-flight activities and repeats their effects on retry ([the worker's root](references/composition.md#the-workers-root)).
 - A process connected as the database owner bypasses row-level security, so every process connects as its roles and only `serve --migrate-database` as the owner.
 - Policies combine with `OR`: on a table with a user's and an organization's, a session acting for the organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
@@ -123,6 +124,7 @@ Each runs from the package's root and exits non-zero on any failure:
 
 - Not for iOS, macOS or SwiftUI apps, or Swift packages that aren't servers.
 - The code inside a shape that isn't architecture belongs to the [related skills](#related-skills).
+- A workflow start or signal lost after its transaction commits is recovered only when the client retries the request ([transactions](references/use-cases.md#transactions)).
 - Not covered: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends; ask the user rather than invent them.
 
 ## References

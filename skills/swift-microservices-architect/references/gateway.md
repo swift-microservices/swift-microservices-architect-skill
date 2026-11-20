@@ -336,13 +336,13 @@ package struct ErrorMiddleware<Context: RequestContext>: RouterMiddleware {
         } catch let error as RPCError {
             let status = HTTPResponse.Status(error.code)
             guard status.kind == .clientError else {
-                context.logger.error("Upstream call failed", metadata: ["error": "\(String(reflecting: error))"])
+                context.logger.error("Upstream call failed", metadata: ["error": "\(error)"])
                 throw Problem(status: status)
             }
 
             throw Problem(status: status, detail: error.message)
         } catch {
-            context.logger.error("Request failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
+            context.logger.error("Request failed: unknown error", metadata: ["error": "\(error)"])
             throw Problem(status: .internalServerError)
         }
     }
