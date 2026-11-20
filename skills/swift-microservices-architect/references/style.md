@@ -54,7 +54,7 @@ let rows = try await connection.execute(statement, logger: logger)
 - A `do` nests in one place: around a workflow's start, when its `catch` returns what the path built ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - Inside a typed-throws function and outside a `do`, `throw .case` takes its type from the function. Inside a `do`, a `throw` is spelled in full: `throw BorrowBookUseCaseError.bookNotFound`.
 - An unknown error's log line holds its description, `"\(error)"`, never `String(reflecting: error)`, whose debug description of a `PSQLError` prints the row values Postgres reports, such as an email address. Neither goes into a response.
-- A use case's typed error has no case for cancellation, so `CancellationError` reaches its final `catch` and leaves as `.unknown`. Everywhere else it propagates, and nothing catches it to carry on, except where `temporal-developer` gives a workflow's wait for a deadline that form.
+- A use case's typed error has no case for cancellation, so `CancellationError` leaves as `.unknown` through a `catch` of its own before the final one, with no log line: the caller has gone, by its deadline or its disconnect, and a cancelled request is no failure to alert on. Everywhere else it propagates, and nothing catches it to carry on, except where `temporal-developer` gives a workflow's wait for a deadline that form.
 
 ## Concurrency
 

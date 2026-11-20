@@ -81,6 +81,8 @@ do {
 } catch CatalogClientError.unavailable {
     logger.warning("Borrowing failed: the catalog is unavailable")
     throw .catalogUnavailable
+} catch is CancellationError {
+    throw .unknown
 } catch {
     logger.error("Borrowing failed: unknown error", metadata: ["error": "\(error)"])
     throw .unknown

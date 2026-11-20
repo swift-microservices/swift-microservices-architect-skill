@@ -311,6 +311,8 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
         } catch CatalogClientError.unavailable {
             logger.warning("Borrowing failed: the catalog is unavailable")
             throw .catalogUnavailable
+        } catch is CancellationError {
+            throw .unknown
         } catch {
             logger.error(
                 "Borrowing failed: unknown error",
@@ -325,7 +327,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 }
 ```
 
-The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; and a final `catch` that logs an error with the error's description and throws `.unknown`. The rest follows [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
+The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; `catch is CancellationError { throw .unknown }`, with no log line; and a final `catch` that logs an error with the error's description and throws `.unknown`. The rest follows [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
 
 ## System use cases
 
@@ -384,6 +386,8 @@ package func callAsFunction(
         return try await database.withTransaction { scope in
             try await scope.loanRepository.loans(startingAfter: input.startingAfter, pageSize: input.pageSize)
         }
+    } catch is CancellationError {
+        throw .unknown
     } catch {
         logger.error("Loan list failed: unknown error", metadata: ["error": "\(error)"])
         throw .unknown
