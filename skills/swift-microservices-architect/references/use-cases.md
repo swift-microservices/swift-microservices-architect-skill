@@ -186,7 +186,7 @@ package protocol BorrowBookUseCaseScope: Sendable {
 with the error above and the implementation below.
 
 - A use case is named like its RPC ([naming](conventions.md#naming)). Two use cases that share steps each spell them out: what they share by rule is a model's or a policy's method, and what they share in storage is one repository method.
-- `callAsFunction` takes `subject: UserIdentity` first when its RPC requires a caller, even one it only needs to be present, then `input:` when the request carries values. A use case that needs neither takes neither.
+- `callAsFunction` takes `subject: UserIdentity` first when its RPC requires a caller ([authorization](#authorization)), then `input:` when the request carries values. A use case that needs neither takes neither.
 - It returns a domain model, an array of them, a page of them, or nothing. A result that combines values is a domain type named for what it is (`Session`), never `XUseCaseOutput`.
 - The input is a plain value of what the request carries, with an optional for a value the request may leave out. Wire validity, such as an id that isn't a UUID, is the conversion's to refuse ([conversions](grpc.md#conversions)); business validity is the use case's, as an error case.
 - The implementation is generic over its database, `XUseCase<DatabaseType>` where `DatabaseType: Database` and `DatabaseType.Scope: XUseCaseScope`. It holds its ports as `any Port`, a `Logger`, and a policy when its rules are tunable.
@@ -327,7 +327,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 }
 ```
 
-The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; `catch is CancellationError { throw .unknown }`, with no log line; and a final `catch` that logs an error with the error's description and throws `.unknown`. The rest follows [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
+The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; `catch is CancellationError { throw .unknown }`; and a final `catch` that logs an error and throws `.unknown`. They and the rest of the body follow [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
 
 ## System use cases
 
