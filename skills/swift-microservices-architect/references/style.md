@@ -46,7 +46,7 @@ let rows = try await connection.execute(statement, logger: logger)
 
 ## Errors
 
-- A use case declares its error with typed throws: `async throws(BorrowBookUseCaseError) -> Loan`. Repositories, ports, clients and handlers use untyped `throws`.
+- A use case declares its error with typed throws: `async throws(BorrowBookUseCaseError) -> Loan`. Repositories, ports, clients and handlers use untyped `throws`: a driver throws errors the domain doesn't name, and a repository's `XRepositoryError` carries the few it does.
 - A use case maps the errors of its repositories and ports with `do` and one `catch` per case: `catch CatalogClientError.unavailable { throw .catalogUnavailable }`. The order and the final `catch` are in [the body of a use case](use-cases.md#the-body-of-a-use-case).
 - An adapter that calls a use case, a handler or an activity, maps the use case's typed error with `do throws(XUseCaseError)` and one `catch` that switches over every case, with no `default`, so a case added to the error fails its build ([a handler](grpc.md#a-handler)).
 - In a use case, a handler and an activity, the `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
@@ -70,7 +70,7 @@ Every package builds with [the Swift settings](packages.md#swift-settings). The 
 ## Access control and imports
 
 - Inside a service's package, what another target uses is `package`, the rest internal or `private`. `public` is for libraries other packages link: `<project>-core`, `<project>-protos`.
-- A `package` struct spells its `package init`, since the memberwise initializer is internal.
+- A `package` struct spells its `package init`.
 - Imports are internal by default. A file imports a module `package` when the module's types appear in its `package` declarations, `public` when in `public` ones, and plainly otherwise.
 - A file imports every module whose members it uses, since `MemberImportVisibility` hides members of modules it doesn't import: `SwiftProtobuf` for a message's `.with { … }`, `Persistence` or `PersistencePostgres` for `withTransaction`, `<Project>Authentication` for a `UserRole`'s `rawValue`, `SystemPackage` for the `FilePath` literal `DirectoryFilesProvider` takes, the Foundation block for `uuidString`.
 - Access levels go on members, never on an extension.
@@ -96,9 +96,9 @@ package import Foundation
 
 - Models, inputs, commands and outputs are structs of `let` properties. Closed sets are enums (`LoanStatus`); a set other services may extend is a `RawRepresentable` string struct with static members (`UserRole`), which a contract carries as its raw string ([contracts](grpc.md#contracts-in-the-protos-package)).
 - Foundation adds no `Duration` to a `Date`, so a `TimeInterval` appears only at a `Date`'s arithmetic, converted once in the policy or model method that owns the duration: `let loanSeconds = loanPeriod / .seconds(1)`, then `borrowedAt.addingTimeInterval(loanSeconds)`. Every other duration is a `Duration`.
-- A calendar date, such as a date of birth, is a Core value of year, month and day, a `DATE` column and an RFC 3339 full-date `string` (`1988-04-17`) in a contract, `format: date` over HTTP, never a `Date` at midnight.
+- A calendar date, such as a book's publication date, is a Core value of year, month and day, a `DATE` column and an RFC 3339 full-date `string` (`1997-06-26`) in a contract, `format: date` over HTTP, never a `Date` at midnight.
 - Ids are `UUID` in owned Swift and lowercase strings on the wire, over gRPC and HTTP alike; the gateway's generated types hold them as `String`s ([OpenAPI types](gateway.md#openapi-types)). Instants are `Date`, durations `Duration`.
-- Absence is an optional, never a sentinel such as `""`, `-1` or `.distantPast`.
+- Absence is an optional, and a nullable column in Postgres, never a sentinel such as `""`, `-1`, `.distantPast` or a column's `DEFAULT ''`.
 - A value that can be invalid is validated where it's made, by a failable initializer, so a model never holds an invalid one.
 - Protocols exist only where substitution is real: use cases, repositories, scopes, the database and ports. Models, commands, policies and configuration are concrete. There is no clock or id-generator protocol and no injected clock: ids and stored dates come from the database, and a use case that decides on time reads `Date.now` once and passes it to the policy's or model's method that holds the rule (`policy.dueDate(borrowedAt:)`, `loan.isPastDue(at:)`), which a test calls with any instant.
 - Stored dependencies are existentials (`any CatalogClient`), except `TemporalClient`, which Core holds as the concrete type; parameters are opaque where they can be (`some JWTAlgorithm`), and a type is generic where the compiler must check a constraint on it or it wraps a library's generic client: a use case over its database, `GRPCCatalogClient<Transport>`.

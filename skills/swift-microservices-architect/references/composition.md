@@ -35,8 +35,8 @@ struct Loans: AsyncParsableCommand {
 ```
 
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
-- `migrate` applies pending migrations as the owner, proved by the migrator's certificate, and exits ([migrations](persistence.md#migrations)). It's a short-lived command, which each deploy runs before serve and the worker start ([a service's CI workflows](delivery.md#a-services-ci-workflows)), so serve and the worker never read the owner's credentials.
-- `build-indexes` builds the indexes XPostgres lists for building concurrently, as the owner over the migrator's certificate, since only a table's owner may index it. It's a short-lived command an operator runs after the deploy that lists a new index, never a step of the deploy, so a build that takes minutes holds up no deploy.
+- `migrate` applies pending migrations as the owner ([Postgres](security.md#postgres)) and exits ([migrations](persistence.md#migrations)): a short-lived command, which each deploy runs before serve and the worker start ([a service's CI workflows](delivery.md#a-services-ci-workflows)).
+- `build-indexes` builds the indexes XPostgres lists for building concurrently, as the owner, since only a table's owner may index it. It's a short-lived command an operator runs after the deploy that lists a new index, never a step of the deploy, so a build that takes minutes holds up no deploy.
 - A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
 - An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived command, a subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections, no Observability and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
 - A short-lived command's operands, such as whom it acts on, are its `@Option`s and go into the use case's input; only a value configuration also carries goes through the provider. It reports through its log line and exit status, and prints to standard output only a value the operator must read.
@@ -275,7 +275,7 @@ struct Serve: AsyncParsableCommand {
 }
 ```
 
-- **Configuration, Logging, Observability, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order ([observability](observability.md)), and a short-lived command has Configuration, Logging, Infrastructure and Composition ([commands](#commands)).
+- **Configuration, Logging, Observability, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order ([observability](observability.md)): the server is `gRPC` in a service's root, `Worker` in the worker's and `Router` and `Hummingbird` in the gateway's. A short-lived command's are in [commands](#commands).
 - Infrastructure builds what talks to the outside: certificate reloaders, database clients per role, upstream clients, the authenticator and its signing key refresher, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
 - The use cases that start workflows take what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
@@ -342,7 +342,7 @@ extension InMemoryProvider {
 | `HTTP2ClientTransport.Posix.Config(config:)`, `ServiceConfig(config:)` | `grpc.<upstream>` | `keepaliveTimeSeconds` (30), `keepaliveTimeoutSeconds` (10); `deadlineSeconds` (10), with round-robin balancing ([transports](grpc.md#transports)) |
 | `InternalCallerInterceptor(config:)` | `grpc.server` | `internalCallers`, the common names of the processes that call `XInternalService` |
 | `SigningKeyRefresher(config:keys:logger:fetch:onFirstRefresh:)` | `jwt` | `refreshIntervalSeconds` (300) ([signing keys](security.md#signing-keys)) |
-| `PostgresClient.Configuration(config:role:certificateReloader:)` | `postgres` | `host`, `port`, `db`, `tls.trustRootsPath`, `<role>.user`; `<role>.maximumConnections` (10), `statementTimeoutSeconds` (5), `idleInTransactionTimeoutSeconds` (10), `lockTimeoutSeconds` (5) ([connections and timeouts](persistence.md#connections-and-timeouts)); the password fallback's `(config:role:)` adds `<role>.password`, a secret (the file `postgres-service-password`) |
+| `PostgresClient.Configuration(config:role:certificateReloader:)` | `postgres` | `host`, `port`, `db`, `tls.trustRootsPath`, `<role>.user`; `<role>.maximumConnections` (10), `statementTimeoutSeconds` (5), `idleInTransactionTimeoutSeconds` (10), `lockTimeoutSeconds` (5) ([connections and timeouts](persistence.md#connections-and-timeouts)); the password fallback's `(config:role:)` adds `<role>.password`, a secret |
 
 - A `<project>-core` reader requires every value a deployment sets, such as a path, host, port or user, and defaults only tuning; the executable's defaults hold the deployment's values.
 - Keys are named as [naming](conventions.md#naming) gives them, and environment and secret file names derive from them: `postgres.service.user` is `POSTGRES_SERVICE_USER`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`, and the secret `postgres.service.password` is the file `postgres-service-password`.
@@ -361,7 +361,7 @@ extension InMemoryProvider {
 A root lists its long-lived components in one `ServiceGroup` and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
 
 - Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `SigningKeyRefresher`, `TemporalClient`, `TemporalWorker`.
-- Order is dependency order: the observability service first, so it flushes last, then certificate reloaders, database clients, upstream and store clients, the Temporal client, the signing key refresher, and the server, application or worker last, so it drains before the clients it uses close.
+- Order is dependency order: the observability service first, so it flushes last, then certificate reloaders, database clients, upstream and Valkey clients, the Temporal client, the signing key refresher, and the server, application or worker last, so it drains before the clients it uses close.
 - `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. Running the group is the root's last line.
 - A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
 - A long-running component of the service's own is a `Service` whose `run()` returns on graceful shutdown: its loop iterates `sequence.cancelOnGracefulShutdown()`, or wraps its work in `withGracefulShutdownHandler`.
@@ -373,7 +373,7 @@ Each serve process reports its health over gRPC, and the gateway over HTTP, so t
 - Serve registers grpc-swift-extras' `HealthService` beside its services and marks the server serving from its signing key refresher's `onFirstRefresh`, once it can verify a token, as [the composition root](#the-composition-root) shows ([signing keys](security.md#signing-keys)). No interceptor applies to its descriptor, so a probe needs no token.
 - The gateway answers `GET /health` with `200 OK` once its refresher holds the first key set, and `503 Service Unavailable` before, outside `/v1` and every tier, on a route registered before the router's middleware, which applies only to the routes added after it ([the gateway's root](#the-gateways-root)).
 - Health reports the process, never its dependencies: a status that followed Postgres or an upstream would mark every replica unhealthy when one dependency fails, and the platform would restart them all at once. The first key set is the process's own state, and a later failed refresh changes no status.
-- The image holds no probe tool, so each executable has a short-lived `health` command ([commands](#commands)), which the deployment runs as the health check of every serve application and of the gateway. A service's dials its own server on `127.0.0.1` with its own certificate pair, the client config's HTTP/2 `authority` set to its certificate's name from `grpc.server.hostname`, calls `Check`, and exits non-zero unless the status is `SERVING`. The gateway's sends `GET /health` with AsyncHTTPClient.
+- The image holds no probe tool, so each executable has a short-lived `health` command ([commands](#commands)), which the deployment runs as the health check of every serve application and of the gateway. A service's `health` dials its own server on `127.0.0.1` with its own certificate pair, the client config's HTTP/2 `authority` set to its certificate's name from `grpc.server.hostname`, calls `Check`, and exits non-zero unless the status is `SERVING`. The gateway's `health` sends `GET /health` with AsyncHTTPClient.
 - The worker serves nothing and has no health check; Temporal shows whether it polls.
 
 ## The worker's root
@@ -424,7 +424,7 @@ let worker = try TemporalWorker(
 
 - The root builds each activity container from system use cases and port implementations, here XGRPC's and the provider target's, so no adapter target imports another, and registers the workflows. `activityContainers:` takes each container as its own argument.
 - The SDK's reader leaves `gracefulShutdownPeriod` at zero, which cancels in-flight activities at every deploy and retries them, repeating their effects. The root sets it from `temporal.worker.gracefulShutdownPeriodSeconds`, defaulting to the longest activity's `startToCloseTimeout` (30), and the deployment's stop timeout exceeds it.
-- Before its `ServiceGroup`, it applies the service's schedules over a short-lived Temporal client ([recurring work](workflows.md#recurring-work)).
+- It applies the service's schedules before running its `ServiceGroup` ([recurring work](workflows.md#recurring-work)).
 - The worker builds no server and no authenticator: it serves no RPCs, and the users it acts for are named in workflow inputs.
 
 ## The gateway's root

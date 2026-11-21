@@ -6,12 +6,11 @@ How each process records traces and metrics with swift-otel, and how one request
 
 Every long-running root bootstraps swift-otel in its Observability section, after Logging, as [the composition root](composition.md#the-composition-root) shows:
 
-- `OTel.bootstrap(configuration:)` sets the process's `MetricsSystem` and `InstrumentationSystem` once and returns the exporters' `Service`, which goes first in the `ServiceGroup`, so it shuts down last and flushes what the other components recorded ([lifecycle](composition.md#lifecycle)).
-- Logs stay on standard output, where the deployment collects them: `logs.enabled` is `false`, so `LoggingSystem.bootstrap` keeps its handler, and its metadata provider adds the trace and span ids to every line a traced request logs ([logging](composition.md#logging)).
+- `OTel.bootstrap(configuration:)` sets the process's `MetricsSystem` and `InstrumentationSystem` once and returns the exporters' `Service`, placed in the `ServiceGroup` as [lifecycle](composition.md#lifecycle) gives.
+- Logs stay on standard output, where the deployment collects them: `logs.enabled` is `false`, so `LoggingSystem.bootstrap` keeps its handler ([logging](composition.md#logging)).
 - The service name is the root's logger label ([naming](conventions.md#naming)): `bookshelf-loans` for serve and `bookshelf-loans-worker` for the worker.
 - swift-otel reads the OpenTelemetry environment variables itself, the one source of values outside the `ConfigReader`, since the specification names them. The deployment sets `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_PROTOCOL=grpc`, and the collector's certificate paths when it requires mTLS. The root sets in code only what the code decides: the service name, and logs off.
-- swift-otel is declared with `traits: ["OTLPGRPC"]`, since every process already links the gRPC stack ([traits and Foundation](packages.md#traits-and-foundation)).
-- A short-lived command bootstraps nothing: it has no `ServiceGroup` to run the exporters, and its log line and exit status report it ([commands](composition.md#commands)).
+- A short-lived command bootstraps nothing ([commands](composition.md#commands)).
 
 ## A trace across processes
 

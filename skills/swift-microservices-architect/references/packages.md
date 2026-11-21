@@ -1,6 +1,6 @@
 # Packages
 
-The targets inside a service's package, how they depend on each other, its `Package.swift`, and the project's shared packages. The build fails an import the target can't reach; [the boundary script](#checking-the-boundaries) and review hold the rest.
+The targets inside a service's package, how they depend on each other, its `Package.swift`, and the project's shared packages.
 
 ## Contents
 - The targets of a service
@@ -44,7 +44,7 @@ Core links a library that saves every service re-declaring a concept, when the l
 `Temporal` is the one deliberate exception to these criteria: Core commits to it, as it does to the standard library. A workflow is the application's orchestration, and Temporal's determinism rules and macros make a wrapper cost more than it saves. It stays in its own corner of Core, file by file, since a module's types are visible only in files that import it:
 - `import Temporal` appears only in `XCore/Workflows/**` and in the use cases that start, signal, query or update a workflow, in `XUseCase.swift` alone of their five files.
 - A file whose `package` API names Temporal's types, including what a Temporal macro on a `package` type expands to, uses `package import Temporal`; the rest use the default internal import.
-- Models, domain errors, repository protocols, ports and every other use case never import it, and neither does an adapter target.
+- Models, domain errors, repository protocols, ports and every other use case never import it.
 - Only the executable constructs `TemporalClient` and `TemporalWorker`, reads their configuration and adds them to the `ServiceGroup`.
 - Building Core links the SDK's prebuilt sdk-core binary, so the build machine must be able to fetch it.
 
@@ -96,6 +96,7 @@ let package = Package(
         .package(url: "https://github.com/hummingbird-project/postgres-migrations.git", from: "1.2.0"),
         .package(url: "https://github.com/swift-otel/swift-otel.git", from: "1.6.1", traits: ["OTLPGRPC"]),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.13.0"),
+        .package(url: "https://github.com/vapor/jwt-kit.git", from: "5.9.1"),
         .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.33.2"),
     ],
     targets: [
@@ -156,6 +157,7 @@ let package = Package(
                 .product(name: "GRPCOTelTracingInterceptors", package: "grpc-swift-extras"),
                 .product(name: "GRPCServiceLifecycle", package: "grpc-swift-extras"),
                 .product(name: "IdentityProtos", package: "bookshelf-protos"),
+                .product(name: "JWTKit", package: "jwt-kit"),
                 .product(name: "LoansProtos", package: "bookshelf-protos"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCertificateReloading", package: "swift-nio-extras"),
@@ -184,7 +186,7 @@ let package = Package(
 
 ## Swift settings
 
-Every target in every package, services and libraries, builds in Swift 6 mode with the template's `swiftSettings`. `.strictMemorySafety()` makes the compiler warn at each unsafe construct, such as a `nonisolated(unsafe)` value or an `Unsafe…` pointer, and CI's warnings-as-errors fails one that isn't marked `unsafe`; it doesn't flag `@unchecked Sendable`, which the boundary script still checks. The code relies on `package` access, typed throws and package traits ([style](style.md)). A server package never sets `.defaultIsolation(MainActor.self)`.
+Every target in every package, services and libraries, builds in Swift 6 mode with the template's `swiftSettings`. Under `.strictMemorySafety()`, CI's warnings-as-errors fails an unsafe construct not marked `unsafe`; it doesn't flag `@unchecked Sendable`, which the boundary script checks. The code relies on `package` access, typed throws and package traits ([style](style.md)). A server package never sets `.defaultIsolation(MainActor.self)`.
 
 ## Traits and Foundation
 
@@ -200,7 +202,7 @@ On Linux, full Foundation brings `FoundationInternationalization` and ICU's data
 
 - Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<project>-core`, `<project>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the template's lower bounds are releases that do.
 - A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
-- A dependency that still links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's README. Owned code stays on `FoundationEssentials`, so the service sheds full Foundation when the dependency does, and CI checks it from then on ([Foundation linking](delivery.md#foundation-linking)).
+- A dependency that links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's README, and owned code stays on `FoundationEssentials` ([Foundation linking](delivery.md#foundation-linking)).
 - Before adding a dependency, list its traits with `swift package show-traits` and read its sources' Foundation imports. A library proves it in CI with the Foundation-linking check ([Foundation linking](delivery.md#foundation-linking)).
 
 ## Folder layout
@@ -224,7 +226,7 @@ bookshelf-loans/
     │   ├── Scopes/                 PostgresLoansScope.swift, PostgresLoansInternalScope.swift, PostgresLoansWorkerScope.swift
     │   ├── Repositories/Loans/     PostgresLoanRepository.swift
     │   ├── Statements/Loans/       CreateLoanStatement.swift, ActiveLoansByUserIDStatement.swift, LoansByUserIDStatement.swift,
-    │   │                       CountLoansByUserIDStatement.swift, Loan+PostgresRow.swift
+    │   │                           CountLoansByUserIDStatement.swift, Loan+PostgresRow.swift
     │   ├── Extensions/             LoanStatus+PostgresCodable.swift
     │   └── Migrations/             LoansMigrations.swift, Role/CreateServiceRole.swift, …, Loans/CreateLoansTable.swift, Loans/CreateLoansRLSPolicy.swift
     ├── LoansGRPC/
@@ -235,7 +237,10 @@ bookshelf-loans/
         ├── Loans.swift             the @main command
         ├── Configuration/          InMemoryProvider+ApplicationDefaults.swift, LoanPolicy+ConfigReader.swift
         ├── Database/               Migrations.swift
-        ├── Serve/                  Serve.swift
+        ├── Serve/                  Serve.swift, JWKS+Protobuf.swift
+        ├── Migrate/                Migrate.swift
+        ├── BuildIndexes/           BuildIndexes.swift
+        ├── Health/                 Health.swift
         └── Worker/                 Worker.swift, Run.swift
 ```
 

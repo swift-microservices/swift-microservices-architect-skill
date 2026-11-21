@@ -19,8 +19,7 @@ The public HTTP API: a Hummingbird application that verifies the caller, chooses
 
 - The only process clients reach. Every service listens privately, for gRPC over mTLS.
 - It owns the HTTP contract, `openapi.yaml`, and its conversion onto the services' `XService` contracts.
-- It owns no tables, no business rules and no use cases. It verifies a token only to choose a tier and to refuse early; each service verifies it again ([user tokens](security.md#user-tokens)).
-- It never routes to an `XInternalService`.
+- It owns no tables, no business rules and no use cases.
 
 ## The package
 
@@ -91,7 +90,7 @@ components:
     …
 ```
 
-- It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references, which the generator makes a `String`, so ids cross HTTP as the services write them, lowercase ([conversions](#conversions)).
+- It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references, which the generator makes a `String` ([conversions](#conversions)).
 - `servers` ends in `/v1`, and paths are written without it; a `/v2` route has its own ([versions](#versions)).
 - A create a client may retry declares the `Idempotency-Key` header as a required parameter, once under `components/parameters` ([controllers](#controllers)).
 - A page's schema is `<Resource>PageResponse`, its items under the resource's plural beside `pageInfo` or `nextPageToken`.
@@ -141,10 +140,9 @@ package struct AdministratorRequestContext: ChildRequestContext {
 ```
 
 - A child context's throwing initializer is the check: a handler that takes `AdministratorRequestContext` never re-tests the role.
-- Absent and insufficient answer differently: `401` when no one identified, `403` when the caller can't do this whatever token they hold.
 - The administrator check happens at the verb, not behind an `/admin` path prefix, so a resource's path is shared by its audiences. `/admin/…` is only for an administrator's view of a collection that callers also list (`/admin/loans`).
 - Only administrators have a context of their own. A route for another role, such as a librarian's, is in the caller tier, and the use case behind it refuses the wrong role as `403` ([authorization](use-cases.md#authorization)): a context per role would copy the domain's rules into the gateway.
-- A route whose bearer token isn't an access token, such as the refresh token a refresh, sign-out or change of organization presents, stays in the first tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the first tier too, since there is no caller yet.
+- A route whose bearer token isn't an access token, such as the refresh token a refresh, sign-out or change of organization presents, stays in the no-caller tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the no-caller tier too, since there is no caller yet.
 
 ## The router
 
@@ -258,7 +256,7 @@ package struct LoanController: Sendable {
 - Status codes follow the method: `201` with `EditedResponse` for a create, `202` for a route that only asks for work to happen later and has nothing yet to return, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, a `DELETE` included, `200` otherwise.
 - Hummingbird keys a path capture by one name per segment, so every route on one path shares its capture name (`:id`).
 
-A provider's webhooks get a controller of their own, in the first tier at `webhooks/<provider>`, that forwards each event unparsed:
+A provider's webhooks get a controller of their own, in the no-caller tier at `webhooks/<provider>`, that forwards each event unparsed:
 
 ```swift
 /// Resend's delivery events, forwarded to Loans as Resend signed them.
@@ -284,7 +282,7 @@ package struct ResendWebhookController: Sendable {
 - The conversion copies the bytes and the provider's signature headers unchanged, refusing a request missing one as `400`; the service verifies them ([webhooks](security.md#webhooks)).
 - A body over the limit answers `413` through `ErrorMiddleware`.
 
-`SigningKeyController`, also in the first tier, serves Identity's public keys at `GET /.well-known/jwks.json`:
+`SigningKeyController`, also in the no-caller tier, serves Identity's public keys at `GET /.well-known/jwks.json`:
 
 - Its handler calls `IdentityService`'s `ListSigningKeys` and answers `JWKSetResponse`, an RFC 7517 JWK Set with the keys the refreshers build ([signing keys](security.md#signing-keys)).
 - It answers with `Cache-Control: public, max-age=300`, the refresh interval, so a verifier outside the system that caches the set holds it no longer than a process does.
@@ -421,7 +419,6 @@ package struct Problem: HTTPResponseError {
 The executable builds one `GRPCClient` per upstream service over mTLS, its transport built like any client's ([transports](grpc.md#transports)), with `ClientOTelTracingInterceptor` first ([observability](observability.md#a-trace-across-processes)) and `BearerPropagationInterceptor` applied to the descriptors the gateway calls ([the gateway's root](composition.md#the-gateways-root)).
 
 - Propagation presents the caller's original token, as `BearerAuthenticationMiddleware` bound it, when a route identified a caller; a public route's call goes upstream anonymously.
-- `BookshelfAPI` holds each as the generated client protocol: `Bookshelf_Loans_V1_LoanService.Client(wrapping: loansGRPCClient)`.
 - Each service's cap on concurrent calls holds the gateway's excess calls to it in their connection, within their deadline ([transports](grpc.md#transports)), so a slow service delays only its own routes. The gateway adds no limit of its own: Hummingbird's `MaximumAvailableConnections` bounds connections, not requests, and a connection past it waits unanswered in the listen backlog, holding the edge's request with it.
 
 ## The edge

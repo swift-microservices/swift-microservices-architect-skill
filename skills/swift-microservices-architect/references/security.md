@@ -69,7 +69,7 @@ extension TimedCertificateReloader.Configuration {
 - `TimedCertificateReloader` from swift-nio-extras is the `CertificateReloader` that `.mTLS(certificateReloader:)` takes. `makeReloaderValidatingSources(configuration:)` loads the pair before any transport is built, so missing, malformed or mismatched files fail startup.
 - The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair, and servers bound connection age so every connection handshakes again ([transports](grpc.md#transports)); a failed reload keeps the last good pair and logs a warning.
 - One reloader per certificate pair: the process's pair under `tls` for gRPC and Postgres, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services', and the migrator's under `postgres.owner.tls`.
-- Issuing and renewing certificates is the deployment's job; the process only reads files. A new trust root needs a restart.
+- Issuing and renewing certificates is the deployment's job; the process only reads files. A new trust root joins every trust bundle beside the old one, with a restart of each process, before any pair it signs is mounted, and the old root leaves once no mounted pair chains to it.
 - A local run uses the same mTLS, with a development authority and pairs whose common names are the production identities (`loans`, `loans-worker`, `loans-migrator`). No process has a plaintext or no-verification mode, so nothing that only works locally ships.
 - Internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.
 
@@ -165,8 +165,6 @@ public struct UserIdentity: JWTPayload, Equatable, Sendable {
 }
 
 /// A role as the token names it, open so a role added later decodes everywhere.
-///
-/// The standard library codes a `RawRepresentable` string as its raw value, so `Codable` needs no code.
 public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByStringLiteral, Sendable {
     public static let user: UserRole = "user"
     public static let librarian: UserRole = "librarian"
@@ -174,13 +172,9 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 
     public let rawValue: String
 
-    public init(rawValue: String) {
-        self.rawValue = rawValue
-    }
+    public init(rawValue: String) { … }
 
-    public init(stringLiteral value: String) {
-        self.rawValue = value
-    }
+    public init(stringLiteral value: String) { … }
 }
 ```
 
@@ -188,9 +182,9 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
 - Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes `JWTCredentialIssuer` ([signing keys](#signing-keys)).
 - An access token lives 15 minutes, `SessionPolicy.accessTokenLifetime`, a policy value Identity reads from configuration: a revoked session or a changed role reaches every service within that time, since no service asks Identity about a token it can verify.
-- A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh and sign-out RPCs, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)). Sign-out ends the one session that refresh token belongs to.
+- A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh and sign-out RPCs, which the gateway routes in the no-caller tier ([request contexts](gateway.md#request-contexts-and-tiers)). Sign-out ends the one session that refresh token belongs to.
 - Each refresh replaces the refresh token: in one transaction, the use case moves the presented token from active to used with a conditional write, and stores its successor in the same session. A used token presented again was copied, by whoever holds either copy, so the use case ends the whole session and refuses; the holder of the real one signs in again.
-- The gateway verifies the token to pick a tier and forwards the original with `BearerPropagationInterceptor`; each service's `BearerAuthenticationInterceptor` verifies it again. A token never travels on an internal RPC, into a workflow's input, or into a log.
+- Each service's `BearerAuthenticationInterceptor` verifies again the token the gateway verified to pick a tier and forwards ([upstream clients](gateway.md#upstream-clients)). A token never travels on an internal RPC, into a workflow's input, or into a log.
 
 `<Project>Authentication` spells the lookup of the bound principal once, for handlers, interceptors and logging:
 
@@ -240,7 +234,7 @@ The rotation is `RotateSigningKeysUseCase`, the system use case that the one act
 
 Each write is conditional on what the transaction read under the lock, so a repeated run changes nothing. `SigningKeyPolicy.refreshInterval` (5 minutes) is every refresher's `jwt.refreshIntervalSeconds`, and no process sets a longer one.
 
-`ListSigningKeys` publishes the set: every key's `kid` and public key, unpaged, since there are at most three. It's one use case that `IdentityService` holds in its anyone group, since public keys aren't secret, and `IdentityInternalService` holds as well, as Catalog's `GetBook` is ([a use case](use-cases.md#a-use-case)); it runs on Identity's tenant database, which sees the untenanted table whole. Every service's serve process calls the internal one, so Identity's `grpc.server.internalCallers` lists each (`loans`, `catalog`); the gateway calls the public one and serves the set at `/.well-known/jwks.json` ([controllers](gateway.md#controllers)).
+`ListSigningKeys` publishes the set: every key's `kid` and public key, unpaged, since there are at most three. It's one use case that `IdentityService` holds in its anyone group, since public keys aren't secret, and `IdentityInternalService` holds as well, as Catalog's `GetBook` is ([a use case](use-cases.md#a-use-case)); it runs on Identity's tenant database, which sees the untenanted table whole. Every service's serve process calls the internal one, so Identity's `grpc.server.internalCallers` lists each serve process (`loans`, `catalog`) beside its other callers (`loans-worker`); the gateway calls the public one and serves the set at `/.well-known/jwks.json` ([controllers](gateway.md#controllers)).
 
 Every process keeps the `JWTKeyCollection` its `JWTAuthenticator` shares in step with the set through `<Project>Transport`'s refresher:
 
@@ -267,14 +261,14 @@ public struct SigningKeyRefresher: Service {
 
     /// Fetches the set at once, then every interval, until graceful shutdown.
     public func run() async throws {
-        …  // a failed first fetch throws; a later one keeps the last good set and logs a warning
+        …
     }
 }
 ```
 
-- `<project>-core` doesn't depend on `<project>-protos`, so the executable passes the fetch: a service's calls `IdentityInternalService` through its Identity client, the gateway's `IdentityService`, and Identity's its own `ListSigningKeysUseCase` ([the composition root](composition.md#the-composition-root)). Each converts the answer with `JWKS(_:)` ([folders](conventions.md#folders)), one RFC 7517 key per row: `kty` `OKP`, `crv` `Ed25519`, `alg` `EdDSA`, `use` `sig`, the `kid`, and the public key in base64url as `x`.
+- `<project>-core` doesn't depend on `<project>-protos`, so the executable passes the fetch: a service's fetch calls `IdentityInternalService` through its Identity client, the gateway's calls `IdentityService`, and Identity's calls its own `ListSigningKeysUseCase` ([the composition root](composition.md#the-composition-root)). Each converts the answer with `JWKS(_:)` ([folders](conventions.md#folders)), one RFC 7517 key per row: `kty` `OKP`, `crv` `Ed25519`, `alg` `EdDSA`, `use` `sig`, the `kid`, and the public key in base64url as `x`.
 - A refresh adds the fetched keys, then removes the rest with `removeAll(except:)`, so no key a live token names is missing mid-refresh. That call also clears the collection's default key, which would otherwise go on verifying a deleted key's tokens; a token that names no `kid`, or a deleted one, fails as `unauthenticated`.
-- The first fetch runs as the group starts, and the process reports itself serving only from `onFirstRefresh` ([health](composition.md#health)), so the deployment routes it no call it can't verify. A failed first fetch ends the process, as a missing certificate fails startup.
+- The first fetch runs as the group starts. A failed first fetch ends the process, as a missing certificate fails startup; until then the process isn't serving ([health](composition.md#health)).
 - After that, a failed fetch keeps the last good set and logs a warning, as a failed certificate reload does: Identity's outage stops no process verifying, and only delays which keys it learns.
 
 swift-authentication-jwt's `JWTIssuer` signs with its collection's default key and writes no `kid`, so Identity signs with `JWTCredentialIssuer`, its own `CredentialIssuer<UserIdentity, String>` in the provider target `IdentityJWT`:
@@ -304,7 +298,7 @@ Each layer refuses what it can see; the use case decides.
 - A secret value reaches the process as a file in `/run/secrets` named for its key, which `DirectoryFilesProvider` reads ([configuration](composition.md#configuration)), never as an environment variable: `docker inspect` and `/proc/<pid>/environ` show those to anyone who can read the container's configuration.
 - Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres and Valkey store their SHA-256 digest (`Crypto`), never the secret, Valkey with its expiry.
 - Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), off the cooperative pool ([concurrency](style.md#concurrency)). The cost is a policy value, `PasswordPolicy.bcryptCost` (12), raised as hardware gets faster.
-- A password longer than 72 bytes of UTF-8 is refused as `invalidPassword` (`PasswordPolicy.maximumByteCount`): bcrypt ignores every byte after the 72nd, so two passwords that share their first 72 bytes would both sign in. The limit counts bytes, not characters, since a character can take up to four.
+- A password longer than 72 bytes of UTF-8 is refused as `invalidPassword` (`PasswordPolicy.maximumByteCount`): bcrypt ignores every byte after the 72nd, so two passwords that share their first 72 bytes would both sign in. The limit counts bytes, not characters.
 
 ## Attempt limits
 
@@ -313,7 +307,7 @@ A request that proves a secret someone could guess, signing in with a password o
 - The count is an XValkey repository behind a Core port, keyed by the account's id: `SignInFailureRepository` (`identity:sign-in-failures:<user id>`) and `ResetCodeFailureRepository` (`identity:reset-code-failures:<user id>`), each with `failures(userID:)`, `recordFailure(userID:window:)`, which increments and sets the window's expiry on the first failure, and `clear(userID:)` after a success ([Valkey](persistence.md#valkey)).
 - So the account is known before the secret is checked: a sign-in names its address, and a reset code's redemption names the address it was sent to. An unknown address counts nothing and answers as a wrong secret does ([authorization](#authorization)).
 - The limits and windows are policy values: `SessionPolicy.maximumSignInFailures` and `signInFailureWindow`, and the reset code's alike.
-- The use case's case is `tooManyAttempts`, which maps to `resourceExhausted` and the gateway's `429` ([status codes](grpc.md#status-codes)).
+- The use case's case is `tooManyAttempts` ([status codes](grpc.md#status-codes)).
 - Unlike a cache's read, a failed read of the count fails the request: a limit that Valkey's outage turned off would let guessing through.
 - Limits per address, against many accounts at once, are the edge's ([the edge](gateway.md#the-edge)).
 
@@ -322,7 +316,7 @@ A request that proves a secret someone could guess, signing in with a password o
 A provider's webhook arrives with no token: its signature over the body is its proof. Loans receives Resend's delivery events for its overdue notices this way.
 
 - Its RPC is in `XService`'s anyone group ([contracts](grpc.md#contracts-in-the-protos-package)). The gateway forwards the body unparsed with the headers the provider signs with ([controllers](gateway.md#controllers)), since the signature covers the exact bytes.
-- The use case verifies before anything else, through a port its provider target implements (`NoticeEventVerifier`, `ResendNoticeEventVerifier`), with the signing secret read as a secret. A signature or timestamp the verifier refuses is the use case's `signatureRejected`, answered `unauthenticated`; checking the timestamp keeps a captured event from being replayed.
+- The use case verifies before anything else, through a port its provider target implements (`NoticeEventVerifier`, `ResendNoticeEventVerifier`), with the signing secret read as a secret. A signature or timestamp the verifier refuses is the use case's `signatureRejected` ([status codes](grpc.md#status-codes)); checking the timestamp keeps a captured event from being replayed.
 - It runs on the internal database: no caller is bound, so a tenant policy would hide every row ([database roles](persistence.md#database-roles)).
 - Providers retry, so an event acts once: the transaction that acts also records the provider's event id under a unique key. A repeat that finds it changes nothing in the database, then starts the event's workflow, if it has one, as the first delivery did: the deterministic id joins a run that exists and starts one whose start was lost after the first commit.
 - It answers once the event is recorded. Work that takes longer, or calls out, is a workflow the use case starts ([workflows a webhook starts](workflows.md#starting-a-workflow-from-a-use-case)).

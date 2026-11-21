@@ -7,7 +7,7 @@
 
 ## Naming
 
-`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); this table spells out what a type is named for, as `<Operation>`, `<Resource>` or `<Process>`, and the other references shorten each to `X` before the type's suffix: `XUseCase` is `<Operation>UseCase` (`BorrowBookUseCase`), `XRepository` `<Resource>Repository` (`LoanRepository`), `XService` `<Resource>Service` (`LoanService`); `<Project>` and `<project>` are the project's (`Bookshelf`, `bookshelf`), and `<owner>` is the GitHub account that owns its repositories. Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/): they read as English at the point of use, name things by role, and keep an initialism in one case (`userID`, `ActiveLoansByUserIDStatement`, `baseURL`, `XGRPC`).
+`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); this table spells out what a type is named for, as `<Operation>`, `<Resource>` or `<Process>`, and the other references shorten each to `X` before the type's suffix: `XUseCase` is `<Operation>UseCase` (`BorrowBookUseCase`), `XRepository` `<Resource>Repository` (`LoanRepository`), `XService` `<Resource>Service` (`LoanService`); `<Project>` and `<project>` are the project's (`Bookshelf`, `bookshelf`), and `<owner>` is the GitHub account that owns its repositories. Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/), with an initialism in one case (`userID`, `ActiveLoansByUserIDStatement`, `baseURL`, `XGRPC`).
 
 | Kind | Name | Example |
 |---|---|---|
@@ -40,7 +40,7 @@
 | A use case's Temporal properties | `temporalClient`, `taskQueue` | `private let temporalClient: TemporalClient` |
 | Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `currentState(input:)` |
 | Workflow id, task queue, Temporal namespace | `<x>-<workflow>-<id>`; `x`; `<project>-<x>` | `loans-loan-0193…`; `loans`; `bookshelf-loans` |
-| Schedule id, scheduled workflow | `<x>-<job>`; `<Job>Workflow` | `loans-purge-notice-events`; `PurgeNoticeEventsWorkflow` |
+| Schedule id, scheduled workflow | `<x>-<process>`; `<Process>Workflow` | `loans-purge-notice-events`; `PurgeNoticeEventsWorkflow` |
 | Named activity options | The kind of step, never where it's used | `ActivityOptions.database`, `.notification` |
 | Postgres scopes | `Postgres<X>Scope`, `Postgres<X>InternalScope`, `Postgres<X>WorkerScope` | `PostgresLoansScope` |
 | Mock | `Mock` + the protocol's name, without `Protocol` | `MockCatalogClient`, `MockBorrowBookUseCase`, `MockDatabase` |
@@ -64,7 +64,7 @@
 
 | Target | Folders |
 |---|---|
-| XCore | A folder per area (`Loans/`) with its models and policy, `Repository/` (and `Repository/Commands/`), `UseCases/<Name>/`; `Workflows/<WorkflowName>/` with the workflow, its activity container and `ActivityOptions+X.swift`, and a shared container, a payload type two workflows share, and `XSchedules.swift` directly in `Workflows/`; `Ports/` for what the service needs from other systems, with the models they return; `Paging/` for the page types |
+| XCore | A folder per area (`Loans/`) with its models and policy, `Repository/` with its `<Resource>Query` types, `Repository/Commands/`, `UseCases/<Name>/`; `Workflows/<WorkflowName>/` with the workflow, its activity container and `ActivityOptions+X.swift`, and a shared container, a payload type two workflows share, and `XSchedules.swift` directly in `Workflows/`; `Ports/` for what the service needs from other systems, with the models they return; `Paging/` for the page types |
 | XPostgres | `Scopes/`, `Repositories/<Area>/` and `Repositories/PostgresRepositoryError.swift`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/` for the area's own tables and policies, `Migrations/Role/`, `Migrations/XMigrations.swift` for their order and `Migrations/XIndexes.swift` for the indexes built concurrently |
 | XGRPC | A folder per proto service's resource (`Loans/`) with `XService`, `XInternalService` and `Protobuf/`; a `Protobuf/` at the target's root for what several of them convert (`PageSize.swift`, `PageInfo+Protobuf.swift`); `Clients/` with `Clients/Protobuf/` |
 | XValkey, X<Provider> | Flat, one file per type |

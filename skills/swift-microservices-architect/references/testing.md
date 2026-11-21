@@ -1,6 +1,6 @@
 # Testing
 
-Tests follow the module map: each target is tested on its own, over mocks of the protocols it depends on. [Style](style.md) governs `Sources/`; the test code in `Tests/`, with Swift Testing's `@Test`, `#expect`, traits and parameterized cases, follows the Swift Testing skill (`swift-testing-pro`) instead.
+Tests follow the module map. [Style](style.md) governs `Sources/`; the test code in `Tests/`, with Swift Testing's `@Test`, `#expect`, traits and parameterized cases, follows the Swift Testing skill (`swift-testing-pro`) instead.
 
 ## Test targets
 
@@ -58,7 +58,6 @@ Tests/
 
 ## Mocks
 
-- A mock conforms to the protocol it stands in for and is named for it: `MockLoanRepository`, `MockCatalogClient`, `MockBorrowBookUseCase` for `BorrowBookUseCaseProtocol`.
+- A mock conforms to the protocol it stands in for ([naming](conventions.md#naming)).
 - It's hand-written: it returns, or throws, what its initializer was given. One that records its calls is a `final class` keeping them in a `Mutex`, so it stays `Sendable` without `@unchecked`. There's no mocking framework.
-- A mock lives in the `Mocks/` folder of the test target that uses it, never in a module's sources.
 - A mock every service would write alike comes from a shared package's testing product instead. `<Project>Testing` holds `MockDatabase<Scope>`, which runs a transaction's closure on the scope a test gives it, and `MockAuthenticator`, which maps tokens to identities. A library whose protocols services depend on may ship such a product too.

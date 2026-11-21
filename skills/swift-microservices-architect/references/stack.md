@@ -22,8 +22,6 @@ Small libraries that give every service the same shape for identity, request-sco
 | [swift-persistence](https://github.com/swift-microservices/swift-persistence) | `Persistence` | `Database<Scope>` and `withTransaction(_:)`: the transaction boundary and the scope of repositories a unit of work may touch | XCore, `<Project>Testing` |
 | [swift-persistence-postgres](https://github.com/swift-microservices/swift-persistence-postgres) | `PersistencePostgres` | `PostgresDatabase<Scope>`, `PostgresScope`, `PostgresSettings` (transaction-local `set_config`, read from `OperationContext`), `PostgresClient.withClient` | XPostgres, `<Project>Persistence`, executables |
 
-On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `OperationContext`, the handler passes its identity to the use case ([user tokens](security.md#user-tokens)), and `UserSettingsInterceptor` binds the tenant for every transaction ([binding the tenant](persistence.md#binding-the-tenant)).
-
 ## The server stack
 
 | Package | Products | Used for | Linked by |
@@ -38,9 +36,9 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 | [grpc-swift-extras](https://github.com/grpc/grpc-swift-extras) | `GRPCServiceLifecycle`, `GRPCHealthService`, `GRPCOTelTracingInterceptors` | `GRPCServer` and `GRPCClient` as lifecycle services; the `grpc.health.v1` service; tracing interceptors | Executables |
 | [swift-otel](https://github.com/swift-otel/swift-otel) | `OTel` | The OTLP exporters, bootstrapping swift-metrics and swift-distributed-tracing, and the trace's logging metadata | Executables |
 | [swift-protobuf](https://github.com/apple/swift-protobuf) | `SwiftProtobuf` | Messages, well-known types (`Google_Protobuf_Timestamp`, `Google_Protobuf_Empty`) | `<project>-protos`, XGRPC, the gateway |
-| [swift-temporal-sdk](https://github.com/apple/swift-temporal-sdk) | `Temporal`, `TemporalTestKit` | Workflows, activities, `TemporalClient`, `TemporalWorker`; the test servers | XCore in a service with workflows, executables, and no adapter target; `Temporal` and `TemporalTestKit` in `XCoreTests` |
+| [swift-temporal-sdk](https://github.com/apple/swift-temporal-sdk) | `Temporal`, `TemporalTestKit` | Workflows, activities, `TemporalClient`, `TemporalWorker`; the test servers | XCore in a service with workflows, executables; `Temporal` and `TemporalTestKit` in `XCoreTests` |
 | [valkey-swift](https://github.com/valkey-io/valkey-swift) | `Valkey` | `ValkeyClient`, commands, pipelines, transactions | XValkey, executables |
-| [swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | `NIOSSL` | `TLSConfiguration` for the Valkey client | Executables with XValkey |
+| [swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | `NIOSSL` | `TLSConfiguration` for the Postgres and Valkey clients | `<Project>Persistence`, executables with XValkey |
 | postgres-nio | `PostgresNIO` | `PostgresClient` pools, prepared statements, row decoding | XPostgres, executables |
 | [postgres-migrations](https://github.com/hummingbird-project/postgres-migrations) | `PostgresMigrations` | `DatabaseMigration`, `DatabaseMigrations` | XPostgres, executables |
 | [swift-configuration](https://github.com/apple/swift-configuration) | `Configuration` | `ConfigReader`, providers, scoped readers, secrets | Executables, `<Project>Transport`, `<Project>Persistence` |

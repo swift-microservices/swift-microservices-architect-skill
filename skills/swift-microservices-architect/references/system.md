@@ -101,12 +101,12 @@ Besides the swift-microservices libraries ([stack](stack.md)), every service and
 
 **`<project>-core`** holds what every service would otherwise write identically:
 
-| Product | Holds | Linked by |
-|---|---|---|
-| `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user` | XCore, XGRPC, executables |
-| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:certificateReloader:)` for a role proved by the process's certificate, and `(config:role:)` for the password fallback | Executables with Postgres |
-| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`; `InternalCallerInterceptor`, `SigningKeyRefresher` | Executables |
-| `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
+| Product | Holds |
+|---|---|
+| `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user` |
+| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:certificateReloader:)` for a role proved by the process's certificate, and `(config:role:)` for the password fallback |
+| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`; `InternalCallerInterceptor`, `SigningKeyRefresher` |
+| `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) |
 
 It holds none of these: a service's models, repositories, scopes or migrations; contracts; deployment defaults such as mount paths, ports and role names, which stay in each executable's `InMemoryProvider` defaults; generic abstractions, which belong to the swift-microservices libraries; a process identity or service token, since certificates prove processes.
 
@@ -133,7 +133,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 ### <project>-<x>
 | Target | Holds |
 |---|---|
-- Commands: `serve`, `worker run`, `migrate`, `build-indexes`
+- Commands: `serve`, `health`, `worker run`, `migrate`, `build-indexes`
 - Data: where it lives, the database roles and the use cases each runs, and how each process proves its roles
 - Calls out to: other services' internal RPCs, providers, Temporal, Valkey
 
@@ -174,7 +174,7 @@ Operations' targets and thresholds are the user's answers; what they measure, th
 - A bad deploy: run Deploy to production with the last commit production ran, never reverting a migration ([a service's CI workflows](delivery.md#a-services-ci-workflows)). Callers and the gateway roll back before a service whose new RPC they call, the reverse of [the order they deploy in](grpc.md#contracts-in-the-protos-package), and the fix goes forward through staging.
 - A stuck workflow: rising schedule-to-start latency means its task queue's worker isn't polling; otherwise its pending activity's last failure names the dependency it waits on, and the activity's retries resume it once that recovers.
 - A nondeterministic workflow: roll back to the image before the change, so the runs that started before it replay and resume; the runs the bad image started then fail on replay and are reset, as `temporal-developer` describes. The change returns behind a patch, with a failed run's history among the replays `XCoreTests` runs ([changing a workflow](workflows.md#changing-a-workflow)).
-- Certificate renewal, which the deployment performs: a renewed pair at the mount paths needs no deploy ([mutual TLS](security.md#mutual-tls)). A new trust root joins every trust bundle beside the old one, with a deploy of each process, before any pair it signs is mounted, and the old root leaves once no mounted pair chains to it.
+- Certificate renewal, which the deployment performs in the order [mutual TLS](security.md#mutual-tls) gives: a renewed pair at the mount paths needs no deploy.
 
 Review the plan against the hard rules in `SKILL.md`, and put its questions to the user, before writing code.
 

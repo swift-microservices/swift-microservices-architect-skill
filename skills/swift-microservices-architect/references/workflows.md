@@ -21,13 +21,13 @@ Work is a workflow when it must happen even if every process restarts, and it:
 - retries a call that can fail for a while (a provider, another service),
 - or spans several services, each step's effect owned by a different one.
 
-A request that only needs an answer stays a synchronous RPC. Work after a response is never a `Task {}`: an unstructured task dies with the process and nobody retries it.
+A request that only needs an answer stays a synchronous RPC.
 
 Temporal's history is the workflow's state. No column mirrors a run's progress, no scanner restarts workflows from rows, and no reconciler compares the two; a loan's `status` is the loan's, written by the use cases its activities run. A record people read or page through, such as who decided what and when, is a domain table all the same, written by those use cases: only a column that tracks where a run has got to is ruled out.
 
 ## Starting a workflow from a use case
 
-A use case that starts a workflow holds the concrete `TemporalClient` and the task queue as a `String`, both from [the composition root](composition.md#the-composition-root), and calls `startWorkflow(type:options:input:)` itself; [`BorrowBook`](use-cases.md#the-body-of-a-use-case) shows it. A start for a loan whose run is in flight joins it, and one whose run failed starts it again; one whose run completed is refused, since its work is done.
+A use case that starts a workflow holds the concrete `TemporalClient` and the task queue as a `String`, both from [the composition root](composition.md#the-composition-root), and calls `startWorkflow(type:options:input:)` itself; [`BorrowBook`](use-cases.md#the-body-of-a-use-case) shows it.
 
 - A workflow's id derives from the business id it's about, named as [naming](conventions.md#naming) gives it, declared once on the workflow (`LoanWorkflow.id(loanID:)`). A retried request then reaches the same run instead of starting a second.
 - `idConflictPolicy: .useExisting` joins a run in flight. `idReusePolicy` decides a start once the id's run has closed:
@@ -164,7 +164,8 @@ extension LoanWorkflow {
 }
 ```
 
-- `run(context:input:)` reads as the process: wait, check, act, one activity per step. It's `mutating` when it or a handler changes the workflow's state.- A workflow takes a nested `Input` and returns a nested `Output` (or nothing), with explicit initializers.
+- `run(context:input:)` reads as the process: wait, check, act, one activity per step. It's `mutating` when it or a handler changes the workflow's state.
+- A workflow takes a nested `Input` and returns a nested `Output` (or nothing), with explicit initializers.
 - Every payload is `Codable, Sendable`, and so is every type it holds: a workflow's input and output, a signal's, query's or update's, and an activity's. The SDK requires only `Sendable` and checks `Codable` when it converts the value, so a missing conformance compiles, then fails on every attempt. A domain enum a payload needs is mirrored as a nested enum, or, when two workflows share it, as a type directly in `Workflows/`.
 - State that handlers change is the workflow's private stored properties. A signal is a `@WorkflowSignal mutating func`; a query a `@WorkflowQuery func` taking `input:` and returning a value, which can't mutate; an update, which changes state and answers, a `@WorkflowUpdate`. The macros generate the types callers name, the method's name capitalized.
 
@@ -186,7 +187,7 @@ Workflows and their inputs are value types; nothing in a workflow holds a refere
 
 An activity container is an inbound adapter that lives in Core, the worker's counterpart to a gRPC service: it holds use cases and ports, and maps their errors. There is one container per workflow, named after it. An activity several workflows share gets its own small container, named for its step, in `Workflows/`.
 
-A container is injected only with use case protocols (`any MarkLoanOverdueUseCaseProtocol`) and port protocols (`any CatalogClient`), plus a `Logger` if needed. It never receives a repository, a database or scope, a concrete adapter type, `TemporalClient` or configuration. The worker's root passes in the implementations, so no adapter target meets another.
+A container is injected only with use case protocols (`any MarkLoanOverdueUseCaseProtocol`) and port protocols (`any CatalogClient`), plus a `Logger` if needed. It never receives a repository, a database or scope, a concrete adapter type, `TemporalClient` or configuration.
 
 ```swift
 package import Temporal
@@ -281,7 +282,7 @@ package struct LoanActivities {
 - An activity runs a [system use case](use-cases.md#system-use-cases) when the step reads or writes this service's data, on the worker's database, and calls a port when the step is one effect another system owns; a use case that would only forward to the port adds nothing. It makes no business decision: the use case decides, and the activity reports what it decided, never discarding what the use case returned, since the workflow's next step depends on that answer.
 - Its input is a small struct nested in the container, named for the activity (`MarkOverdueInput`), holding ids and values, never commands; the activity builds what the use case or port takes.
 - It returns a primitive or a small nested output holding only what the workflow reads (`MarkOverdueOutput`), never a domain model, which isn't `Codable`.
-- It maps its use case's error as a handler does, with `do throws(E)` and an exhaustive `switch` ([errors](style.md#errors)): a permanent failure, a case no retry can change, becomes `ApplicationError(message:type:isNonRetryable: true)`, and every other case is rethrown, so Temporal retries it.
+- It maps its use case's error as a handler does ([errors](style.md#errors)): a permanent failure, a case no retry can change, becomes `ApplicationError(message:type:isNonRetryable: true)`, and every other case is rethrown, so Temporal retries it.
 - It's safe to run twice: writes are conditional or keyed, and external effects carry an idempotency key derived from the workflow's subject (`loans-overdue-notice-<loan id>`). When one subject gets the effect more than once, such as a member's successive reset codes, the key adds the effect's own stored id: never a value made at send time, which a retry wouldn't repeat, and never a secret or part of one.
 - Activities are registered by name, the method's name capitalized (`MarkOverdue`).
 
@@ -317,7 +318,7 @@ A deploy replaces the code under every run in flight, and `LoanWorkflow`'s runs 
 - A change to the commands a workflow issues, such as an activity added, removed or reordered, or a wait changed, takes the new path behind `context.patch("<change>")` and keeps the old one. Once no run that started before the change remains, `context.deprecatePatch("<change>")` replaces the branch in one deploy, and a later deploy removes it.
 - A change too large to patch is a new workflow type, which new runs start; the worker registers it beside the old one until the old one's runs have ended.
 - A change to an activity's body alone, or to a payload's optional field, replays without a patch.
-- `temporal.worker.buildid`, the image's commit, labels which code a worker ran. The worker doesn't version by build id, so every worker polls every run, which is why a change must replay.
+- `temporal.worker.buildid` labels which code a worker ran. The worker doesn't version by build id, so every worker polls every run, which is why a change must replay.
 - `XCoreTests` replays each workflow's recorded histories, so a change that breaks a run in flight fails its build before it deploys ([test targets](testing.md#test-targets)).
 
 ## Recurring work
@@ -332,7 +333,7 @@ Work on a calendar, such as deleting rows whose retention has ended, is a workfl
 ## The worker
 
 `x worker run` builds the worker in [its own root](composition.md#the-workers-root):
-- It connects to Postgres as the worker role, so only use cases whose scopes the worker scope adopts can run in it.
+- It connects to Postgres as the worker role ([database roles](persistence.md#database-roles)).
 - Each service has one task queue, named for it (`loans`), under the SDK's key `temporal.worker.taskqueue`, which the serve process also reads for its starts.
 - Each service has its own namespace, named like its package (`bookshelf-loans`), so its runs, schedules and retention are its own. No service reaches another's runs: what another service must do, it asks through that service's contract. The Temporal server's authorizer, which the deployment configures, admits each certificate identity (`loans`, `loans-worker`) to its service's namespace only; without one, every process the Temporal authority signs reaches every namespace, which the plan puts to the user as a question.
 - The SDK's readers take the namespace under `temporal.client.namespace` for starts and `temporal.worker.namespace` for polling, which the defaults set together. They also require `temporal.client.instrumentation.serverhostname` and `temporal.worker.client.instrumentation.serverhostname` (the Temporal host), `temporal.worker.buildid` (the image's commit) and `temporal.worker.client.identity`, which the deployment sets.
