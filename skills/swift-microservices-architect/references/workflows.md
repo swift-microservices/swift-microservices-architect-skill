@@ -41,7 +41,7 @@ A workflow a provider's [webhook](security.md#webhooks) starts takes ids, not th
 
 ## Reaching a run from a use case
 
-A person's action on what a run waits for is a use case like any other, on its audience's database. It reaches the run through `temporalClient.workflowHandle(type:id:)`, with the id the workflow declares. `ExtendLoan` moves a loan's due date, which its run is waiting for:
+A person's action on what a run waits for is a use case like any other, on its audience's database. It reaches the run by the id the workflow declares: a signal with `signalWithStartWorkflow(type:input:options:signalType:)`, an update through `temporalClient.workflowHandle(type:id:)`. `ExtendLoan` moves a loan's due date, which its run is waiting for:
 
 ```swift
 let loan = try await database.withTransaction { scope in
@@ -49,8 +49,24 @@ let loan = try await database.withTransaction { scope in
 }
 
 let workflowID = LoanWorkflow.id(loanID: loan.id)
-let workflowHandle = temporalClient.workflowHandle(type: LoanWorkflow.self, id: workflowID)
-try await workflowHandle.signal(signalType: LoanWorkflow.ExtendDueDate.self)
+let workflowOptions = WorkflowOptions(
+    id: workflowID,
+    taskQueue: taskQueue,
+    idReusePolicy: .allowDuplicateFailedOnly,
+    idConflictPolicy: .useExisting
+)
+let workflowInput = LoanWorkflow.Input(
+    loanID: loan.id,
+    userID: loan.userID,
+    bookID: loan.bookID,
+    dueDate: loan.dueDate
+)
+_ = try await temporalClient.signalWithStartWorkflow(
+    type: LoanWorkflow.self,
+    input: workflowInput,
+    options: workflowOptions,
+    signalType: LoanWorkflow.ExtendDueDate.self
+)
 logger.info("Loan extended", metadata: ["loanID": "\(loan.id)"])
 return loan
 ```
@@ -61,7 +77,7 @@ The signal carries nothing: its handler ends the run's wait, and the run reads t
 - The run's correctness never rests on the signal. A run that wakes at the old due date, its signal lost or racing the extension, finds the loan not due, since the transition names the due date ([state transitions](persistence.md#repositories-and-statements)), and waits again for the date the activity reports.
 - A fact that outlives the run, such as a return, needs no signal: it stays in the database, where the activity that acts on it reads it (`markOverdue`).
 - The signal follows every call that finds the row in the state it reports, a repeat included, so a retried request delivers a signal lost after the first commit. Its handler sets a property, so a second delivery changes nothing.
-- A use case whose run may never have started, its start lost after the commit, starts it with the same id and policies before signalling: `.useExisting` joins the run that's there.
+- A run may never have started, its start lost after the commit, so a signal is sent with signal-with-start under the start's id and policies, and the use case holds what a start needs: Temporal signals the run that's there, or starts it and delivers the signal, in one call.
 - An update is for the one case a signal can't serve: the answer must come from the run, which alone knows whether the step may happen now. The use case authorizes the caller before sending it, and its input names the user it acts for, since the worker binds no caller. Its handler refuses by the workflow's state first, runs the write as an activity over a system use case, and answers what the run decided, which the use case maps to its cases.
 - A handler whose activity fails leaves the workflow's state as it found it, and that activity's attempts are bounded ([activity options](#activity-options)).
 - Where a record's status and a run's stage are the same steps, the row holds them. The workflow keeps only what it waits on, and moves on from what an activity reports its use case found, never from its own count of the steps.
