@@ -62,6 +62,7 @@ let swiftSettings: [SwiftSetting] = [
     .enableUpcomingFeature("MemberImportVisibility"),
     .enableUpcomingFeature("InternalImportsByDefault"),
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .strictMemorySafety(),
 ]
 
 let package = Package(
@@ -87,6 +88,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.17.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.35.2"),
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.36.0", traits: []),
+        .package(url: "https://github.com/apple/swift-system.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-temporal-sdk.git", from: "1.5.0"),
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
         .package(url: "https://github.com/grpc/grpc-swift-extras.git", from: "2.2.2"),
@@ -162,6 +164,7 @@ let package = Package(
                 .product(name: "PostgresMigrations", package: "postgres-migrations"),
                 .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+                .product(name: "SystemPackage", package: "swift-system"),
                 .product(name: "Temporal", package: "swift-temporal-sdk"),
                 .product(name: "UnixSignals", package: "swift-service-lifecycle"),
             ],
@@ -181,7 +184,7 @@ let package = Package(
 
 ## Swift settings
 
-Every target in every package, services and libraries, builds in Swift 6 mode with the template's `swiftSettings`. The code relies on `package` access, typed throws and package traits ([style](style.md)). A server package never sets `.defaultIsolation(MainActor.self)`.
+Every target in every package, services and libraries, builds in Swift 6 mode with the template's `swiftSettings`. `.strictMemorySafety()` makes the compiler warn at each unsafe construct, such as a `nonisolated(unsafe)` value or an `Unsafe…` pointer, and CI's warnings-as-errors fails one that isn't marked `unsafe`; it doesn't flag `@unchecked Sendable`, which the boundary script still checks. The code relies on `package` access, typed throws and package traits ([style](style.md)). A server package never sets `.defaultIsolation(MainActor.self)`.
 
 ## Traits and Foundation
 

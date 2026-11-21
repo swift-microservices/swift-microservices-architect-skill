@@ -20,4 +20,3 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 - **Public API versioning.** `Deprecation` and `Sunset` headers on a retiring route, the rule for a `/v2` beside `/v1`, and an `openapi.yaml` breaking-change check as a swift-microservices/ci input. Home: `gateway.md`, `delivery.md`.
 - **Operations plan.** Service-level objectives per route tier, the alerts that guard them (error rate, latency, failed workflows, schedule-to-start latency, pool waits), and runbooks for a bad deploy, a stuck or nondeterministic workflow, and certificate renewal, in the plan's Operations section. Home: `system.md#the-plan`.
 
-- **Strict memory safety.** `.strictMemorySafety()` flags `nonisolated(unsafe)` and unsafe pointers, not `@unchecked Sendable`, and CI turns its warnings into errors. Build the package template with it, the Temporal macros and generated contracts included, before adding it to `swiftSettings`. Home: `packages.md#swift-settings`.

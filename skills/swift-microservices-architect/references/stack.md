@@ -44,6 +44,7 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 | postgres-nio | `PostgresNIO` | `PostgresClient` pools, prepared statements, row decoding | XPostgres, executables |
 | [postgres-migrations](https://github.com/hummingbird-project/postgres-migrations) | `PostgresMigrations` | `DatabaseMigration`, `DatabaseMigrations` | XPostgres, executables |
 | [swift-configuration](https://github.com/apple/swift-configuration) | `Configuration` | `ConfigReader`, providers, scoped readers, secrets | Executables, `<Project>Transport`, `<Project>Persistence` |
+| [swift-system](https://github.com/apple/swift-system) | `SystemPackage` | `FilePath`, the secrets directory `DirectoryFilesProvider` reads | Executables |
 | [swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle) | `ServiceLifecycle`, `UnixSignals` | `Service`, `ServiceGroup`, graceful shutdown on signals | Executables |
 | [swift-argument-parser](https://github.com/apple/swift-argument-parser) | `ArgumentParser` | The executable's commands | Executables |
 | [swift-certificates](https://github.com/apple/swift-certificates) | `X509` | Reading the common name of a peer's certificate | `<Project>Transport` |
