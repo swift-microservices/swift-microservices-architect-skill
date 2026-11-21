@@ -271,7 +271,8 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                     throw BorrowBookUseCaseError.loanLimitReached
                 }
 
-                let dueDate = policy.dueDate(borrowedAt: .now)
+                let borrowDate = Date.now
+                let dueDate = policy.dueDate(borrowedAt: borrowDate)
                 let command = CreateLoanCommand(
                     userID: subject.userID,
                     bookID: book.id,
