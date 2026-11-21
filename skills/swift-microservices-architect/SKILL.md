@@ -108,11 +108,11 @@ do {
 ## Prerequisites
 
 - A Swift toolchain at the package's `swift-tools-version`, and for its `XPostgresTests` and `XValkeyTests` a real Postgres, 18 or later for `uuidv7()`, and Valkey reached through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
-- Building an XCore with workflows fetches the Temporal SDK's prebuilt sdk-core binary, so the machine needs access to it ([what Core may link](references/packages.md#what-core-may-link)).
+- Building an XCore with workflows fetches the Temporal SDK's prebuilt sdk-core binary, and testing it downloads Temporal's test server, so the machine needs network access to both ([what Core may link](references/packages.md#what-core-may-link), [test targets](references/testing.md#test-targets)).
 
 ## Available Scripts
 
-Each runs from the package's root and exits non-zero on any failure:
+Each is in this skill's `scripts/`, runs from the package's root and exits non-zero on any failure:
 
 | Script | Purpose | Arguments |
 |---|---|---|
@@ -123,13 +123,12 @@ Each runs from the package's root and exits non-zero on any failure:
 ## Limitations
 
 - Not for iOS, macOS or SwiftUI apps, or Swift packages that aren't servers.
-- The code inside a shape that isn't architecture belongs to the [related skills](#related-skills).
 - A workflow start or signal lost after its transaction commits is recovered only when the client retries the request ([transactions](references/use-cases.md#transactions)).
 - Not covered: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery, client SDKs and frontends; ask the user rather than invent them.
 
 ## References
 
-Read a reference when the task reaches its row, or when a checklist item names it, never all of them up front: each one costs context for the rest of the task.
+Read a reference only when the task reaches its row or a checklist item names it.
 
 | Reference | Read when |
 |---|---|
@@ -258,5 +257,5 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] Where the backend has them: workflows checked with temporal-developer, tests with swift-testing-expert, and actors, Mutexes and the boundary script's unchecked concurrency with swift-concurrency
 - [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), FoundationEssentials imports, package access, naming (conventions.md)
 - [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (the shapes), minor (naming, layout, logging), each citing a file and line or an empty grep, with the rule and fix; change code only when asked
-- [ ] swift build and swift test; report each result, or why it couldn't run
+- [ ] scripts/swift_ci.sh build and test; report each result, or why it couldn't run
 ```

@@ -241,7 +241,7 @@ package struct LoanActivities {
 
 ## Activity options
 
-Named once per target, in `ActivityOptions+X.swift` in the folder of the first workflow that needs them, and used by name in every workflow of the target. A step a caller waits on, inside an update, takes options of its own with `maximumAttempts`; a background step retries until it lands:
+Named once per target, in `ActivityOptions+X.swift` in the folder of the first workflow that needs them, and used by name in every workflow of the target. A write to the service's own data retries until it lands. An effect that loses its worth when late, such as a notice, and a step a caller waits on inside an update, take options with `maximumAttempts`:
 
 ```swift
 extension ActivityOptions {
