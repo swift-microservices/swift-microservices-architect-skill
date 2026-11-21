@@ -151,6 +151,13 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 ## Operations
 | Environment | Postgres `max_connections` | Each process's replicas and role pools, and their total | Collector endpoint | Stop timeout |
 |---|---|---|---|---|
+
+| Tier, or a route set apart | Availability over 30 days | Latency at the 99th percentile |
+|---|---|---|
+
+| Alert | Source | Fires when | Runbook |
+|---|---|---|---|
+- Runbooks, as numbered steps: a bad deploy, a stuck or nondeterministic workflow, certificate renewal
 - Backups and point-in-time recovery of Postgres and Temporal's store, each service's Temporal namespace and its retention, and whether Temporal's authorizer confines each identity to its namespace: the user's answers
 
 ## Build order
@@ -159,6 +166,15 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 ## Questions
 - Each question for the user, with the answer the plan assumes
 ```
+
+Operations' targets and thresholds are the user's answers; what they measure, the gateway and Temporal already emit:
+
+- Objectives take a row per route tier ([request contexts and tiers](gateway.md#request-contexts-and-tiers)), and one per route whose work sets it apart, such as sign-in, which bcrypt slows. The gateway's `MetricsMiddleware` measures both ([a trace across processes](observability.md#a-trace-across-processes)): availability from its count of requests by route and status, as the share answered without a `5xx`, and latency from its duration, which covers only requests answered without an error, since it counts a thrown problem but doesn't time it.
+- Alerts: error rate and latency per tier, against its objective; failed and timed-out runs, and failing workflow tasks, per namespace; schedule-to-start latency per task queue, which rises when no worker polls or every worker is busy. The workflow alerts read Temporal's own metrics. A nondeterministic run never fails: its workflow task fails on every retry, so only the failing-task alert sees it.
+- A bad deploy: run Deploy to production with the last commit production ran, never reverting a migration ([a service's CI workflows](delivery.md#a-services-ci-workflows)). Callers and the gateway roll back before a service whose new RPC they call, the reverse of [the order they deploy in](grpc.md#contracts-in-the-protos-package), and the fix goes forward through staging.
+- A stuck workflow: rising schedule-to-start latency means its task queue's worker isn't polling; otherwise its pending activity's last failure names the dependency it waits on, and the activity's retries resume it once that recovers.
+- A nondeterministic workflow: roll back to the image before the change, so the runs that started before it replay and resume; the runs the bad image started then fail on replay and are reset, as `temporal-developer` describes. The change returns behind a patch, with a failed run's history among the replays `XCoreTests` runs ([changing a workflow](workflows.md#changing-a-workflow)).
+- Certificate renewal, which the deployment performs: a renewed pair at the mount paths needs no deploy ([mutual TLS](security.md#mutual-tls)). A new trust root joins every trust bundle beside the old one, with a deploy of each process, before any pair it signs is mounted, and the old root leaves once no mounted pair chains to it.
 
 Review the plan against the hard rules in `SKILL.md`, and put its questions to the user, before writing code.
 

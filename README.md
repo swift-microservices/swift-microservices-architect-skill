@@ -69,7 +69,7 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 
 | Area | Covers |
 |---|---|
-| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan |
+| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan with its objectives, alerts and runbooks |
 | Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
 | Persistence | Postgres roles proved by certificates, row-level security for user and organization tenants, statements, paging, migrations, Valkey |
