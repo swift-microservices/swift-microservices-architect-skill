@@ -12,7 +12,7 @@ Every change to the skill ends with [the checks](#after-every-change), repeated 
 
 ## Skill best practices
 
-These come from Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), [skills in Claude Code](https://code.claude.com/docs/en/skills), the [Agent Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) and the [Agent Skills specification](https://agentskills.io/specification), as this skill applies them, with [Codex's skills](https://learn.chatgpt.com/docs/build-skills) for what Codex reads and NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) for the Tier 1 checks a skill passes before it's published. The guidance changes, so recheck the sources before changing the skill's structure or frontmatter.
+These come from Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), [skills in Claude Code](https://code.claude.com/docs/en/skills), the [Agent Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) and the [Agent Skills specification](https://agentskills.io/specification), as this skill applies them, with [Codex's skills](https://learn.chatgpt.com/docs/build-skills) for what Codex reads and NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) for the Tier 1 and Tier 2 checks a skill passes before it's published. The guidance changes, so recheck the sources before changing the skill's structure or frontmatter.
 
 **How Claude loads a skill**, in three stages, each with its own limit:
 
@@ -43,6 +43,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - One home per example, too. Code shown in one reference is linked from the others: the composition root holds the transports, the gateway's root its upstream clients.
 - `SKILL.md`'s Troubleshooting holds the gotchas: mistakes that compile and then fail only at run time or silently, such as a component left out of the `ServiceGroup` or a nondeterministic workflow; a mistake the build catches is stated once, in its shape's reference. An environment fact that stops a build or test from running is a prerequisite.
 - One term per concept, no time-sensitive statements, concrete examples, and one default rather than a menu of options.
+- Related skills lists each skill that covers the code inside a shape, one line each: what it covers, the `name` in that skill's frontmatter, and a link to its source. Prerequisites names the same skills, so an agent asks the user to install a missing one, and `README.md`'s Works well with links the same sources. A related skill is chosen for server-side Swift on Linux, accuracy, the specification and a small `SKILL.md`; a pair on one subject, such as Swift Testing and Swift Concurrency, comes from one author. Where its examples differ from this skill, this skill's shapes and rules win, and the overlap is never restated here.
 - A checklist is what the agent copies into its response for a task. One that changes code ends in `Verify`, the one build, test and script run those checklists share, repeated until all pass; a review runs the build and the tests and reports the results. `SKILL.md`'s Instructions hold them and call them checklists, so "workflow" means only a Temporal workflow or a CI workflow.
 
 ## What a change must respect
@@ -88,6 +89,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - the frontmatter's keys, `name`, `description`, `license` and `metadata`, against the limits above, with `license` and `metadata.author` matching `plugin.json`'s
    - `SKILL.md`'s lines and estimated tokens, at 4 characters a token over the whole file, as SkillEvaluator estimates them
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
+   - that Prerequisites names, and `README.md`'s Works well with links, exactly the skills Related skills lists
    - every link and anchor
    - that the descriptions and the four versions in `SKILL.md` and the Claude Code and Codex manifests agree, and that the Codex marketplace lists the plugin
    - that no Swift example builds a value inside an argument or declares a variable before a `do` for its catches to fill
@@ -99,7 +101,15 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    skillevaluator tier1 skills/swift-microservices-architect --no-llm --skillspector-baseline .github/skillspector-baseline.yaml -o /tmp/skillevaluator
    ```
 
-3. Review the diff for what no script checks:
+3. SkillEvaluator's Tier 2 passes, with no cluster judged redundant: a rule repeated within the skill moves to its one home. It embeds the skill through NVIDIA's API, so it needs a key from [build.nvidia.com](https://build.nvidia.com). To compare the skill against the related skills too, check each one out into a folder of its own under one directory, build a catalog from it, and pass it with `--catalog`; content the skill shares with one is technique, which stays in the related skill:
+
+   ```
+   export SKILL_EVAL_EMBEDDING_PROVIDER=nv_build NVIDIA_API_KEY=<key>
+   skillevaluator tier2 similarity-check <related skills> --type skill --full-body --save-catalog /tmp/related-skills.json
+   skillevaluator tier2 skills/swift-microservices-architect --catalog /tmp/related-skills.json --full-body -o /tmp/skillevaluator
+   ```
+
+4. Review the diff for what no script checks:
 
    ```
    - [ ] Each rule has one home: SKILL.md carries at most one line for it, and other files link to it
@@ -107,6 +117,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - [ ] Examples are Bookshelf's and follow the code style
    - [ ] Terms are the ones this file lists, with no dates, history or old names
    - [ ] README.md still describes what the skill covers
+   - [ ] Related skills, Prerequisites and README.md's Works well with name the same skills
    ```
 
 ## Pull requests and releases

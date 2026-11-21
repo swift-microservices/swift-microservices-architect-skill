@@ -97,7 +97,7 @@ do {
 
 ## Troubleshooting
 
-- A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls hang until a deadline or timeout cancels them.
+- A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls hang until their deadline.
 - The worker's `gracefulShutdownPeriod` defaults to zero, so every deploy cancels in-flight activities and repeats their effects ([the worker's root](references/composition.md#the-workers-root)).
 - The database owner bypasses row-level security, so only `serve --migrate-database` connects as the owner, and every other process as its roles.
 - Policies combine with `OR`: on a table with a user's and an organization's, a session acting for the organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
@@ -109,6 +109,7 @@ do {
 
 - A Swift toolchain at the package's `swift-tools-version`, and for its `XPostgresTests` and `XValkeyTests` a real Postgres, 18 or later for `uuidv7()`, and Valkey reached through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
 - Building an XCore with workflows fetches the Temporal SDK's prebuilt sdk-core binary, and testing it downloads Temporal's test server, so the machine needs network access to both ([what Core may link](references/packages.md#what-core-may-link), [test targets](references/testing.md#test-targets)).
+- The [related skills](#related-skills) `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`; ask the user once to install a missing one (`npx skills add <source> --skill <name>`) and carry on.
 
 ## Available Scripts
 
@@ -122,7 +123,7 @@ Each is in this skill's `scripts/`, runs from the package's root and exits non-z
 
 ## Limitations
 
-- Not for iOS, macOS or SwiftUI apps, or Swift packages that aren't servers.
+- Not for Apple-platform apps or Swift packages that aren't servers.
 - A workflow start or signal lost after its transaction commits is recovered only when the client retries the request ([transactions](references/use-cases.md#transactions)).
 - Not covered: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery, client SDKs and frontends; ask the user rather than invent them.
 
@@ -150,13 +151,13 @@ Read a reference only when the task reaches its row or a checklist item names it
 
 ## Related skills
 
-These cover the code inside the shapes; where this skill states a shape, follow it. Load each when its task comes up or a checklist names it; when one isn't installed, tell the user once, with its source, and carry on:
-- How a workflow is designed and behaves (its history, signals and updates, waiting, compensation, versioning): `temporal-developer` ([source](https://github.com/temporalio/skill-temporal-developer))
+They cover the code inside the shapes, and this skill's shapes and rules win over their examples. Load each when its task comes up or a checklist names it:
+- A workflow's design: its history, signals and updates, waiting, compensation, versioning: `temporal-developer` ([source](https://github.com/temporalio/skill-temporal-developer))
 - A table's policy, grants, indexes and column types, and what a migration locks: `supabase-postgres-best-practices` ([source](https://github.com/supabase/agent-skills))
 - The Valkey command for an operation, its expiry and atomicity: `valkey` ([source](https://github.com/valkey-io/valkey-skills))
-- Test code, with Swift Testing: `swift-testing-expert` ([source](https://github.com/AvdLee/Swift-Testing-Agent-Skill))
-- Actors, task groups, cancellation, `Sendable` diagnostics, Swift 6 migration: `swift-concurrency` ([source](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill))
-- Argument labels, method names, documentation comments: `swift-api-design-guidelines` ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
+- Test code, with Swift Testing: `swift-testing-pro` ([source](https://github.com/twostraws/Swift-Testing-Agent-Skill))
+- Actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics: `swift-concurrency-pro` ([source](https://github.com/twostraws/Swift-Concurrency-Agent-Skill))
+- Argument labels, method names, documentation comments: `swift-api-design-guidelines-skill` ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
 
 ## Instructions
 
@@ -187,7 +188,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer, a Valkey command chosen with valkey
 - [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' list, Serve with its health service, Health, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
-- [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-expert
+- [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-pro
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
 - [ ] Verify
 ```
@@ -203,7 +204,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] XGRPC: the handler and the input's conversion, every error case mapped
 - [ ] Executable: the use case on its role's database, passed to the service
 - [ ] Gateway: the route in its tier, if public
-- [ ] Tests: the use case's outcomes and the handler's statuses, over mocks, written with swift-testing-expert
+- [ ] Tests: the use case's outcomes and the handler's statuses, over mocks, written with swift-testing-pro
 - [ ] Verify
 ```
 
@@ -211,13 +212,13 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 
 ```
 - [ ] Look up the feature's established approach (style.md#reading-like-the-requirement)
-- [ ] Load temporal-developer, and design the workflow with it: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow); where it has no Swift reference, read the SDK's documentation before using an API
+- [ ] Design the workflow with temporal-developer: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow); where it has no Swift reference, read the SDK's documentation first
 - [ ] Each person's change is written by its use case, then signalled if the run waits on it, or sent as an update if only the run can decide (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
 - [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)
 - [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
 - [ ] Executable: TemporalClient and the task queue into Serve's use cases; the worker group and its Run root
-- [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks, written with swift-testing-expert
+- [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks, written with swift-testing-pro
 - [ ] Verify
 ```
 
@@ -235,7 +236,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 ```
 - [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests); report any suite that can't run
 - [ ] scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries), and swift-format lint
-- [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency, never silenced
+- [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency-pro, never silenced
 ```
 
 **Set up CI/CD**
@@ -254,7 +255,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] Each use case: its files, typed throws, one catch per case, no helpers, the right database role
 - [ ] Each adapter only converts and delegates; every error case is mapped
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
-- [ ] Where the backend has them: workflows checked with temporal-developer, tests with swift-testing-expert, and actors, Mutexes and the boundary script's unchecked concurrency with swift-concurrency
+- [ ] Workflows checked with temporal-developer, tests with swift-testing-pro, and actors, Mutexes and unchecked concurrency with swift-concurrency-pro
 - [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), FoundationEssentials imports, package access, naming (conventions.md)
 - [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (the shapes), minor (naming, layout, logging), each citing a file and line or an empty grep, with the rule and fix; change code only when asked
 - [ ] scripts/swift_ci.sh build and test; report each result, or why it couldn't run

@@ -88,10 +88,10 @@ Not covered: setting up Dokploy and its servers, compose files, networks, the ed
 
 ### Works well with
 
-The skill decides the shapes; these skills cover the code inside them. The agent loads each where a checklist calls for it, such as Temporal's skill before designing a workflow and the testing skill before writing tests, and tells you when one isn't installed:
+The skill decides the shapes; these skills cover the code inside them. The agent loads each where a checklist calls for it, such as Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you to install one that's missing:
 
-- [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill): actors, task groups, `Sendable` diagnostics
-- [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
+- [Swift Concurrency Pro](https://github.com/twostraws/Swift-Concurrency-Agent-Skill): actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics
+- [Swift Testing Pro](https://github.com/twostraws/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
 - [Temporal Developer](https://github.com/temporalio/skill-temporal-developer): how a workflow is designed and behaves, from signals and updates to versioning
 - [Supabase Postgres Best Practices](https://github.com/supabase/agent-skills): the SQL inside the shapes, from policies and grants to indexes and migration locks
 - [Valkey](https://github.com/valkey-io/valkey-skills): which command fits an operation, with its expiry and atomicity
@@ -137,9 +137,10 @@ Issues and pull requests are welcome. [CLAUDE.md](CLAUDE.md) holds the rules eve
 ```bash
 python3 .github/scripts/check_skill.py
 skillevaluator tier1 skills/swift-microservices-architect --no-llm --skillspector-baseline .github/skillspector-baseline.yaml -o /tmp/skillevaluator
+skillevaluator tier2 skills/swift-microservices-architect -o /tmp/skillevaluator
 ```
 
-The second is NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install skillevaluator`).
+The last two are NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install skillevaluator`); Tier 2 needs an NVIDIA API key, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
 
 Each pull request carries one semver label, which sets the next release's version.
 
