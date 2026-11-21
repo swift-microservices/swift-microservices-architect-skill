@@ -133,7 +133,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 ### <project>-<x>
 | Target | Holds |
 |---|---|
-- Commands: `serve [--migrate-database]`, `worker run`
+- Commands: `serve [--migrate-database]`, `worker run`, `build-indexes`
 - Data: where it lives, the database roles and the use cases each runs, and how each process proves its roles
 - Calls out to: other services' internal RPCs, providers, Temporal, Valkey
 

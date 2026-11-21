@@ -26,7 +26,7 @@ By default ([data placement](system.md#data-placement)), each service's database
 
 | Role | Connects | Sees | Scope |
 |---|---|---|---|
-| Owner | `serve --migrate-database`, for migrations only, as the migrator ([Postgres](security.md#postgres)) | Everything; bypasses row-level security | none |
+| Owner | `serve --migrate-database` and `build-indexes`, for migrations and indexes only, as the migrator ([Postgres](security.md#postgres)) | Everything; bypasses row-level security | none |
 | `<x>_service` | `serve`, for anyone's and the caller's own RPCs | Tenant tables narrowed to the bound caller; untenanted tables whole | `Postgres<X>Scope` |
 | `<x>_internal` | `serve`, for administrators' and internal RPCs, anyone's that reach tenant rows with no caller bound, such as a webhook, and a caller's that must reach rows outside the caller's tenant, such as adding someone who isn't a member yet | Every row, through its own policy | `Postgres<X>InternalScope` |
 | `<x>_worker` | `worker run`, for [system use cases](use-cases.md#system-use-cases) | Every row, through its own policy | `Postgres<X>WorkerScope` |
@@ -273,9 +273,9 @@ package enum LoansMigrations {
 
 - The executable's `Database/Migrations.swift` reads the names from configuration, adds the list with `add(contentsOf:)` and applies it with `options: .ignoreUnknownMigrations`, so a rolled-back image starts on a schema holding migrations its list lacks instead of refusing to start. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited or renamed.
 - `serve --migrate-database` applies them as the owner, proved by the migrator's certificate, over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before the role clients and the `ServiceGroup` are built ([commands](composition.md#commands)).
-- Every pending migration applies in one transaction, which holds each lock it takes until the last migration commits. An index on a table that already holds many rows is built with `CREATE INDEX CONCURRENTLY`, which can't run in a transaction and doesn't block writes: XPostgres lists those in `Migrations/LoansIndexes.swift`, and `Migrations.apply()` runs each after the list as `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, first dropping one that an interrupted build left invalid.
+- Every pending migration applies in one transaction, which holds each lock it takes until the last migration commits. An index on a table that already holds many rows is built with `CREATE INDEX CONCURRENTLY`, which can't run in a transaction and doesn't block writes: XPostgres lists those in `Migrations/LoansIndexes.swift`, and `loans build-indexes` runs each as `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, first dropping one that an interrupted build left invalid ([commands](composition.md#commands)).
 - A backfill of existing rows is never a migration: it's a short-lived command on the internal role ([commands](composition.md#commands)) that updates in batches by id, each batch its own transaction, between the deploy that adds the column and the one that relies on it.
-- One process migrates, before the serving replicas start: postgres-migrations takes no lock, so replicas that apply at once race and all but one fail. `serve --migrate-database` runs in one process, deployed first ([a service's CI workflows](delivery.md#a-services-ci-workflows)); every other serve replica runs without the flag.
+- One process migrates, before the serving replicas start: postgres-migrations takes no lock, so replicas that apply at once race and all but one fail. `serve --migrate-database` runs in one process, deployed first, with a health check that waits out its migrations ([a service's CI workflows](delivery.md#a-services-ci-workflows)); every other serve replica runs without the flag.
 
 ## Valkey
 
