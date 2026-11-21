@@ -101,13 +101,7 @@ struct Serve: AsyncParsableCommand {
         let postgresConfig = config.scoped(to: "postgres")
         if migrateDatabase {
             let migratorTLSConfig = postgresConfig.scoped(to: "owner.tls")
-            let migratorCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(
-                config: migratorTLSConfig,
-                logger: logger
-            )
-            let migratorCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
-                configuration: migratorCertificateReloaderConfiguration
-            )
+            …  // migratorCertificateReloader from migratorTLSConfig, as certificateReloader above
             let ownerPostgresConfiguration = try PostgresClient.Configuration(
                 config: postgresConfig,
                 role: "owner",
@@ -123,16 +117,8 @@ struct Serve: AsyncParsableCommand {
             role: "service",
             certificateReloader: certificateReloader
         )
-        let internalPostgresConfiguration = try PostgresClient.Configuration(
-            config: postgresConfig,
-            role: "internal",
-            certificateReloader: certificateReloader
-        )
         let postgresClient = PostgresClient(configuration: servicePostgresConfiguration, backgroundLogger: logger)
-        let internalPostgresClient = PostgresClient(
-            configuration: internalPostgresConfiguration,
-            backgroundLogger: logger
-        )
+        …  // internalPostgresClient the same way, for the role "internal"
 
         let jwtConfig = config.scoped(to: "jwt")
         let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
@@ -158,17 +144,7 @@ struct Serve: AsyncParsableCommand {
         let temporalTLSConfig = temporalConfig.scoped(to: "tls")
         let temporalHost = try temporalConfig.requiredString(forKey: "host")
         let temporalPort = try temporalConfig.requiredInt(forKey: "port")
-        let temporalCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(
-            config: temporalTLSConfig,
-            logger: logger
-        )
-        let temporalCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
-            configuration: temporalCertificateReloaderConfiguration
-        )
-        let temporalSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(
-            config: temporalTLSConfig,
-            certificateReloader: temporalCertificateReloader
-        )
+        …  // temporalCertificateReloader and temporalSecurity from temporalTLSConfig, as the tls pair's above
         let temporalClientConfiguration = try TemporalClient.Configuration(configReader: temporalConfig)
         let temporalClient = try TemporalClient(
             target: .dns(host: temporalHost, port: temporalPort),
