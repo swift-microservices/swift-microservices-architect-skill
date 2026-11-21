@@ -170,7 +170,7 @@ extension LoanWorkflow {
 
 ## Determinism
 
-A workflow takes the same path on every replay:
+A workflow takes the same path on every replay, as `temporal-developer` gives it. In Swift:
 
 | Instead of | A workflow uses |
 |---|---|
@@ -178,9 +178,7 @@ A workflow takes the same path on every replay:
 | `Task.sleep`, `Clock.sleep` | `context.sleep(for:)` |
 | `UUID()`, `.random(in:)` | `context.randomNumberGenerator`, or a value an activity returns |
 | A `Logger` from the composition root | `Logger.current`, which the worker keeps quiet during replay |
-| I/O of any kind: databases, network, files, the environment | An activity |
 | `Task {}`, `Task.detached`, actors | `async let`, task groups, child workflows |
-| Global or static mutable state | The workflow's own stored properties |
 
 Workflows and their inputs are value types; nothing in a workflow holds a reference to a service, a client or a repository.
 
