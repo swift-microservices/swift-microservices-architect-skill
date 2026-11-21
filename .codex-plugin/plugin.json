@@ -34,7 +34,7 @@
     "websiteURL": "https://github.com/swift-microservices/swift-microservices-architect-skill",
     "defaultPrompt": [
       "Plan a Swift backend for a lending library with accounts, a book catalog and loans",
-      "Add an endpoint for returning a book",
+      "Take the next step in this backend's plan",
       "Review this service's architecture and code style"
     ]
   }
