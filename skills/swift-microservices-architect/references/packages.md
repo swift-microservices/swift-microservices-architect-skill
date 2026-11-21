@@ -39,7 +39,7 @@ Core links a library that saves every service re-declaring a concept, when the l
 - doesn't pull full Foundation into the target;
 - is stable enough for its types to appear in use case signatures.
 
-`Persistence`, `<Project>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
+`Persistence`, `<Project>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token or making a signing key qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
 
 `Temporal` is the one deliberate exception to these criteria: Core commits to it, as it does to the standard library. A workflow is the application's orchestration, and Temporal's determinism rules and macros make a wrapper cost more than it saves. It stays in its own corner of Core, file by file, since a module's types are visible only in files that import it:
 - `import Temporal` appears only in `XCore/Workflows/**` and in the use cases that start, signal, query or update a workflow, in `XUseCase.swift` alone of their five files.
@@ -247,7 +247,7 @@ Where each file goes: [folders](conventions.md#folders).
 bookshelf-core/
 ├── Package.swift
 └── Sources/
-    ├── BookshelfAuthentication/    UserIdentity.swift, UserRole.swift, OperationContext+User.swift, JWT+EdDSA.swift
+    ├── BookshelfAuthentication/    UserIdentity.swift, UserRole.swift, OperationContext+User.swift
     ├── BookshelfPersistence/       PostgresSettings+User.swift, UserSettingsInterceptor.swift,
     │                               PostgresClient.Configuration+ConfigReader.swift
     ├── BookshelfTransport/         TimedCertificateReloader.Configuration+ConfigReader.swift,
@@ -255,13 +255,13 @@ bookshelf-core/
     │                               HTTP2ClientTransport.Posix.TransportSecurity+ConfigReader.swift,
     │                               HTTP2ServerTransport.Posix.Config+ConfigReader.swift,
     │                               HTTP2ClientTransport.Posix.Config+ConfigReader.swift,
-    │                               ServiceConfig+ConfigReader.swift, JWTAuthenticator+ConfigReader.swift,
-    │                               JWTIssuer+ConfigReader.swift, InternalCallerInterceptor.swift
+    │                               ServiceConfig+ConfigReader.swift, InternalCallerInterceptor.swift,
+    │                               SigningKeyRefresher.swift
     └── BookshelfTesting/           MockDatabase.swift, MockAuthenticator.swift
 ```
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
-- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. It adds swift-crypto for a key's thumbprint ([user tokens](security.md#user-tokens)). `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; executables link it, and `XPostgresTests` for the settings it binds. `BookshelfTransport` adds grpc-swift-2 for `ServiceConfig` and the interceptor, grpc-swift-nio-transport, swift-certificates for the peer's common name, swift-nio-extras and swift-configuration.
+- `BookshelfAuthentication` depends on swift-authentication, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; executables link it, and `XPostgresTests` for the settings it binds. `BookshelfTransport` adds grpc-swift-2 for `ServiceConfig` and the interceptor, grpc-swift-nio-transport, swift-certificates for the peer's common name, swift-nio-extras, swift-configuration, and jwt-kit and swift-service-lifecycle for `SigningKeyRefresher` ([signing keys](security.md#signing-keys)).
 - Its API is `public`, with `public import` for every module whose types it exposes.
 - It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<project>-protos`, is released and tagged first; each service and the gateway then raise their requirement. Before the shared packages have a remote, each is a local repository with its releases tagged, and a dependent names it by its `file://` URL and the same `from:`, which resolves as a release does; the URL becomes the remote's in one change once it exists.
 

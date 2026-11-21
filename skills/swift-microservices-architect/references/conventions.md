@@ -35,7 +35,7 @@
 | Write command | The write's verb and noun + `Command` | `CreateLoanCommand` |
 | Errors | `<Resource>RepositoryError`, `<Service>ClientError`, `<Operation>UseCaseError`; cases name outcomes | `CatalogClientError.unavailable`, `.bookNotFound` |
 | Port to another service | `<Service>Client`; implementation `GRPC<Service>Client` | `CatalogClient`, `GRPCCatalogClient` |
-| Port to a provider | A role noun; implementation the provider's name + the role | `NoticeSender`, `ResendNoticeSender`; `PasswordHasher`, `BcryptPasswordHasher` |
+| Port to a provider | A role noun; implementation the provider's name + the role | `NoticeSender`, `ResendNoticeSender`; `PasswordHasher`, `BcryptPasswordHasher`; `CredentialIssuer`, `JWTCredentialIssuer` |
 | Workflow, activity container | `<Process>Workflow`, `<Process>Activities`; a container an activity several workflows share is named for its step, `<Step>Activities`; activities are verbs, inputs `<Activity>Input` | `LoanWorkflow`, `LoanActivities.markOverdue(input:)`, `MarkOverdueInput` |
 | A use case's Temporal properties | `temporalClient`, `taskQueue` | `private let temporalClient: TemporalClient` |
 | Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `currentState(input:)` |
@@ -68,7 +68,7 @@
 | XPostgres | `Scopes/`, `Repositories/<Area>/` and `Repositories/PostgresRepositoryError.swift`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/` for the area's own tables and policies, `Migrations/Role/`, `Migrations/XMigrations.swift` for their order and `Migrations/XIndexes.swift` for the indexes built concurrently |
 | XGRPC | A folder per proto service's resource (`Loans/`) with `XService`, `XInternalService` and `Protobuf/`; a `Protobuf/` at the target's root for what several of them convert (`PageSize.swift`, `PageInfo+Protobuf.swift`); `Clients/` with `Clients/Protobuf/` |
 | XValkey, X<Provider> | Flat, one file per type |
-| X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift`, `Worker/Worker.swift`, `Worker/Run.swift`, `<Command>/<Command>.swift` for a short-lived command |
+| X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift` and the signing key set's conversion, `Serve/JWKS+Protobuf.swift` (Identity's `JWKS+SigningKey.swift`), `Worker/Worker.swift`, `Worker/Run.swift`, `<Command>/<Command>.swift` for a short-lived command |
 | Test target | `Mocks/`, `Support/` for a harness or fixtures several suites share, then a file per tested type, never one per group of them: `BorrowBookUseCaseTests.swift` |
 | GatewayHTTP | `openapi.yaml`, `openapi-generator-config.yaml`, `<Project>API.swift`, `Contexts/`, `Controllers/`, `Middlewares/`, `Schemas/Requests/`, `Schemas/Responses/`, `Schemas/Shared/` |
 

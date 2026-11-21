@@ -120,9 +120,6 @@ struct Serve: AsyncParsableCommand {
         let postgresClient = PostgresClient(configuration: servicePostgresConfiguration, backgroundLogger: logger)
         …  // internalPostgresClient the same way, for the role "internal"
 
-        let jwtConfig = config.scoped(to: "jwt")
-        let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
-
         let catalogConfig = config.scoped(to: "grpc.catalog")
         let catalogHost = try catalogConfig.requiredString(forKey: "host")
         let catalogPort = try catalogConfig.requiredInt(forKey: "port")
@@ -139,6 +136,20 @@ struct Serve: AsyncParsableCommand {
             transport: catalogTransport,
             interceptorPipeline: [.apply(catalogTracing, to: .all)]
         )
+        …  // identityGRPCClient the same way, from "grpc.identity"
+
+        let jwtConfig = config.scoped(to: "jwt")
+        let keys = JWTKeyCollection()
+        let authenticator = JWTAuthenticator<UserIdentity>(keys: keys)
+        let identityClient = Bookshelf_Identity_V1_IdentityInternalService.Client(wrapping: identityGRPCClient)
+        let healthService = HealthService()
+        let signingKeyRefresher = SigningKeyRefresher(config: jwtConfig, keys: keys, logger: logger) {
+            let request = Bookshelf_Identity_V1_ListSigningKeysRequest()
+            let response = try await identityClient.listSigningKeys(request)
+            return try JWKS(response)
+        } onFirstRefresh: {
+            healthService.provider.updateStatus(.serving, forService: "")
+        }
 
         let temporalConfig = config.scoped(to: "temporal")
         let temporalTLSConfig = temporalConfig.scoped(to: "tls")
@@ -210,8 +221,6 @@ struct Serve: AsyncParsableCommand {
         let serverTracing = ServerOTelTracingInterceptor(serverHostname: serverHostname, networkTransportMethod: "tcp")
         let bearerAuthentication = BearerAuthenticationInterceptor(authenticator: authenticator)
         let userSettings = UserSettingsInterceptor()
-        let healthService = HealthService()
-        healthService.provider.updateStatus(.serving, forService: "")
         let server = GRPCServer(
             transport: serverTransport,
             services: [loanService, healthService],
@@ -231,7 +240,9 @@ struct Serve: AsyncParsableCommand {
                 postgresClient,
                 internalPostgresClient,
                 catalogGRPCClient,
+                identityGRPCClient,
                 temporalClient,
+                signingKeyRefresher,
                 server,
             ],
             gracefulShutdownSignals: [.sigterm, .sigint],
@@ -245,7 +256,7 @@ struct Serve: AsyncParsableCommand {
 ```
 
 - **Configuration, Logging, Observability, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order ([observability](observability.md)), and a short-lived command has Configuration, Logging, Infrastructure and Composition ([commands](#commands)).
-- Infrastructure builds what talks to the outside: certificate reloaders, database clients per role, the authenticator, upstream clients, the Temporal and Valkey clients.
+- Infrastructure builds what talks to the outside: certificate reloaders, database clients per role, upstream clients, the authenticator and its signing key refresher, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
 - The use cases that start workflows take what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
 - Each use case is a `let` named like the property that holds it, on the database its audience requires; the service then takes the names. Every value in a root is built this way ([build, then call](style.md#build-then-call)).
@@ -267,10 +278,10 @@ extension InMemoryProvider {
             "grpc.server.port": 50051,
             "grpc.server.hostname": "loans",
             "grpc.catalog.port": 50051,
+            "grpc.identity.port": 50051,
             "tls.certificatePath": "/run/tls/cert.pem",
             "tls.privateKeyPath": "/run/tls/key.pem",
             "tls.trustRootsPath": "/run/tls/ca.pem",
-            "jwt.publicKeysPath": "/run/secrets/jwt-public",
             "postgres.port": 5432,
             "postgres.db": "bookshelf_loans",
             "postgres.tls.trustRootsPath": "/run/tls/ca.pem",
@@ -310,7 +321,7 @@ extension InMemoryProvider {
 | `HTTP2ServerTransport.Posix.Config(config:)` | `grpc.server` | `maxConnectionAgeSeconds` (1800), `connectionGraceTimeSeconds` (30), `minPingIntervalSeconds` (10) |
 | `HTTP2ClientTransport.Posix.Config(config:)`, `ServiceConfig(config:)` | `grpc.<upstream>` | `keepaliveTimeSeconds` (30), `keepaliveTimeoutSeconds` (10); `deadlineSeconds` (10), with round-robin balancing ([transports](grpc.md#transports)) |
 | `InternalCallerInterceptor(config:)` | `grpc.server` | `internalCallers`, the common names of the processes that call `XInternalService` |
-| `JWTAuthenticator<UserIdentity>(config:)`, Identity's `JWTIssuer<UserIdentity>(config:)` | `jwt` | `publicKeysPath`, a directory of PEM files; `privateKeyPath` |
+| `SigningKeyRefresher(config:keys:logger:fetch:onFirstRefresh:)` | `jwt` | `refreshIntervalSeconds` (300) ([signing keys](security.md#signing-keys)) |
 | `PostgresClient.Configuration(config:role:certificateReloader:)` | `postgres` | `host`, `port`, `db`, `tls.trustRootsPath`, `<role>.user`; `<role>.maximumConnections` (10), `statementTimeoutSeconds` (5), `idleInTransactionTimeoutSeconds` (10), `lockTimeoutSeconds` (5) ([connections and timeouts](persistence.md#connections-and-timeouts)); the password fallback's `(config:role:)` adds `<role>.password`, a secret (the file `postgres-service-password`) |
 
 - A `<project>-core` reader requires every value a deployment sets, such as a path, host, port or user, and defaults only tuning; the executable's defaults hold the deployment's values.
@@ -329,8 +340,8 @@ extension InMemoryProvider {
 
 A root lists its long-lived components in one `ServiceGroup` and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
 
-- Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `TemporalClient`, `TemporalWorker`.
-- Order is dependency order: the observability service first, so it flushes last, then certificate reloaders, database clients, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
+- Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `SigningKeyRefresher`, `TemporalClient`, `TemporalWorker`.
+- Order is dependency order: the observability service first, so it flushes last, then certificate reloaders, database clients, upstream and store clients, the Temporal client, the signing key refresher, and the server, application or worker last, so it drains before the clients it uses close.
 - `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. Running the group is the root's last line.
 - A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
 - A long-running component of the service's own is a `Service` whose `run()` returns on graceful shutdown: its loop iterates `sequence.cancelOnGracefulShutdown()`, or wraps its work in `withGracefulShutdownHandler`.
@@ -339,9 +350,9 @@ A root lists its long-lived components in one `ServiceGroup` and nothing else: n
 
 Each serve process reports its health over gRPC, and the gateway over HTTP, so the deployment sends traffic only to a process that's up:
 
-- Serve registers grpc-swift-extras' `HealthService` beside its services and marks the server serving before the group runs, as [the composition root](#the-composition-root) shows. No interceptor applies to its descriptor, so a probe needs no token.
-- The gateway answers `GET /health` with `200 OK`, outside `/v1` and every tier, on a route registered before the router's middleware, which applies only to the routes added after it ([the gateway's root](#the-gateways-root)).
-- Health reports the process, never its dependencies: a status that followed Postgres or an upstream would mark every replica unhealthy when one dependency fails, and the platform would restart them all at once.
+- Serve registers grpc-swift-extras' `HealthService` beside its services and marks the server serving from its signing key refresher's `onFirstRefresh`, once it can verify a token, as [the composition root](#the-composition-root) shows ([signing keys](security.md#signing-keys)). No interceptor applies to its descriptor, so a probe needs no token.
+- The gateway answers `GET /health` with `200 OK` once its refresher holds the first key set, and `503 Service Unavailable` before, outside `/v1` and every tier, on a route registered before the router's middleware, which applies only to the routes added after it ([the gateway's root](#the-gateways-root)).
+- Health reports the process, never its dependencies: a status that followed Postgres or an upstream would mark every replica unhealthy when one dependency fails, and the platform would restart them all at once. The first key set is the process's own state, and a later failed refresh changes no status.
 - The image holds no probe tool, so each executable has a short-lived `health` command ([commands](#commands)), which the deployment runs as the health check of every serve application and of the gateway. A service's dials its own server on `127.0.0.1` with its own certificate pair, the client config's HTTP/2 `authority` set to its certificate's name from `grpc.server.hostname`, calls `Check`, and exits non-zero unless the status is `SERVING`. The gateway's sends `GET /health` with AsyncHTTPClient.
 - The worker serves nothing and has no health check; Temporal shows whether it polls.
 
@@ -402,8 +413,8 @@ let worker = try TemporalWorker(
 
 ```swift
 // MARK: - Infrastructure
-let jwtConfig = config.scoped(to: "jwt")
-let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
+let keys = JWTKeyCollection()
+let authenticator = JWTAuthenticator<UserIdentity>(keys: keys)
 let propagation = BearerPropagationInterceptor<UserIdentity>()
 …  // each upstream's transport, as in a service's Serve
 let loansTracing = ClientOTelTracingInterceptor(serverHostname: loansHost, networkTransportMethod: "tcp")
@@ -415,6 +426,12 @@ let loansGRPCClient = GRPCClient(
     ]
 )
 …  // identityGRPCClient and catalogGRPCClient the same way
+let jwtConfig = config.scoped(to: "jwt")
+let signingKeyRefresher = SigningKeyRefresher(config: jwtConfig, keys: keys, logger: logger) {
+    …  // ListSigningKeys on IdentityService over identityGRPCClient, converted with JWKS(_:), as in a service's Serve
+} onFirstRefresh: {
+    …  // marks GET /health ready
+}
 
 // MARK: - Composition
 let identityClient = Bookshelf_Identity_V1_IdentityService.Client(wrapping: identityGRPCClient)
@@ -437,7 +454,7 @@ let cors = CORSMiddleware<BasicRequestContext>(
 let requestLogging = LogRequestsMiddleware<BasicRequestContext>(logLevel)
 let router = Router(context: BasicRequestContext.self)
 // First, so no middleware traces, measures or logs a probe.
-router.get("health") { _, _ in HTTPResponse.Status.ok }
+router.get("health") { _, _ in … }  // 200 once the first key set is in, 503 before
 router.add(middleware: cors)
 router.add(middleware: TracingMiddleware())
 router.add(middleware: MetricsMiddleware())
@@ -451,7 +468,7 @@ let applicationConfiguration = ApplicationConfiguration(reader: httpServerConfig
 let application = Application(router: router, configuration: applicationConfiguration, logger: logger)
 
 // MARK: - Lifecycle
-// observability, certificateReloader, every upstream client, application
+// observability, certificateReloader, every upstream client, signingKeyRefresher, application
 ```
 
 The gateway's root has the same Logging and Observability sections as a service's. Its defaults hold `http.server.host` and `http.server.port`; Hummingbird's configuration reader comes from its `ConfigurationSupport` trait.

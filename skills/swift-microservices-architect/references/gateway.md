@@ -35,7 +35,7 @@ bookshelf-gateway/Sources/
 └── Gateway/
     ├── Gateway.swift               the @main command
     ├── Configuration/              InMemoryProvider+ApplicationDefaults.swift
-    └── Serve/                      Serve.swift
+    └── Serve/                      Serve.swift, JWKS+Protobuf.swift
 ```
 
 ## OpenAPI types

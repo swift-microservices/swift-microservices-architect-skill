@@ -327,6 +327,7 @@ Work on a calendar, such as deleting rows whose retention has ended, is a workfl
 - A service declares its schedules once, in `XCore/Workflows/XSchedules.swift`: each one's id, calendar, workflow and input, with `overlap: .skip`, so a run that outlasts its interval isn't joined by a second.
 - `worker run` applies them before its `ServiceGroup` starts, the way `serve --migrate-database` applies migrations ([the worker's root](composition.md#the-workers-root)): inside `TemporalClient.connect(transport:configuration:_:)`, it creates each schedule by its id, and on `ScheduleAlreadyRunningError` updates it to the declared one, so every replica converges on the same schedules.
 - A table whose rows stop mattering has a retention period, a policy value, and a scheduled workflow whose activity runs a system use case that deletes the expired rows in batches by id: the webhook event ids Loans keeps against redelivery (`PurgeNoticeEventsWorkflow`), and Identity's ended sessions and their refresh tokens.
+- A schedule whose first run a new environment needs at once is created with `ScheduleOptions(triggerImmediately: true)`, which acts on creation only: `identity-rotate-signing-keys`, in `IdentitySchedules.swift`, starts `RotateSigningKeysWorkflow` daily, whose one activity runs `RotateSigningKeysUseCase`, and a new environment has no key to sign with until its first run ([signing keys](security.md#signing-keys)).
 
 ## The worker
 
