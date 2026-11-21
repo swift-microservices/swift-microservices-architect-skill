@@ -86,7 +86,6 @@ CREATE POLICY worker_all ON loans TO "loans_worker" USING (true);
 - `CreateLoansRLSPolicy(internalRole:workerRole:)` takes the role names from configuration, as `CreateServiceRole(role:database:)` does ([migrations](#migrations)), and quotes each as an identifier.
 - The tenant policy is a predicate on the tenant and nothing else. Whether a caller is an administrator is decided in the use case, which runs on the internal role; a policy that reads a role is authorization in SQL, where the domain's rules can't see it.
 - `NULLIF(…, '')` is required: once a pooled connection has carried the setting, reading it in a later transaction yields `''` rather than `NULL`, and `''::uuid` is an error rather than a non-match.
-- Policies combine with `OR`, so a role's `USING (true)` widens only that role.
 - Nothing bound means nothing visible: with no caller set, the tenant policy matches no row.
 - Untenanted tables carry no policy: public data (`books`) and rows found by a secret on anonymous paths, where no caller is bound yet (refresh tokens by digest).
 
@@ -133,7 +132,7 @@ CREATE POLICY organization_isolation ON loans FOR SELECT
 - The table's policy is `organization_isolation`, the tenant policy's predicate over the column that names the organization (`branch_id`). A table that users and organizations both own rows of, as `loans` is a member's and a branch's, carries both policies.
 - A policy may reach its tenant through the table that links them, with the state that makes the link one: `USING (EXISTS (SELECT 1 FROM memberships WHERE … AND status = 'active'))`. It still reads no role.
 - `USING` alone also checks what a statement writes, so a tenant writes only its own rows. A policy that only lets a tenant read is `FOR SELECT`. A table every caller reads and one organization writes carries `everyone_read FOR SELECT USING (true)` beside its isolation policy.
-- Policies combine with `OR`, so a session acting for an organization reaches the organization's rows through the caller's own use cases too. A caller's own list names the user in its `WHERE` (`LoansByUserIDStatement`), and where the organization's policy lets it write, so does each of the caller's own writes.
+- Policies combine with `OR`: a role's `USING (true)` widens only that role, and a session acting for an organization reaches the organization's rows through the caller's own use cases too. A caller's own list names the user in its `WHERE` (`LoansByUserIDStatement`), and where the organization's policy lets it write, so does each of the caller's own writes.
 - The use case reads the organization from `subject`, never from its input ([authorization](use-cases.md#authorization)).
 
 ## Repositories and statements
