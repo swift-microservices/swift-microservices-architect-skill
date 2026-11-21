@@ -56,7 +56,7 @@
 | Configuration keys | Dotted scopes with lowerCamelCase leaves; a duration names its unit | `grpc.server.port`, `postgres.service.user`, `tls.refreshIntervalSeconds` |
 | Logger label | `<project>-<x>`, `<project>-<x>-worker` | `bookshelf-loans-worker` |
 | Log metadata keys | lowerCamelCase | `loanID`, `userID`, `error` |
-| Valkey keys | `<x>:<purpose>:<id>` | `identity:reset-code:…` |
+| Valkey keys, ACL user | `<x>:<purpose>:<id>`; `<x>` | `identity:reset-code:<user id>`; `identity` |
 | Idempotency keys for providers | `<x>-<what>-<subject id>`, then `-<effect id>` when the subject gets the effect more than once | `loans-overdue-notice-<loan id>` |
 | Conversion files | `Type+Protobuf.swift`, `Type+PostgresRow.swift`, `Type+PostgresCodable.swift`, `Type+ConfigReader.swift`; in the gateway `Type+RPC.swift` | `Loan+Protobuf.swift`, `LoanResponse+RPC.swift` |
 

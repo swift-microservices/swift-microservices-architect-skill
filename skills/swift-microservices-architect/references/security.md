@@ -21,10 +21,11 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens,
 | A service or worker to another's `XInternalService` | gRPC over mTLS | Both processes by certificate; the request names the user it acts for |
 | A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate; the authorizer admits the process to its service's namespace only ([the worker](workflows.md#the-worker)) |
 | A process to Postgres | TLS, required (`.require(…)`), against the environment's authority, with the process's certificate, as one of the service's roles | Both sides by certificate; the server's map admits the process to its roles only ([Postgres](#postgres)) |
-| A process to Valkey | TLS, required, against the environment's authority, with a username and password (`authentication.*`) | The server by certificate; the process by its password |
+| A process to Valkey | TLS, required, against the environment's authority, as its service's ACL user (`authentication.*`) | The server by certificate; the process by its password, admitted to its service's keys only |
 | Inside the database | Row-level security | The tenant, by the setting bound to the transaction |
 
-The edge proxy and certificate issuance belong to the deployment; this skill fixes what each process presents and checks.
+- Each service has its own Valkey ACL user, named for it, whose key pattern is the service's prefix (`~identity:*`), so a service whose password leaks exposes no other service's keys. The deployment creates the users; the service names them in its defaults.
+- The edge proxy and certificate issuance belong to the deployment; this skill fixes what each process presents and checks.
 
 ## Mutual TLS
 
@@ -234,7 +235,7 @@ Each layer refuses what it can see; the use case decides.
 
 - Configuration reads passwords, API keys and webhook secrets with `isSecret: true`, so access reporting redacts them; keys and certificates are files at configured paths, never in an image or a repository.
 - A secret value reaches the process as a file in `/run/secrets` named for its key, which `DirectoryFilesProvider` reads ([configuration](composition.md#configuration)), never as an environment variable: `docker inspect` and `/proc/<pid>/environ` show those to anyone who can read the container's configuration.
-- Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres stores their SHA-256 digest (`Crypto`), never the secret; Valkey stores a short-lived one with its expiry.
+- Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres and Valkey store their SHA-256 digest (`Crypto`), never the secret, Valkey with its expiry.
 - Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), off the cooperative pool ([concurrency](style.md#concurrency)). The cost is a policy value, `PasswordPolicy.bcryptCost` (12), raised as hardware gets faster.
 - A password longer than 72 bytes of UTF-8 is refused as `invalidPassword` (`PasswordPolicy.maximumByteCount`): bcrypt ignores every byte after the 72nd, so two passwords that share their first 72 bytes would both sign in. The limit counts bytes, not characters, since a character can take up to four.
 
@@ -242,8 +243,9 @@ Each layer refuses what it can see; the use case decides.
 
 A request that proves a secret someone could guess, signing in with a password or redeeming a reset code, is limited per account: Identity counts the account's failures in Valkey and refuses once the policy's limit is reached, before checking the secret.
 
-- The count is an XValkey repository behind a Core port, `SignInFailureRepository`, keyed by the account's id (`identity:sign-in-failures:<user id>`): `failures(userID:)`, `recordFailure(userID:window:)`, which increments and sets the window's expiry on the first failure, and `clear(userID:)` after a success ([Valkey](persistence.md#valkey)).
-- The limit and the window are policy values, `SessionPolicy.maximumSignInFailures` and `signInFailureWindow`.
+- The count is an XValkey repository behind a Core port, keyed by the account's id: `SignInFailureRepository` (`identity:sign-in-failures:<user id>`) and `ResetCodeFailureRepository` (`identity:reset-code-failures:<user id>`), each with `failures(userID:)`, `recordFailure(userID:window:)`, which increments and sets the window's expiry on the first failure, and `clear(userID:)` after a success ([Valkey](persistence.md#valkey)).
+- So the account is known before the secret is checked: a sign-in names its address, and a reset code's redemption names the address it was sent to. An unknown address counts nothing and answers as a wrong secret does ([authorization](#authorization)).
+- The limits and windows are policy values: `SessionPolicy.maximumSignInFailures` and `signInFailureWindow`, and the reset code's alike.
 - The use case's case is `tooManyAttempts`, which maps to `resourceExhausted` and the gateway's `429` ([status codes](grpc.md#status-codes)).
 - Unlike a cache's read, a failed read of the count fails the request: a limit that Valkey's outage turned off would let guessing through.
 - Limits per address, against many accounts at once, are the edge's ([the edge](gateway.md#the-edge)).

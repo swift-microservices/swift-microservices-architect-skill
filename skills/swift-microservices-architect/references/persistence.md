@@ -291,7 +291,7 @@ package import FoundationEssentials
 package import Foundation
 #endif
 
-/// A reset code from the moment it's sent until it's redeemed or expires.
+/// A user's reset code, as its digest, from the moment it's sent until it's redeemed or expires.
 package struct ValkeyResetCodeRepository<Client: ValkeyClientProtocol>: ResetCodeRepository {
     private let client: Client
 
@@ -299,19 +299,21 @@ package struct ValkeyResetCodeRepository<Client: ValkeyClientProtocol>: ResetCod
         self.client = client
     }
 
-    package func store(_ code: ResetCode, lifetime: Duration) async throws {
-        …  // SET with an expiry, under identity:reset-code:<code>
+    /// `SET` with an expiry under `identity:reset-code:<user id>`, replacing the user's last code.
+    package func store(_ resetCode: ResetCode, lifetime: Duration) async throws {
+        …
     }
 
-    /// `GETDEL`, so a code is redeemed once even when two requests race.
-    package func redeem(_ code: String) async throws -> UUID? {
+    /// `DELIFEQ`, so the code is redeemed once even when two requests race, and a wrong one stays stored.
+    package func redeem(userID: UUID, digest: String) async throws -> Bool {
         …
     }
 }
 ```
 
 - The repository is generic over `ValkeyClientProtocol`, takes the client in its initializer, and lives in XValkey; the use case holds it as a port.
-- Keys are as [naming](conventions.md#naming) gives them, so services sharing an instance never collide.
+- A reset code is keyed by its user, so the user's failures are counted before the code is checked ([attempt limits](security.md#attempt-limits)), and stored as its digest ([secrets](security.md#secrets)).
+- Keys are as [naming](conventions.md#naming) gives them, so services sharing an instance never collide, and each service's ACL user reaches only its own ([the trust model](security.md#the-trust-model)).
 - Every write sets its expiry, passed by the use case from its policy, never configured in the store.
 - A cache is never the source of truth and never holds a decision. Its expiry is the use case's staleness budget, and its read answers `nil` on a miss and on a Valkey error, which the repository logs as a warning, so the use case reads the database and carries on.
 - A use case that changes a cached value's source deletes its key after the transaction commits, never before, so no read refills it from the old row; a delete that fails is logged as a warning, and the expiry bounds how long the value stays stale.
