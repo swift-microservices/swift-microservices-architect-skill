@@ -126,7 +126,6 @@ skills/swift-microservices-architect/
     ├── testing.md              test targets and mocks
     ├── delivery.md             CI/CD for each kind of package
     └── conventions.md          names, folders, files
-evals/                          the cases claude plugin eval runs against the skill
 .github/                        validation, SkillSpector's reviewed exceptions, the semver label check, releases
 CLAUDE.md                       authoring rules for changing the skill
 ```
@@ -141,8 +140,6 @@ skillevaluator tier1 skills/swift-microservices-architect --no-llm --skillspecto
 ```
 
 The second is NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install skillevaluator`).
-
-A change that alters what the agent produces also runs the eval suite in `evals/`, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
 
 Each pull request carries one semver label, which sets the next release's version.
 

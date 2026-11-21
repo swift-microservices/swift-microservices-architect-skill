@@ -1,6 +1,6 @@
 # To do
 
-Guidance the skill doesn't give yet. Until an item lands, the skill says nothing about it. Each item names where its rule would live, following `CLAUDE.md`'s one home per rule, and a rule that lands also gets a grader or an eval case.
+Guidance the skill doesn't give yet. Until an item lands, the skill says nothing about it. Each item names where its rule would live, following `CLAUDE.md`'s one home per rule.
 
 ## Deferred
 
@@ -8,11 +8,7 @@ Guidance the skill doesn't give yet. Until an item lands, the skill says nothing
 
 ## Before production (P0)
 
-- **Evals for the production rules.** Graders for the rules added with the pool budget and timeouts, `InternalCallerInterceptor`, health checks and observability, per `CLAUDE.md`'s eval suite, then a comparison against `main`.
-
-## Next (P1)
-
-- **Evals for the P1 rules.** Graders for typed error mapping, secrets from files, refresh-token reuse, attempt limits, batch reads, large-table migrations, workflow changes and data erasure.
+- **An eval suite.** Cases and graders that check what agents produce with the skill against `main`, rebuilt from scratch, with the rules and the steps that run them in `CLAUDE.md`.
 
 ## Later (P2)
 
