@@ -55,7 +55,7 @@ Copy `skills/swift-microservices-architect/` into `~/.claude/skills/` for Claude
 
 ## Usage
 
-The agent loads the skill when a task matches it, or when asked: `/swift-microservices-architect` in Claude Code, `$swift-microservices-architect` in Codex. For example:
+The agent loads the skill when a task matches it, or when asked: in Claude Code, `/swift-microservices-architect:swift-microservices-architect` once installed as a plugin, or `/swift-microservices-architect` once copied in by hand; in Codex, `$swift-microservices-architect`. Text after the name is the task. For example:
 
 - "Plan a backend for a lending library with accounts, a book catalog and loans."
 - "Add an endpoint for returning a book."
