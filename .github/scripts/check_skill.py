@@ -6,8 +6,8 @@ Run from anywhere after every change to the skill, and fix until it passes:
     python3 .github/scripts/check_skill.py
 
 It checks what a script can: the frontmatter, SKILL.md's size, the references and their
-Contents lists, links and anchors, the plugin manifests, and the code style of every Swift
-example. It exits non-zero when any check fails. The review that needs judgment is the
+Contents lists, the related skills in Prerequisites and README.md, links and anchors, the
+plugin manifests, and the code style of every Swift example. It exits non-zero when any check fails. The review that needs judgment is the
 checklist in CLAUDE.md.
 """
 
@@ -195,6 +195,34 @@ def check_references(skill_text: str, readme_text: str) -> None:
             fail(f"{link}: its Contents list must match its ## headings, in order")
 
 
+# MARK: - Related skills
+
+
+def section(text: str, heading: str) -> str:
+    start = text.find(f"\n## {heading}\n")
+    if start == -1:
+        return ""
+    end = text.find("\n## ", start + 1)
+    return text[start:end] if end != -1 else text[start:]
+
+
+def check_related_skills(skill_text: str, readme_text: str) -> None:
+    """Checks that Prerequisites and README.md name exactly the skills Related skills lists."""
+    related = re.findall(r"^- .*: `([\w-]+)` \(\[source\]\((https://github\.com/[^)]+)\)\)$", section(skill_text, "Related skills"), re.M)
+    if not related:
+        fail("SKILL.md: Related skills lists no skill as `- <what it covers>: `<name>` ([source](<url>))`")
+    prerequisites = section(skill_text, "Prerequisites")
+    named = set(re.findall(r"`([\w-]+)`", next((line for line in prerequisites.splitlines() if "(#related-skills)" in line), "")))
+    names = {name for name, _ in related}
+    if named != names:
+        fail(f"SKILL.md: Prerequisites must name the related skills {sorted(names)}, not {sorted(named)}")
+    works_well_with = section(readme_text.replace("\n### ", "\n## "), "Works well with")
+    readme_sources = set(re.findall(r"\]\((https://github\.com/[^)]+)\)", works_well_with))
+    sources = {source for _, source in related}
+    if readme_sources != sources:
+        fail(f"README.md: Works well with must link the related skills' sources {sorted(sources)}, not {sorted(readme_sources)}")
+
+
 # MARK: - Links and anchors
 
 
@@ -368,6 +396,7 @@ def main() -> int:
     description = check_frontmatter(skill_text)
     check_skill_size(skill_text)
     check_references(skill_text, readme_text)
+    check_related_skills(skill_text, readme_text)
     check_links()
     check_checklist_references(skill_text)
     check_manifests(description)

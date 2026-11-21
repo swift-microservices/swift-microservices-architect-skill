@@ -7,6 +7,7 @@ How a backend splits into services, how they talk, and the packages they share. 
 - Naming a service
 - Contracts
 - How services talk
+- Erasing a person's data
 - Data placement
 - The shared packages
 - The plan
@@ -72,6 +73,15 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 - Calls between services form no cycle. Break one by moving ownership, extracting a third capability, or making one direction a workflow.
 - What each hop proves, and where a user's token may travel: [the trust model](security.md#the-trust-model).
 
+## Erasing a person's data
+
+A person's data lives in every service that keeps rows about them, so erasing it is a workflow of the service that owns the person:
+
+- Identity's `CloseAccount` use case closes the account and starts `AccountErasureWorkflow` after its commit. One activity per service that keeps rows about members calls that service's internal `Erase…` RPC with the user's id: Loans' `EraseMemberLoans`. A service that starts keeping rows about members adds its RPC and its activity in the same change.
+- Each `Erase…` use case deletes what the service owns about the person, or replaces it where a record must stay, such as a loan a branch accounts for, and answers the same when run again.
+- The workflow's calls run against the usual direction, Identity to Loans, which a workflow may do without forming a call cycle ([how services talk](#how-services-talk)).
+- Workflow payloads and log lines carry ids, never personal data ([reaching a run](workflows.md#reaching-a-run-from-a-use-case), [logging](use-cases.md#logging)), so a history and a log hold nothing to erase; the namespace's retention bounds how long histories keep those ids.
+
 ## Data placement
 
 A service's data is its own wherever it lives: only the service reads and writes it, and every other process reaches it through the service's contract. Where the data lives and how a process reaches it are choices, each with a default; a plan that departs from one records the choice and its reason under Decisions ([the plan](#the-plan)).
@@ -95,7 +105,7 @@ Besides the swift-microservices libraries ([stack](stack.md)), every service and
 |---|---|---|
 | `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, executables |
 | `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:certificateReloader:)` for a role proved by the process's certificate, and `(config:role:)` for the password fallback | Executables with Postgres |
-| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys | Executables |
+| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys; `InternalCallerInterceptor` | Executables |
 | `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
 
 It holds none of these: a service's models, repositories, scopes or migrations; contracts; deployment defaults such as mount paths, ports and role names, which stay in each executable's `InMemoryProvider` defaults; generic abstractions, which belong to the swift-microservices libraries; a process identity or service token, since certificates prove processes.
@@ -138,6 +148,11 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 ## Decisions
 - Each boundary and why it holds; each departure from a default or exception to a rule, with its reason
 
+## Operations
+| Environment | Postgres `max_connections` | Each process's replicas and role pools, and their total | Collector endpoint | Stop timeout |
+|---|---|---|---|---|
+- Backups and point-in-time recovery of Postgres and Temporal's store, each service's Temporal namespace and its retention, and whether Temporal's authorizer confines each identity to its namespace: the user's answers
+
 ## Build order
 1. <package>
 
@@ -149,4 +164,4 @@ Review the plan against the hard rules in `SKILL.md`, and put its questions to t
 
 ## Out of scope
 
-Decided separately, outside this skill: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, client SDKs and frontends. How each package is tested, released and deployed is [delivery](delivery.md). The architecture leaves room for each: an executable runs wherever its configuration points, and certificates and keys are files at configured paths.
+Decided separately, outside this skill: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery of Postgres and Temporal's store, client SDKs and frontends. How each package is tested, released and deployed is [delivery](delivery.md). The architecture leaves room for each: an executable runs wherever its configuration points, and certificates and keys are files at configured paths.

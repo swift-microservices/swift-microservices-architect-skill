@@ -35,7 +35,8 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 | [grpc-swift-2](https://github.com/grpc/grpc-swift-2) | `GRPCCore` | Servers, clients, interceptors, `RPCError`, `ServiceConfig` | XGRPC, executables, `<Project>Persistence`, `<Project>Transport`, the gateway |
 | [grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | `GRPCNIOTransportHTTP2` | HTTP/2 transports with TLS and mTLS | Executables, `<Project>Transport` |
 | [grpc-swift-protobuf](https://github.com/grpc/grpc-swift-protobuf) | `GRPCProtobuf`, `GRPCProtobufGenerator` plugin | Protobuf serialization and code generation | `<project>-protos` |
-| [grpc-swift-extras](https://github.com/grpc/grpc-swift-extras) | `GRPCServiceLifecycle` | `GRPCServer` and `GRPCClient` as lifecycle services | Executables |
+| [grpc-swift-extras](https://github.com/grpc/grpc-swift-extras) | `GRPCServiceLifecycle`, `GRPCHealthService`, `GRPCOTelTracingInterceptors` | `GRPCServer` and `GRPCClient` as lifecycle services; the `grpc.health.v1` service; tracing interceptors | Executables |
+| [swift-otel](https://github.com/swift-otel/swift-otel) | `OTel` | The OTLP exporters, bootstrapping swift-metrics and swift-distributed-tracing, and the trace's logging metadata | Executables |
 | [swift-protobuf](https://github.com/apple/swift-protobuf) | `SwiftProtobuf` | Messages, well-known types (`Google_Protobuf_Timestamp`, `Google_Protobuf_Empty`) | `<project>-protos`, XGRPC, the gateway |
 | [swift-temporal-sdk](https://github.com/apple/swift-temporal-sdk) | `Temporal`, `TemporalTestKit` | Workflows, activities, `TemporalClient`, `TemporalWorker`; the test servers | XCore in a service with workflows, executables, and no adapter target; `Temporal` and `TemporalTestKit` in `XCoreTests` |
 | [valkey-swift](https://github.com/valkey-io/valkey-swift) | `Valkey` | `ValkeyClient`, commands, pipelines, transactions | XValkey, executables |
@@ -43,8 +44,10 @@ On a call, `BearerAuthenticationInterceptor` binds the caller's principal in `Op
 | postgres-nio | `PostgresNIO` | `PostgresClient` pools, prepared statements, row decoding | XPostgres, executables |
 | [postgres-migrations](https://github.com/hummingbird-project/postgres-migrations) | `PostgresMigrations` | `DatabaseMigration`, `DatabaseMigrations` | XPostgres, executables |
 | [swift-configuration](https://github.com/apple/swift-configuration) | `Configuration` | `ConfigReader`, providers, scoped readers, secrets | Executables, `<Project>Transport`, `<Project>Persistence` |
+| [swift-system](https://github.com/apple/swift-system) | `SystemPackage` | `FilePath`, the secrets directory `DirectoryFilesProvider` reads | Executables |
 | [swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle) | `ServiceLifecycle`, `UnixSignals` | `Service`, `ServiceGroup`, graceful shutdown on signals | Executables |
 | [swift-argument-parser](https://github.com/apple/swift-argument-parser) | `ArgumentParser` | The executable's commands | Executables |
+| [swift-certificates](https://github.com/apple/swift-certificates) | `X509` | Reading the common name of a peer's certificate | `<Project>Transport` |
 | [swift-nio-extras](https://github.com/apple/swift-nio-extras) | `NIOCertificateReloading` | `CertificateReloader`, `TimedCertificateReloader` | Executables, `<Project>Transport`, `<Project>Persistence` |
 | [swift-log](https://github.com/apple/swift-log) | `Logging` | `Logger`, `LoggingSystem`, metadata providers | Every target that logs |
 | [swift-async-algorithms](https://github.com/apple/swift-async-algorithms) | `AsyncAlgorithms` | Collecting a row sequence into an array | XPostgres |

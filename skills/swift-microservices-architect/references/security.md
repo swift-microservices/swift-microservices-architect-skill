@@ -8,6 +8,7 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens,
 - User tokens
 - Authorization
 - Secrets
+- Attempt limits
 - Webhooks
 
 ## The trust model
@@ -18,7 +19,7 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens,
 | Edge to the gateway | TLS between proxies, as the deployment chooses; plain HTTP on the gateway's private interface | Nothing more: the gateway trusts its private network for this hop only |
 | Gateway to a service's `XService` | gRPC over mTLS, with the caller's token | Both processes by certificate; the user by the token, verified again by the service |
 | A service or worker to another's `XInternalService` | gRPC over mTLS | Both processes by certificate; the request names the user it acts for |
-| A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate |
+| A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate; the authorizer admits the process to its service's namespace only ([the worker](workflows.md#the-worker)) |
 | A process to Postgres | TLS, required (`.require(…)`), against the environment's authority, with the process's certificate, as one of the service's roles | Both sides by certificate; the server's map admits the process to its roles only ([Postgres](#postgres)) |
 | A process to Valkey | TLS, required, against the environment's authority, with a username and password (`authentication.*`) | The server by certificate; the process by its password |
 | Inside the database | Row-level security | The tenant, by the setting bound to the transaction |
@@ -58,17 +59,7 @@ extension TimedCertificateReloader.Configuration {
     /// - `certificatePath`, `privateKeyPath` (string, required): the PEM pair.
     /// - `refreshIntervalSeconds` (int, default 60): how often the files are read.
     public init(config: ConfigReader, logger: Logger) throws {
-        let refreshInterval = config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))
-        let certificatePath = try config.requiredString(forKey: "certificatePath")
-        let privateKeyPath = try config.requiredString(forKey: "privateKeyPath")
-        let certificateSource = TimedCertificateReloader.CertificateSource(location: .file(path: certificatePath), format: .pem)
-        let privateKeySource = TimedCertificateReloader.PrivateKeySource(location: .file(path: privateKeyPath), format: .pem)
-
-        self.init(refreshInterval: refreshInterval, certificateSource: certificateSource, privateKeySource: privateKeySource)
-        self.logger = logger
-        self.onCertificateLoadFailed = { failure in
-            logger.warning("TLS certificate reload failed", metadata: ["error": "\(String(reflecting: failure.error))"])
-        }
+        …  // the PEM sources and the interval; `onCertificateLoadFailed` logs a warning
     }
 }
 ```
@@ -78,7 +69,44 @@ extension TimedCertificateReloader.Configuration {
 - The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair, and servers bound connection age so every connection handshakes again ([transports](grpc.md#transports)); a failed reload keeps the last good pair and logs a warning.
 - One reloader per certificate pair: the process's pair under `tls` for gRPC and Postgres, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services', and the migrator's under `postgres.owner.tls`.
 - Issuing and renewing certificates is the deployment's job; the process only reads files. A new trust root needs a restart.
-- An internal RPC is admitted by the listener's trust alone, so every peer the authority signs may call it; internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.
+- A local run uses the same mTLS, with a development authority and pairs whose common names are the production identities (`loans`, `loans-worker`, `loans-migrator`). No process has a plaintext or no-verification mode, so nothing that only works locally ships.
+- Internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.
+
+An internal RPC admits only the processes its service lists as callers. `<Project>Transport`'s `InternalCallerInterceptor`, applied to each `XInternalService` descriptor ([interceptors](grpc.md#interceptors)), reads the common name of the peer's certificate and refuses any identity not in `grpc.server.internalCallers` with `permissionDenied`:
+
+```swift
+public import Configuration
+public import GRPCCore
+import GRPCNIOTransportHTTP2
+import X509
+
+/// Admits to an internal service only the processes whose certificates name a listed caller.
+///
+/// ## Configuration keys
+/// - `internalCallers` (string array, required): the common names of the processes that may call.
+public struct InternalCallerInterceptor: ServerInterceptor {
+    private let callers: Set<String>
+
+    public init(config: ConfigReader) throws {
+        …
+    }
+
+    public func intercept<Input: Sendable, Output: Sendable>(
+        request: StreamingServerRequest<Input>,
+        context: ServerContext,
+        next:
+            @concurrent @Sendable (
+                _ request: StreamingServerRequest<Input>,
+                _ context: ServerContext
+            ) async throws -> StreamingServerResponse<Output>
+    ) async throws -> StreamingServerResponse<Output> {
+        …  // the common name of `HTTP2ServerTransport.Posix.Context`'s `peerCertificate`, or `permissionDenied`
+    }
+}
+```
+
+- Catalog lists `loans` and `loans-worker`, the identities of the processes that call `BookInternalService`, as the plan's contracts name its callers ([the plan](system.md#the-plan)).
+- The gateway is never a caller: it faces the internet, and an internal RPC takes the user it acts for in its input, past tokens and row-level security.
 
 ### Postgres
 
@@ -127,15 +155,7 @@ public struct UserIdentity: JWTPayload, Equatable, Sendable {
 
     /// Writes `sub` and `org` lowercase, as every id on the wire is; `UUID`'s own encoding is uppercase.
     public func encode(to encoder: any Encoder) throws {
-        let subject = userID.uuidString.lowercased()
-        let organization = organizationID?.uuidString.lowercased()
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(subject, forKey: .userID)
-        try container.encode(role, forKey: .role)
-        try container.encodeIfPresent(organization, forKey: .organizationID)
-        try container.encode(issuer, forKey: .issuer)
-        try container.encode(issueDate, forKey: .issueDate)
-        try container.encode(expirationDate, forKey: .expirationDate)
+        …
     }
 
     public func verify(using algorithm: some JWTAlgorithm) throws {
@@ -165,9 +185,11 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 
 - The token carries identity only: `sub`, `role`, `iss`, `iat`, `exp`, `aud` where an audience is used, and `org` where callers act for an organization ([organization tenants](persistence.md#organization-tenants)). It carries no permissions, entitlements, business state or personal data; a use case reads those from the service that owns them.
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
-- `<Project>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the current key from `jwt.privateKeyPath`. Each key is registered under its `kid`, the RFC 7638 thumbprint of the public key, which the issuer writes in the token's header, so rotating adds a public key file before the issuer changes keys.
+- `<Project>Transport` reads the keys by path. `JWTAuthenticator<UserIdentity>(config:)` loads every PEM file in the directory `jwt.publicKeysPath`; Identity's `JWTIssuer<UserIdentity>(config:)` loads the private key from `jwt.privateKeyPath`. Each key is registered under its `kid`, the RFC 7638 thumbprint of the public key, which the issuer writes in the token's header.
 - Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes the `JWTIssuer`.
-- Access tokens are short-lived. A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh and sign-out RPCs, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)). Sign-out ends the one session that refresh token belongs to.
+- An access token lives 15 minutes, `SessionPolicy.accessTokenLifetime`, a policy value Identity reads from configuration: a revoked session or a changed role reaches every service within that time, since no service asks Identity about a token it can verify.
+- A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh and sign-out RPCs, which the gateway routes in the tier with no caller ([request contexts](gateway.md#request-contexts-and-tiers)). Sign-out ends the one session that refresh token belongs to.
+- Each refresh replaces the refresh token: in one transaction, the use case moves the presented token from active to used with a conditional write, and stores its successor in the same session. A used token presented again was copied, by whoever holds either copy, so the use case ends the whole session and refuses; the holder of the real one signs in again.
 - The gateway verifies the token to pick a tier and forwards the original with `BearerPropagationInterceptor`; each service's `BearerAuthenticationInterceptor` verifies it again. A token never travels on an internal RPC, into a workflow's input, or into a log.
 
 `<Project>Authentication` spells the lookup of the bound principal once, for handlers, interceptors and logging:
@@ -211,8 +233,20 @@ Each layer refuses what it can see; the use case decides.
 ## Secrets
 
 - Configuration reads passwords, API keys and webhook secrets with `isSecret: true`, so access reporting redacts them; keys and certificates are files at configured paths, never in an image or a repository.
+- A secret value reaches the process as a file in `/run/secrets` named for its key, which `DirectoryFilesProvider` reads ([configuration](composition.md#configuration)), never as an environment variable: `docker inspect` and `/proc/<pid>/environ` show those to anyone who can read the container's configuration.
 - Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres stores their SHA-256 digest (`Crypto`), never the secret; Valkey stores a short-lived one with its expiry.
-- Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), on `NIOThreadPool.singleton.runIfActive { … }`, so the hash never blocks the cooperative pool.
+- Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), off the cooperative pool ([concurrency](style.md#concurrency)). The cost is a policy value, `PasswordPolicy.bcryptCost` (12), raised as hardware gets faster.
+- A password longer than 72 bytes of UTF-8 is refused as `invalidPassword` (`PasswordPolicy.maximumByteCount`): bcrypt ignores every byte after the 72nd, so two passwords that share their first 72 bytes would both sign in. The limit counts bytes, not characters, since a character can take up to four.
+
+## Attempt limits
+
+A request that proves a secret someone could guess, signing in with a password or redeeming a reset code, is limited per account: Identity counts the account's failures in Valkey and refuses once the policy's limit is reached, before checking the secret.
+
+- The count is an XValkey repository behind a Core port, `SignInFailureRepository`, keyed by the account's id (`identity:sign-in-failures:<user id>`): `failures(userID:)`, `recordFailure(userID:window:)`, which increments and sets the window's expiry on the first failure, and `clear(userID:)` after a success ([Valkey](persistence.md#valkey)).
+- The limit and the window are policy values, `SessionPolicy.maximumSignInFailures` and `signInFailureWindow`.
+- The use case's case is `tooManyAttempts`, which maps to `resourceExhausted` and the gateway's `429` ([status codes](grpc.md#status-codes)).
+- Unlike a cache's read, a failed read of the count fails the request: a limit that Valkey's outage turned off would let guessing through.
+- Limits per address, against many accounts at once, are the edge's ([the edge](gateway.md#the-edge)).
 
 ## Webhooks
 

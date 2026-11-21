@@ -186,7 +186,7 @@ package protocol BorrowBookUseCaseScope: Sendable {
 with the error above and the implementation below.
 
 - A use case is named like its RPC ([naming](conventions.md#naming)). Two use cases that share steps each spell them out: what they share by rule is a model's or a policy's method, and what they share in storage is one repository method.
-- `callAsFunction` takes `subject: UserIdentity` first when its RPC requires a caller, even one it only needs to be present, then `input:` when the request carries values. A use case that needs neither takes neither.
+- `callAsFunction` takes `subject: UserIdentity` first when its RPC requires a caller ([authorization](#authorization)), then `input:` when the request carries values. A use case that needs neither takes neither.
 - It returns a domain model, an array of them, a page of them, or nothing. A result that combines values is a domain type named for what it is (`Session`), never `XUseCaseOutput`.
 - The input is a plain value of what the request carries, with an optional for a value the request may leave out. Wire validity, such as an id that isn't a UUID, is the conversion's to refuse ([conversions](grpc.md#conversions)); business validity is the use case's, as an error case.
 - The implementation is generic over its database, `XUseCase<DatabaseType>` where `DatabaseType: Database` and `DatabaseType.Scope: XUseCaseScope`. It holds its ports as `any Port`, a `Logger`, and a policy when its rules are tunable.
@@ -251,7 +251,10 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                 try await scope.loanRepository.lockLoans(userID: subject.userID)
 
                 // A retry returns the loan its first attempt created, before the limit counts it.
-                let existingLoan = try await scope.loanRepository.loan(userID: subject.userID, idempotencyKey: input.idempotencyKey)
+                let existingLoan = try await scope.loanRepository.loan(
+                    userID: subject.userID,
+                    idempotencyKey: input.idempotencyKey
+                )
                 if let existingLoan {
                     guard existingLoan.bookID == book.id else {
                         logger.warning("Borrowing refused: idempotency key reused for another book")
@@ -284,10 +287,19 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                 idReusePolicy: .allowDuplicateFailedOnly,
                 idConflictPolicy: .useExisting
             )
-            let workflowInput = LoanWorkflow.Input(loanID: loan.id, userID: loan.userID, bookID: loan.bookID, dueDate: loan.dueDate)
+            let workflowInput = LoanWorkflow.Input(
+                loanID: loan.id,
+                userID: loan.userID,
+                bookID: loan.bookID,
+                dueDate: loan.dueDate
+            )
 
             do {
-                _ = try await temporalClient.startWorkflow(type: LoanWorkflow.self, options: workflowOptions, input: workflowInput)
+                _ = try await temporalClient.startWorkflow(
+                    type: LoanWorkflow.self,
+                    options: workflowOptions,
+                    input: workflowInput
+                )
                 logger.info("Book borrowed", metadata: ["loanID": "\(loan.id)"])
                 return loan
             } catch is WorkflowAlreadyStartedError {
@@ -299,12 +311,14 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
         } catch CatalogClientError.unavailable {
             logger.warning("Borrowing failed: the catalog is unavailable")
             throw .catalogUnavailable
+        } catch is CancellationError {
+            throw .unknown
         } catch {
             logger.error(
                 "Borrowing failed: unknown error",
                 metadata: [
                     "bookID": "\(input.bookID)",
-                    "error": "\(String(reflecting: error))",
+                    "error": "\(error)",
                 ]
             )
             throw .unknown
@@ -313,7 +327,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 }
 ```
 
-The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; and a final `catch` that logs an error with `String(reflecting: error)` and throws `.unknown`. The rest follows [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
+The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; `catch is CancellationError { throw .unknown }`; and a final `catch` that logs an error and throws `.unknown`. They and the rest of the body follow [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
 
 ## System use cases
 
@@ -343,8 +357,10 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - A decision that must be atomic with its write happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
 - A rule over a count, such as the loan limit, first locks what it counts (`lockLoans(userID:)`), since `SELECT … FOR UPDATE` locks only rows that already exist; the lock ends with the transaction. A rule a constraint can state, such as a unique index, is that constraint, mapped to a case.
 - A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`), reading the row in the same transaction first when a missing row answers differently (`loanNotFound`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue or returned, and throws `loanNotFound` only when there's no loan.
+- An edit a person makes to what they read, such as an administrator's change to a book in Catalog's `UpdateBook`, is checked against the version they read, so two edits never silently overwrite each other. The row carries `version`, the read returns it as the resource's `etag`, the update's input carries it, and the repository's conditional write names it: `UPDATE books SET …, version = version + 1 WHERE id = $1 AND version = $2`. No row back is `bookNotFound` when a read in the same transaction finds none, and `versionConflict` otherwise.
 - An idempotent create with no count to guard follows the same order: lock the owner its key is unique with, or the key itself when it has no owner, look the key up, then insert. A unique constraint a concurrent request can still trip is mapped to its case, never left to `unknown`.
 - Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
+- That retry is the only recovery: a start or signal lost after the commit, such as when the process stops or Temporal is down, stays lost unless the client retries the request with the same key ([transports](grpc.md#transports)). A plan whose runs must exist without a client's retry puts that to the user as a question.
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
 
 ## Authorization
@@ -354,7 +370,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - **Any caller.** A use case any caller with a token may run still takes `subject`, so its signature states the requirement the handler's `requireUser()` enforces.
 - **A role.** Where a role other than administrator may act, such as a librarian, the use case checks `subject.role` before anything else and throws `forbidden`, as an administrators' does. A role held at an organization unwraps it in the same `guard`, as `ListBranchLoans` begins: `guard subject.role == .librarian, let branchID = subject.organizationID else { … }`. It runs on the tenant database when the rows it touches are its tenant's ([organization tenants](persistence.md#organization-tenants)), and on the internal database otherwise.
 - **Administrators.** The use case checks the role before anything else, then runs on the internal database in a service with tenant tables. The gateway's `AdministratorRequestContext` refuses earlier; the use case's check is the rule.
-- **Internal callers.** The use case takes the user it acts for in its input; mTLS admitted the calling process.
+- **Internal callers.** The use case takes the user it acts for in its input; `InternalCallerInterceptor` admitted the calling process by its certificate.
 - **The system.** A [system use case](#system-use-cases) acts for no caller and runs on the worker's database, or on the internal database when a short-lived command runs it ([commands](composition.md#commands)), whose scope then adopts its scope protocol too.
 
 ```swift
@@ -371,8 +387,10 @@ package func callAsFunction(
         return try await database.withTransaction { scope in
             try await scope.loanRepository.loans(startingAfter: input.startingAfter, pageSize: input.pageSize)
         }
+    } catch is CancellationError {
+        throw .unknown
     } catch {
-        logger.error("Loan list failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
+        logger.error("Loan list failed: unknown error", metadata: ["error": "\(error)"])
         throw .unknown
     }
 }
@@ -384,5 +402,5 @@ package func callAsFunction(
 - Levels: `info` for a completed change, `warning` for a refusal, `error` for `unknown`. Input refused before the `do`, such as an empty idempotency key, throws without a log line, and a read logs nothing, whether it finds its row or not.
 - A refusal is logged where it's thrown, inside the transaction's closure included, so no `catch` exists only to log one. `info` follows the transaction's return: inside the closure the change can still roll back.
 - Messages are short sentences: `Book borrowed`, `Borrowing refused: no such book`, `Borrowing failed: unknown error`.
-- `error` holds `String(reflecting: error)`.
+- `error` holds the error's description ([errors](style.md#errors)).
 - Never logged: tokens, passwords, secrets and their digests, email addresses, names, request bodies.

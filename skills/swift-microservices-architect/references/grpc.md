@@ -178,29 +178,32 @@ package func borrowBook(
     let subject = try requireUser()
     let input = try BorrowBookUseCaseInput(request)
 
-    do {
+    do throws(BorrowBookUseCaseError) {
         let loan = try await borrowBookUseCase(subject: subject, input: input)
         return Bookshelf_Loans_V1_Loan(loan)
-    } catch BorrowBookUseCaseError.invalidIdempotencyKey {
-        throw RPCError(code: .invalidArgument, message: "A valid idempotency key is required.")
-    } catch BorrowBookUseCaseError.bookNotFound {
-        throw RPCError(code: .notFound, message: "The book was not found.")
-    } catch BorrowBookUseCaseError.loanLimitReached {
-        throw RPCError(code: .failedPrecondition, message: "The loan limit has been reached.")
-    } catch BorrowBookUseCaseError.idempotencyConflict {
-        throw RPCError(code: .failedPrecondition, message: "The idempotency key was used to borrow another book.")
-    } catch BorrowBookUseCaseError.catalogUnavailable {
-        throw RPCError(code: .unavailable, message: "The catalog is unavailable.")
-    } catch BorrowBookUseCaseError.unknown {
-        throw RPCError(code: .internalError, message: "The book could not be borrowed.")
+    } catch {
+        switch error {
+        case .invalidIdempotencyKey:
+            throw RPCError(code: .invalidArgument, message: "A valid idempotency key is required.")
+        case .bookNotFound:
+            throw RPCError(code: .notFound, message: "The book was not found.")
+        case .loanLimitReached:
+            throw RPCError(code: .failedPrecondition, message: "The loan limit has been reached.")
+        case .idempotencyConflict:
+            throw RPCError(code: .failedPrecondition, message: "The idempotency key was used to borrow another book.")
+        case .catalogUnavailable:
+            throw RPCError(code: .unavailable, message: "The catalog is unavailable.")
+        case .unknown:
+            throw RPCError(code: .internalError, message: "The book could not be borrowed.")
+        }
     }
 }
 ```
 
 1. Require a caller for the caller's own and administrators' RPCs (`requireUser()`); anyone's require nothing.
 2. Convert the request before the `do`: a malformed request is refused as `invalidArgument` by the conversion.
-3. The `do` holds the use case call and the response's conversion; one `catch` per case of the use case's error, in the order the enum declares them.
-4. No catch-all, and no logging: the use case logged what happened. Because the handler `throws`, the compiler doesn't flag a case left out; a case added to an error is added to every handler that maps it, and one that slips through reaches the client as `unknown`.
+3. The `do` declares the use case's error, `do throws(BorrowBookUseCaseError)`, and holds the use case call and the response's conversion, which doesn't throw. Its one `catch` switches over the error, a `case` per case in the order the enum declares them.
+4. No `default`, and no logging: the use case logged what happened. The `switch` is exhaustive, so a case added to the error fails the build of every handler that maps it.
 
 ## An internal service
 
@@ -221,19 +224,22 @@ package struct BookInternalService: Bookshelf_Catalog_V1_BookInternalService.Sim
     ) async throws -> Bookshelf_Catalog_V1_Book {
         let input = try GetBookUseCaseInput(request)
 
-        do {
+        do throws(GetBookUseCaseError) {
             let book = try await getBookUseCase(input: input)
             return Bookshelf_Catalog_V1_Book(book)
-        } catch GetBookUseCaseError.bookNotFound {
-            throw RPCError(code: .notFound, message: "The book was not found.")
-        } catch GetBookUseCaseError.unknown {
-            throw RPCError(code: .internalError, message: "The book could not be read.")
+        } catch {
+            switch error {
+            case .bookNotFound:
+                throw RPCError(code: .notFound, message: "The book was not found.")
+            case .unknown:
+                throw RPCError(code: .internalError, message: "The book could not be read.")
+            }
         }
     }
 }
 ```
 
-- A handler requires no caller, and no interceptor runs on its descriptor ([interceptors](#interceptors)).
+- A handler requires no caller; only `InternalCallerInterceptor` runs on its descriptor ([interceptors](#interceptors)).
 - Its use cases take no `subject:`. One that acts for a user takes the user's id in its input, as Identity's `GetMember` takes `user_id` ([authorization](use-cases.md#authorization)).
 - The server registers it beside `XService`: `services: [bookService, bookInternalService]`.
 
@@ -279,8 +285,9 @@ A list that can grow large pages; one a rule keeps small, such as a member's act
 | By key | Large or fast-growing lists: every member's loans (`ListAllLoans`) | `page_size`, `page_token` | `next_page_token`, empty after the last page | `loans(startingAfter:pageSize:)` → `KeyedPage<Loan>` |
 
 - By page number, a client can jump to any page, but rows added between requests shift the pages, and a deep page scans every row before it. Pages count from 1.
-- By key, the token is the page's last id, opaque to clients, and rows added between pages neither repeat nor go missing. A page carries a token only when another page follows.
+- By key, the token is the page's last id, opaque to clients, and rows added between pages don't shift them, so none repeats. A page carries a token only when another page follows.
 - `page_size` 0 asks for the service's default and more than its maximum gets the maximum, both constants in `PageSize.swift`, in the `Protobuf/` at the target's root that holds what several areas convert; `page` 0, a field the client left out, asks for the first page. A negative size or page, or a token the service didn't issue, is `invalidArgument`.
+- A list the client orders reads `order_by` into a Core enum in its conversion, and the statement maps the enum ([paged statements](persistence.md#paged-statements)).
 - The input carries what the repository's read takes, the use case returns the repository's page, and the response conversion copies its metadata ([paged statements](persistence.md#paged-statements)):
 
 ```swift
@@ -309,8 +316,10 @@ extension Bookshelf_Loans_V1_ListAllLoansResponse {
 | The request's own proof fails (`signatureRejected`, `credentialsRejected`) | `unauthenticated` |
 | What the request names doesn't exist (`…NotFound`) | `notFound` |
 | What the request creates, or asks for a second time, exists (`duplicate…`) | `alreadyExists` |
+| The resource changed since the caller read it (`versionConflict`) | `aborted` |
 | The resource's state refuses it, whoever asks (`loanLimitReached`, `alreadyReturned`, `idempotencyConflict`) | `failedPrecondition` |
 | Who the caller is refuses it (`forbidden`) | `permissionDenied` |
+| An attempt limit refuses it (`tooManyAttempts`) | `resourceExhausted` |
 | A dependency is down (`…Unavailable`) | `unavailable` |
 | `unknown` | `internalError` |
 
@@ -318,12 +327,12 @@ A refusal that turns on who the caller is, such as approving a request the calle
 
 ## Interceptors
 
-The server's interceptors apply to the person-facing descriptors only, as [the composition root](composition.md#the-composition-root) wires them:
+`ServerOTelTracingInterceptor` comes first on every `XService` and `XInternalService` descriptor, and `ClientOTelTracingInterceptor` first in every client ([observability](observability.md#a-trace-across-processes)). The others apply to the person-facing descriptors only, as [the composition root](composition.md#the-composition-root) wires them:
 
 - `BearerAuthenticationInterceptor` proves a bearer token if there is one and binds the principal; an invalid token ends the call as `unauthenticated` before the handler runs, and a missing one continues unbound.
 - `UserSettingsInterceptor` follows it in a service with tenant tables ([binding the tenant](persistence.md#binding-the-tenant)).
-- `XInternalService` descriptors carry neither: the listener's mTLS trust admits their callers.
-- Clients a service uses to reach other services' internal RPCs carry no interceptor. Forwarding the caller's token with `BearerPropagationInterceptor` is the gateway's ([upstream clients](gateway.md#upstream-clients)).
+- `XInternalService` descriptors carry neither. `InternalCallerInterceptor` admits their callers by certificate ([mutual TLS](security.md#mutual-tls)): `.apply(internalCallers, to: .services([Bookshelf_Catalog_V1_BookInternalService.descriptor]))`, built from the server's scoped configuration with `try InternalCallerInterceptor(config: serverConfig)`.
+- Clients a service uses to reach other services' internal RPCs carry only the tracing interceptor. Forwarding the caller's token with `BearerPropagationInterceptor` is the gateway's ([upstream clients](gateway.md#upstream-clients)).
 
 ## Clients for Core's ports
 
@@ -355,6 +364,7 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 ```
 
 - It translates only the statuses a use case acts on; any other error propagates unchanged, so the use case that logs it logs its cause.
+- A list that shows another service's data for each item reads it in one call, never a call per item. The owner's internal contract offers a batch read, `BatchGetBooks`, which takes `ids` up to the list's maximum page size and returns the books it found; the port reads `books(ids: Set<UUID>) async throws -> [UUID: Book]`, and an id with no book is absent from the dictionary.
 - `notFound` on a lookup becomes `nil`, matching the port's optional.
 - The response conversion (`Book+Protobuf.swift` in `Clients/Protobuf/`) throws on a malformed message, such as an id that isn't a UUID or an unset field the domain needs, rather than inventing a value.
 - Every call has a deadline: the client's `ServiceConfig` sets one for all methods, and a port that needs a tighter bound passes `CallOptions` with its own `timeout`.
@@ -366,5 +376,6 @@ The executable builds the server's and each client's transport from `<Project>Tr
 - One `clientSecurity` serves every client of the process, and each upstream gets its own scoped configuration (`grpc.catalog`) with its host, port, transport config and service config.
 - The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.
 - A client's host is the name in the peer certificate's DNS names. Its config sends keepalive pings on idle connections; its `ServiceConfig` waits for a ready connection, bounded by a deadline, so a transient reconnect doesn't fail a call and a down upstream still does.
-- A client neither retries nor hedges: its `ServiceConfig` sets only the deadline and wait-for-ready. Each call chain has one owner of retries: Temporal for activities, and the app calling the public API, with an idempotency key, for public creates. A port call inside an activity never retries on its own.
+- A client's host resolves to every replica of the upstream, such as Docker Swarm's `tasks.<service>` rather than the service's one virtual address, and the upstream's certificate names it. Its `ServiceConfig` balances `.roundRobin` across those addresses: the default picks the first and sends every call down one connection, so one replica takes a caller's whole load.
+- A client neither retries nor hedges: its `ServiceConfig` sets only the deadline, wait-for-ready and round-robin balancing. Each call chain has one owner of retries: Temporal for activities, and the app calling the public API, with an idempotency key, for public creates. A port call inside an activity never retries on its own.
 - One long-lived `GRPCClient` per upstream process, shared by every port and handler that calls it, run in the `ServiceGroup`. `GRPCServiceLifecycle` makes `GRPCServer` and `GRPCClient` services.

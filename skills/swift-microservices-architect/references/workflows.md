@@ -10,6 +10,8 @@ Durable processes on Temporal with swift-temporal-sdk: when work is a workflow, 
 - Determinism
 - Activities
 - Activity options
+- Changing a workflow
+- Recurring work
 - The worker
 
 ## When work is a workflow
@@ -106,7 +108,11 @@ package struct LoanWorkflow {
             return
         }
 
-        let noticeInput = LoanActivities.SendOverdueNoticeInput(loanID: input.loanID, userID: input.userID, bookID: input.bookID)
+        let noticeInput = LoanActivities.SendOverdueNoticeInput(
+            loanID: input.loanID,
+            userID: input.userID,
+            bookID: input.bookID
+        )
         try await context.executeActivity(
             LoanActivities.Activities.SendOverdueNotice.self,
             options: .notification,
@@ -181,12 +187,17 @@ package struct LoanActivities {
     /// Reports whether the loan is overdue now: one returned in the meantime stays returned.
     @Activity
     package func markOverdue(input: MarkOverdueInput) async throws -> Bool {
-        do {
+        do throws(MarkLoanOverdueUseCaseError) {
             let markLoanOverdueInput = MarkLoanOverdueUseCaseInput(loanID: input.loanID)
             let loan = try await markLoanOverdueUseCase(input: markLoanOverdueInput)
             return loan.status == .overdue
-        } catch MarkLoanOverdueUseCaseError.loanNotFound {
-            throw ApplicationError(message: "The loan does not exist.", type: "LoanNotFound", isNonRetryable: true)
+        } catch {
+            switch error {
+            case .loanNotFound:
+                throw ApplicationError(message: "The loan does not exist.", type: "LoanNotFound", isNonRetryable: true)
+            case .unknown:
+                throw error
+            }
         }
     }
 
@@ -203,7 +214,11 @@ package struct LoanActivities {
     @Activity
     package func sendOverdueNotice(input: SendOverdueNoticeInput) async throws {
         guard let member = try await identityClient.member(id: input.userID) else {
-            throw ApplicationError(message: "Identity has no such member.", type: "MemberNotFound", isNonRetryable: true)
+            throw ApplicationError(
+                message: "Identity has no such member.",
+                type: "MemberNotFound",
+                isNonRetryable: true
+            )
         }
 
         guard let book = try await catalogClient.book(id: input.bookID) else {
@@ -220,13 +235,13 @@ package struct LoanActivities {
 - An activity runs a [system use case](use-cases.md#system-use-cases) when the step reads or writes this service's data, on the worker's database, and calls a port when the step is one effect another system owns; a use case that would only forward to the port adds nothing. It makes no business decision: the use case decides, and the activity reports what it decided, never discarding what the use case returned, since the workflow's next step depends on that answer.
 - Its input is a small struct nested in the container, named for the activity (`MarkOverdueInput`), holding ids and values, never commands; the activity builds what the use case or port takes.
 - It returns a primitive (`Bool`) or a small nested output holding only what the workflow reads, never a domain model, which isn't `Codable`.
-- It maps a permanent failure, a case no retry can change, to `ApplicationError(message:type:isNonRetryable: true)`, catching that case explicitly. Every other error propagates, and Temporal retries it.
+- It maps its use case's error as a handler does, with `do throws(E)` and an exhaustive `switch` ([errors](style.md#errors)): a permanent failure, a case no retry can change, becomes `ApplicationError(message:type:isNonRetryable: true)`, and every other case is rethrown, so Temporal retries it.
 - It's safe to run twice: writes are conditional or keyed, and external effects carry an idempotency key derived from the workflow's subject (`loans-overdue-notice-<loan id>`). When one subject gets the effect more than once, such as a member's successive reset codes, the key adds the effect's own stored id: never a value made at send time, which a retry wouldn't repeat, and never a secret or part of one.
 - Activities are registered by name, the method's name capitalized (`MarkOverdue`).
 
 ## Activity options
 
-Named once per target, in `ActivityOptions+X.swift` in the folder of the first workflow that needs them, and used by name in every workflow of the target. A step a caller waits on, inside an update, takes options of its own with `maximumAttempts`; a background step retries until it lands:
+Named once per target, in `ActivityOptions+X.swift` in the folder of the first workflow that needs them, and used by name in every workflow of the target. A write to the service's own data retries until it lands. An effect that loses its worth when late, such as a notice, and a step a caller waits on inside an update, take options with `maximumAttempts`:
 
 ```swift
 extension ActivityOptions {
@@ -239,14 +254,38 @@ extension ActivityOptions {
     /// A message to a member: a few attempts, then the run fails and the loan stays as recorded.
     static let notification = ActivityOptions(
         startToCloseTimeout: .seconds(30),
-        retryPolicy: RetryPolicy(initialInterval: .seconds(1), backoffCoefficient: 2, maximumInterval: .seconds(30), maximumAttempts: 5)
+        retryPolicy: RetryPolicy(
+            initialInterval: .seconds(1),
+            backoffCoefficient: 2,
+            maximumInterval: .seconds(30),
+            maximumAttempts: 5
+        )
     )
 }
 ```
+
+## Changing a workflow
+
+A deploy replaces the code under every run in flight, and `LoanWorkflow`'s runs last a loan's whole period, so every change to a workflow replays the histories those runs have already written. How a change is patched follows `temporal-developer`; these rules hold around it:
+
+- A change to the commands a workflow issues, such as an activity added, removed or reordered, or a wait changed, takes the new path behind `context.patch("<change>")` and keeps the old one. Once no run that started before the change remains, `context.deprecatePatch("<change>")` replaces the branch in one deploy, and a later deploy removes it.
+- A change too large to patch is a new workflow type, which new runs start; the worker registers it beside the old one until the old one's runs have ended.
+- A change to an activity's body alone, or to a payload's optional field, replays without a patch.
+- `temporal.worker.buildid`, the image's commit, labels which code a worker ran. The worker doesn't version by build id, so every worker polls every run, which is why a change must replay.
+- `XCoreTests` replays each workflow's recorded histories, so a change that breaks a run in flight fails its build before it deploys ([test targets](testing.md#test-targets)).
+
+## Recurring work
+
+Work on a calendar, such as deleting rows whose retention has ended, is a workflow a Temporal Schedule starts: never a timer loop in serve, a cron container, or a workflow that sleeps forever.
+
+- A service declares its schedules once, in `XCore/Workflows/XSchedules.swift`: each one's id, calendar, workflow and input, with `overlap: .skip`, so a run that outlasts its interval isn't joined by a second.
+- `worker run` applies them before its `ServiceGroup` starts, the way `serve --migrate-database` applies migrations ([the worker's root](composition.md#the-workers-root)): inside `TemporalClient.connect(transport:configuration:_:)`, it creates each schedule by its id, and on `ScheduleAlreadyRunningError` updates it to the declared one, so every replica converges on the same schedules.
+- A table whose rows stop mattering has a retention period, a policy value, and a scheduled workflow whose activity runs a system use case that deletes the expired rows in batches by id: the webhook event ids Loans keeps against redelivery (`PurgeNoticeEventsWorkflow`), and Identity's ended sessions and their refresh tokens.
 
 ## The worker
 
 `x worker run` builds the worker in [its own root](composition.md#the-workers-root):
 - It connects to Postgres as the worker role, so only use cases whose scopes the worker scope adopts can run in it.
 - Each service has one task queue, named for it (`loans`), under the SDK's key `temporal.worker.taskqueue`, which the serve process also reads for its starts.
-- The SDK's readers take the namespace under `temporal.client.namespace` for starts and `temporal.worker.namespace` for polling, which the defaults set together (`bookshelf`). They also require `temporal.client.instrumentation.serverhostname` and `temporal.worker.client.instrumentation.serverhostname` (the Temporal host), `temporal.worker.buildid` (the image's commit) and `temporal.worker.client.identity`, which the deployment sets.
+- Each service has its own namespace, named like its package (`bookshelf-loans`), so its runs, schedules and retention are its own. No service reaches another's runs: what another service must do, it asks through that service's contract. The Temporal server's authorizer, which the deployment configures, admits each certificate identity (`loans`, `loans-worker`) to its service's namespace only; without one, every process the Temporal authority signs reaches every namespace, which the plan puts to the user as a question.
+- The SDK's readers take the namespace under `temporal.client.namespace` for starts and `temporal.worker.namespace` for polling, which the defaults set together. They also require `temporal.client.instrumentation.serverhostname` and `temporal.worker.client.instrumentation.serverhostname` (the Temporal host), `temporal.worker.buildid` (the image's commit) and `temporal.worker.client.identity`, which the deployment sets.

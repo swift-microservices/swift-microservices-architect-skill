@@ -52,7 +52,7 @@ The CI pipelines run the tests, and they're the gate:
 | `-Xswiftc -require-explicit-sendable` | Libraries | Every `public` type stating whether it's `Sendable` |
 
 - The toolchain is the package's `swift-tools-version`. CI tests on it, a service and a system library on Ubuntu noble and linux/arm64, where services run, and the `Containerfile` builds on it, so moving a package to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.
-- `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it. `XValkeyTests` reach a real Valkey through `VALKEY_HOST` and `VALKEY_PORT`.
+- `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, 18 or later, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it. `XValkeyTests` need a real Valkey: a service with XValkey passes `valkey_image: valkey/valkey:<major>-alpine` too, the major its Valkey runs, and the tests reach it through `VALKEY_HOST` and `VALKEY_PORT`, unset without it.
 
 ## Foundation linking
 
@@ -88,13 +88,15 @@ jobs:
     uses: swift-microservices/ci/.github/workflows/library.yml@<commit>  # <release>
     with:
       api_breakage_check_enabled: true
+      docs_check_targets: "BookshelfAuthentication BookshelfPersistence BookshelfTransport BookshelfTesting"
       foundation_linking_check_excluded_products: '["BookshelfPersistence"]'
 ```
 
 - `api_breakage_check_enabled` is `true` from 1.0, so a breaking change shows on its pull request, and `false` below 1.0, where a minor release may break the API.
 - A public library builds on every toolchain its users may have: `linux_swift_versions` from its tools version up through the newest release, then `nightly-main` and the next release's nightly; `linux_host_archs: '["x86_64", "aarch64"]'`; `enable_linux_static_sdk_build: true`.
-- A library with DocC catalogs lists their targets in `docs_check_targets`, and Soundness fails on any DocC warning in them.
+- A library with DocC catalogs lists their targets in `docs_check_targets`, and Soundness fails on any DocC warning in them. Each of `<project>-core`'s products has one (`Sources/BookshelfTransport/BookshelfTransport.docc`), since every service builds on its public API.
 - `<project>-protos` has no tests and only builds: its `ci.yml` passes `linux_build_command: swift build -c release`, and `swift build` stands in for `swift test`, which fails on a package with no tests.
+- `<project>-protos` also passes `protobuf_check_enabled: true`, so buf lints its `.proto` files and fails a pull request that breaks the wire, such as a renumbered field or a reused tag, which the Swift API breakage check can't see. Its `buf.yaml`, at the root, lists each target's folder as a module (`Sources/LoansProtos`), lints with `STANDARD` except `RPC_RESPONSE_STANDARD_NAME` and `RPC_REQUEST_RESPONSE_UNIQUE`, since an RPC returns its resource ([contracts](grpc.md#contracts-in-the-protos-package)), and checks `WIRE_JSON` for breaking changes.
 
 ## A service's CI workflows
 
@@ -132,9 +134,23 @@ jobs:
     secrets:
       DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
       DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+
+  attest:
+    name: Attest
+    needs: [ci]
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: swift-microservices/ci/.github/workflows/attest_image.yml@<commit>  # <release>
+    with:
+      image_repository: ghcr.io/bookshelf/bookshelf-loans
 ```
 
-- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest. An environment runs it as one Dokploy application per command ([commands](composition.md#commands)): `loans serve --migrate-database` at one replica, first in `application_ids` and alone mounting the migrator's certificate ([Postgres](security.md#postgres)); `loans worker run`; and, when serve needs more replicas, `loans serve` without the flag ([migrations](persistence.md#migrations)).
+- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest. An environment runs it as one Dokploy application per command ([commands](composition.md#commands)): `loans serve --migrate-database` at one replica, first in `application_ids` and alone mounting the migrator's certificate ([Postgres](security.md#postgres)); `loans worker run`; and, when serve needs more replicas, `loans serve` without the flag ([migrations](persistence.md#migrations)). `deploy_dokploy.yml` deploys each application only once a container of the new image in the one before it passes its health check, so the migrating application's `loans health` check holds the worker and the other replicas until migrations are applied ([health](composition.md#health)).
+- Every image build keeps the image's SBOM as a workflow artifact and fails on a critical vulnerability that has a fixed version, which a base image update or a dependency bump resolves. `attest_image.yml` signs each published image's build provenance and pushes it beside the image, so the deployment can verify an image with `gh attestation verify oci://<image> --owner <owner>`.
 - The gateway's `ci.yml` has no `postgres_image` and one application per environment, since it has no worker, and excludes `gateway` while its generated OpenAPI code links full Foundation.
 - `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls `deploy_dokploy.yml` with `environment: production`, that `commit`, the `image_repository`, the production `application_ids` and the Dokploy secrets. It deploys only a commit that staging ran.
 - `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package, keeping its 30 newest versions. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).
@@ -144,8 +160,10 @@ jobs:
 A service's `Containerfile`, at its root, builds the image `service.yml` publishes:
 
 - A build stage on `swift:<tools version>-noble` resolves with `RUN --mount=type=secret,id=netrc,target=/root/.netrc swift package --disable-automatic-resolution resolve`, so the token never enters a layer, then runs `swift build --configuration release --disable-automatic-resolution --static-swift-stdlib --product loans`. It passes none of CI's flags: CI held the commit to them, and a warning a newer toolchain adds mustn't stop a deploy or a hotfix.
-- A runtime stage on `ubuntu:noble` installs only `ca-certificates` and `tzdata`, creates an unprivileged user, and copies the product, `swift-backtrace-static` and any resource bundles to `/app`.
-- It runs as that user from `WORKDIR /app`, with `ENTRYPOINT ["./loans"]` and `SWIFT_BACKTRACE` pointing at the static backtracer.
+- A runtime stage on `ubuntu:noble` installs only `ca-certificates`, `tzdata` and `libjemalloc2`, creates an unprivileged user with a fixed numeric id (`useradd --uid 10001 loans`), and copies the product, `swift-backtrace-static` and any resource bundles to `/app`.
+- It runs as `USER 10001:10001`, the numeric id, so the platform can tell from the image's configuration alone that it isn't root, from `WORKDIR /app`, with `ENTRYPOINT ["./loans"]` and `SWIFT_BACKTRACE` pointing at the static backtracer.
+- It preloads `libjemalloc.so.2` from `/usr/lib/aarch64-linux-gnu` through the dynamic loader's preload variable, so the process allocates with jemalloc: glibc's allocator keeps the memory a long-running server's many threads fragment, and its resident size grows for days.
+- The process writes nothing inside the image, only to standard output and standard error, so the deployment may mount its root filesystem read-only.
 - A `.dockerignore` beside it keeps `.build`, `.swiftpm`, `.env*`, `.netrc`, secrets and key files out of the build context.
 
 ## Dependabot

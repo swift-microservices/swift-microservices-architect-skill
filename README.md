@@ -84,14 +84,14 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 
 It builds on [Hummingbird](https://github.com/hummingbird-project/hummingbird), [gRPC Swift 2](https://github.com/grpc/grpc-swift-2), the [Temporal Swift SDK](https://github.com/apple/swift-temporal-sdk), [PostgresNIO](https://github.com/vapor/postgres-nio), [valkey-swift](https://github.com/valkey-io/valkey-swift), [Swift Configuration](https://github.com/apple/swift-configuration), [Swift Service Lifecycle](https://github.com/swift-server/swift-service-lifecycle) and the [swift-microservices](https://github.com/swift-microservices) libraries.
 
-Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, client SDKs and frontends.
+Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, backups, client SDKs and frontends.
 
 ### Works well with
 
-The skill decides the shapes; these skills cover the code inside them. The agent loads each where a checklist calls for it, such as Temporal's skill before designing a workflow and the testing skill before writing tests, and tells you when one isn't installed:
+The skill decides the shapes; these skills cover the code inside them. The agent loads each where a checklist calls for it, such as Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you to install one that's missing:
 
-- [Swift Concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill): actors, task groups, `Sendable` diagnostics
-- [Swift Testing Expert](https://github.com/AvdLee/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
+- [Swift Concurrency Pro](https://github.com/twostraws/Swift-Concurrency-Agent-Skill): actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics
+- [Swift Testing Pro](https://github.com/twostraws/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
 - [Temporal Developer](https://github.com/temporalio/skill-temporal-developer): how a workflow is designed and behaves, from signals and updates to versioning
 - [Supabase Postgres Best Practices](https://github.com/supabase/agent-skills): the SQL inside the shapes, from policies and grants to indexes and migration locks
 - [Valkey](https://github.com/valkey-io/valkey-skills): which command fits an operation, with its expiry and atomicity
@@ -119,13 +119,13 @@ skills/swift-microservices-architect/
     ├── grpc.md                 contracts, handlers, conversions, clients, transports
     ├── gateway.md              the Hummingbird gateway
     ├── workflows.md            Temporal workflows, activities, the worker
-    ├── composition.md          commands, composition roots, configuration, lifecycle
+    ├── composition.md          commands, composition roots, configuration, lifecycle, health
+    ├── observability.md        swift-otel, and one request's trace across processes
     ├── security.md             mTLS, tokens, authorization, secrets, webhooks
     ├── style.md                how the code reads
     ├── testing.md              test targets and mocks
     ├── delivery.md             CI/CD for each kind of package
     └── conventions.md          names, folders, files
-evals/                          the cases claude plugin eval runs against the skill
 .github/                        validation, SkillSpector's reviewed exceptions, the semver label check, releases
 CLAUDE.md                       authoring rules for changing the skill
 ```
@@ -137,11 +137,10 @@ Issues and pull requests are welcome. [CLAUDE.md](CLAUDE.md) holds the rules eve
 ```bash
 python3 .github/scripts/check_skill.py
 skillevaluator tier1 skills/swift-microservices-architect --no-llm --skillspector-baseline .github/skillspector-baseline.yaml -o /tmp/skillevaluator
+skillevaluator tier2 skills/swift-microservices-architect -o /tmp/skillevaluator
 ```
 
-The second is NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install skillevaluator`).
-
-A change that alters what the agent produces also runs the eval suite in `evals/`, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
+The last two are NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install skillevaluator`); Tier 2 needs an NVIDIA API key, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
 
 Each pull request carries one semver label, which sets the next release's version.
 

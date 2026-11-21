@@ -7,6 +7,7 @@ This file gives the shapes: the roles, how the caller is bound, scopes, reposito
 ## Contents
 - The Postgres target
 - Database roles
+- Connections and timeouts
 - Row-level security
 - Binding the tenant
 - Organization tenants
@@ -45,7 +46,9 @@ package import PersistencePostgres
 package import PostgresNIO
 
 /// A unit of work as `loans_service`, whose policy narrows `loans` to the bound caller's rows.
-package struct PostgresLoansScope: PostgresScope, BorrowBookUseCaseScope, ReturnBookUseCaseScope, ListLoansUseCaseScope {
+package struct PostgresLoansScope:
+    PostgresScope, BorrowBookUseCaseScope, ReturnBookUseCaseScope, ListLoansUseCaseScope
+{
     package let loanRepository: any LoanRepository
 
     package init(connection: PostgresConnection, logger: Logger) {
@@ -57,6 +60,14 @@ package struct PostgresLoansScope: PostgresScope, BorrowBookUseCaseScope, Return
 - A scope adopts exactly the scope protocols of the use cases that may run as its role. `PostgresLoansInternalScope` adopts `ListAllLoansUseCaseScope` and `ReceiveNoticeEventUseCaseScope`; `PostgresLoansWorkerScope` adopts `MarkLoanOverdueUseCaseScope`. Composing `ListAllLoansUseCase` on the tenant database then fails to compile, so which role a use case runs as is checked by the compiler.
 - Several scopes hold the same repository types; each is built on its own role's connection.
 - PostgresNIO declares a protocol named `PostgresDatabase` too, so a type annotation in a file that imports both modules, such as a test's, spells `PersistencePostgres.PostgresDatabase<PostgresLoansScope>`.
+
+## Connections and timeouts
+
+Every role's `PostgresClient` is built from `<Project>Persistence`'s reader, `PostgresClient.Configuration(config:role:certificateReloader:)`, which bounds its pool and its sessions from configuration ([configuration](composition.md#configuration)):
+
+- The pool opens at most `<role>.maximumConnections`. One Postgres server serves every service of an environment by default ([data placement](system.md#data-placement)), so the plan sizes the pools: the maximums of every role client, times each process's replicas, add up to less than the server's `max_connections`, with room left for the migrator and administration.
+- A role that serves requests or runs activities starts each connection with `statement_timeout` and `idle_in_transaction_session_timeout`, sent as startup parameters. A slow statement fails before the caller's deadline instead of holding its connection, and a transaction a stalled process left open ends and releases its locks.
+- The owner starts its connection with `lock_timeout` and no statement timeout: a migration waits at most that long for a table's lock, rather than queueing every query behind it, and then runs as long as it needs. A migration refused by the timeout fails `serve --migrate-database`, and the platform restarts it.
 
 ## Row-level security
 
@@ -169,7 +180,7 @@ struct CreateLoanStatement: PostgresPreparedStatement {
 - A statement that returns no rows declares `typealias Row = Void` and an empty `decodeRow(_:)`, and the repository runs it with `_ = try await connection.execute(statement, logger: logger)`, since an unused result is a warning, which fails CI.
 - A statement lists its columns, in the order `Model+PostgresRow.swift` decodes them as one tuple (`row.decode((UUID, UUID, …).self)`).
 - An idempotency key is unique with its user, `UNIQUE (user_id, idempotency_key)`, and its insert is plain: under the member's lock, the use case finds a retry by its key first ([transactions](use-cases.md#transactions)).
-- A lock on what a use case counts, or on the owner an idempotency key is unique with, is a transaction-scoped advisory lock on that id: `lockLoans(userID:)` runs `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`.
+- A lock on what a use case counts, or on the owner an idempotency key is unique with, is a transaction-scoped advisory lock on that id: `lockLoans(userID:)` runs `SELECT pg_advisory_xact_lock(hashtextextended('loans:' || $1::text, 0))`. The key starts with what it guards, so locks on different things for the same id don't wait on each other.
 - A unique violation the use case acts on is mapped by constraint name: `catch let error as PSQLError where error.serverInfo?[.sqlState] == "23505"`, then a `switch` on `error.serverInfo?[.constraintName]` that throws the repository's case or rethrows.
 - A value unique only while its row is active, such as a member's one active loan of a book, is a partial unique index over the active states: `CREATE UNIQUE INDEX loans_active_user_id_book_id_key ON loans (user_id, book_id) WHERE status <> 'returned'`. Its violation is mapped by name like any other; a check, then an insert, never stands in for it.
 - A state transition is one statement whose `WHERE` names the states the row may leave: `UPDATE loans SET status = 'returned' WHERE id = $1 AND status <> 'returned' RETURNING …`. No row back means the row isn't in a state it may leave, such as a loan another transaction returned first, and the repository returns `nil` (`markReturned(id:) -> Loan?`). The method or command names only the destination; a read, a decision in Swift and an unconditional write never stand in for it.
@@ -199,7 +210,7 @@ struct LoansByUserIDStatement: PostgresPreparedStatement {
 ```
 
 - `CountLoansByUserIDStatement` is `SELECT count(*) FROM loans WHERE user_id = $1`, decoding an `Int`. The repository runs both and returns `Page(items:page:pageSize:totalCount:)`.
-- A page by key reads one row more than the page size, so the repository knows whether another page follows: `WHERE $1::uuid IS NULL OR id < $1 ORDER BY id DESC LIMIT $2 + 1`. It returns `KeyedPage(items:nextCursor:)` without the extra row and, when that row came back, the last kept item's id as the cursor.
+- A page by key reads one row more than the page size, so the repository knows whether another page follows: `WHERE id < COALESCE($1, 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid) ORDER BY id DESC LIMIT $2 + 1`, the greatest UUID standing for no cursor, never `$1 IS NULL OR id < $1`, which a prepared statement's generic plan reads as a filter rather than an index condition. It returns `KeyedPage(items:nextCursor:)` without the extra row and, when that row came back, the last kept item's id as the cursor.
 - Both order by `id DESC`, so the primary key's index serves every page, and the statement, not Swift, turns a page number into an offset.
 - A list with an order of its own, such as a queue by urgency, pages by number and orders by its columns, then `id`, so the order is total. An order the client chooses is a Core enum the statement maps to a fixed `ORDER BY` with a `CASE` over the bound raw value; a column name is never interpolated.
 - A read with more than two or three filters takes them as one value, `<Resource>Query`, in `Repository/` beside the commands. A search's predicate uses the operator its index serves, and its threshold is the policy's.
@@ -243,7 +254,12 @@ package struct CreateLoansTable: DatabaseMigration {
 ```swift
 /// Every migration of Loans' database, in applied order. Append only.
 package enum LoansMigrations {
-    package static func all(database: String, serviceRole: String, internalRole: String, workerRole: String) -> [any DatabaseMigration] {
+    package static func all(
+        database: String,
+        serviceRole: String,
+        internalRole: String,
+        workerRole: String
+    ) -> [any DatabaseMigration] {
         let createServiceRole = CreateServiceRole(role: serviceRole, database: database)
         …
         let createLoansTable = CreateLoansTable()
@@ -253,8 +269,10 @@ package enum LoansMigrations {
 }
 ```
 
-- The executable's `Database/Migrations.swift` reads the names from configuration, adds the list with `add(contentsOf:)` and applies it. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited or renamed.
+- The executable's `Database/Migrations.swift` reads the names from configuration, adds the list with `add(contentsOf:)` and applies it with `options: .ignoreUnknownMigrations`, so a rolled-back image starts on a schema holding migrations its list lacks instead of refusing to start. The list is append-only: postgres-migrations refuses a reordered list, and an applied migration is never edited or renamed.
 - `serve --migrate-database` applies them as the owner, proved by the migrator's certificate, over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)`, before the role clients and the `ServiceGroup` are built ([commands](composition.md#commands)).
+- Every pending migration applies in one transaction, which holds each lock it takes until the last migration commits. An index on a table that already holds many rows is built with `CREATE INDEX CONCURRENTLY`, which can't run in a transaction and doesn't block writes: XPostgres lists those in `Migrations/LoansIndexes.swift`, and `Migrations.apply()` runs each after the list as `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, first dropping one that an interrupted build left invalid.
+- A backfill of existing rows is never a migration: it's a short-lived command on the internal role ([commands](composition.md#commands)) that updates in batches by id, each batch its own transaction, between the deploy that adds the column and the one that relies on it.
 - One process migrates, before the serving replicas start: postgres-migrations takes no lock, so replicas that apply at once race and all but one fail. `serve --migrate-database` runs in one process, deployed first ([a service's CI workflows](delivery.md#a-services-ci-workflows)); every other serve replica runs without the flag.
 
 ## Valkey
@@ -295,7 +313,7 @@ package struct ValkeyResetCodeRepository<Client: ValkeyClientProtocol>: ResetCod
 - The repository is generic over `ValkeyClientProtocol`, takes the client in its initializer, and lives in XValkey; the use case holds it as a port.
 - Keys are as [naming](conventions.md#naming) gives them, so services sharing an instance never collide.
 - Every write sets its expiry, passed by the use case from its policy, never configured in the store.
-- A read that must happen once is atomic: `GETDEL`, not a read followed by a delete. Several commands that must apply together go in a transaction (`client.transaction(…)`); several independent ones in a pipeline (`client.execute(…)`).
 - A cache is never the source of truth and never holds a decision. Its expiry is the use case's staleness budget, and its read answers `nil` on a miss and on a Valkey error, which the repository logs as a warning, so the use case reads the database and carries on.
+- A use case that changes a cached value's source deletes its key after the transaction commits, never before, so no read refills it from the old row; a delete that fails is logged as a warning, and the expiry bounds how long the value stays stale.
 - A value for one user is keyed by that user too, since Valkey has no row-level security.
-- The executable reads `ValkeyClientConfiguration(configReader:)` into a `var`, which leaves TLS off and connects unauthenticated unless both `authentication.username` and `authentication.password` are set. It sets `valkeyConfiguration.tls = try .enable(tlsConfiguration, tlsServerName: host)` from a NIOSSL `TLSConfiguration` with the environment's trust roots, builds one `ValkeyClient(.hostname(host, port: port), configuration: valkeyConfiguration, logger: logger)` from it, and runs it in the `ServiceGroup` ([lifecycle](composition.md#lifecycle)).
+- The executable builds one `ValkeyClient` over TLS ([configuration](composition.md#configuration)).

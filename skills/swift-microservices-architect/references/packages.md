@@ -62,6 +62,7 @@ let swiftSettings: [SwiftSetting] = [
     .enableUpcomingFeature("MemberImportVisibility"),
     .enableUpcomingFeature("InternalImportsByDefault"),
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .strictMemorySafety(),
 ]
 
 let package = Package(
@@ -87,11 +88,13 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.17.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.35.2"),
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.36.0", traits: []),
+        .package(url: "https://github.com/apple/swift-system.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-temporal-sdk.git", from: "1.5.0"),
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
         .package(url: "https://github.com/grpc/grpc-swift-extras.git", from: "2.2.2"),
         .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
         .package(url: "https://github.com/hummingbird-project/postgres-migrations.git", from: "1.2.0"),
+        .package(url: "https://github.com/swift-otel/swift-otel.git", from: "1.6.1", traits: ["OTLPGRPC"]),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.13.0"),
         .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.33.2"),
     ],
@@ -148,16 +151,20 @@ let package = Package(
                 .product(name: "CatalogProtos", package: "bookshelf-protos"),
                 .product(name: "Configuration", package: "swift-configuration"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
+                .product(name: "GRPCHealthService", package: "grpc-swift-extras"),
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
+                .product(name: "GRPCOTelTracingInterceptors", package: "grpc-swift-extras"),
                 .product(name: "GRPCServiceLifecycle", package: "grpc-swift-extras"),
                 .product(name: "IdentityProtos", package: "bookshelf-protos"),
                 .product(name: "LoansProtos", package: "bookshelf-protos"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCertificateReloading", package: "swift-nio-extras"),
+                .product(name: "OTel", package: "swift-otel"),
                 .product(name: "PersistencePostgres", package: "swift-persistence-postgres"),
                 .product(name: "PostgresMigrations", package: "postgres-migrations"),
                 .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+                .product(name: "SystemPackage", package: "swift-system"),
                 .product(name: "Temporal", package: "swift-temporal-sdk"),
                 .product(name: "UnixSignals", package: "swift-service-lifecycle"),
             ],
@@ -177,7 +184,7 @@ let package = Package(
 
 ## Swift settings
 
-Every target in every package, services and libraries, builds in Swift 6 mode with the template's `swiftSettings`. The code relies on `package` access, typed throws and package traits ([style](style.md)). A server package never sets `.defaultIsolation(MainActor.self)`.
+Every target in every package, services and libraries, builds in Swift 6 mode with the template's `swiftSettings`. `.strictMemorySafety()` makes the compiler warn at each unsafe construct, such as a `nonisolated(unsafe)` value or an `Unsafe…` pointer, and CI's warnings-as-errors fails one that isn't marked `unsafe`; it doesn't flag `@unchecked Sendable`, which the boundary script still checks. The code relies on `package` access, typed throws and package traits ([style](style.md)). A server package never sets `.defaultIsolation(MainActor.self)`.
 
 ## Traits and Foundation
 
@@ -189,6 +196,7 @@ On Linux, full Foundation brings `FoundationInternationalization` and ICU's data
 | swift-openapi-runtime | `FullFoundation`* | `traits: []` |
 | swift-configuration | `JSON`*, `YAML`, `PropertyList` | `traits: []`, plus `Reloading` or `CommandLineArguments` when used |
 | swift-protobuf | `BinaryDelimitedStreams`* | `traits: []`, plus `FieldMaskUtilities` when a contract uses field masks |
+| swift-otel | `OTLPHTTP`*, `OTLPGRPC`* | `traits: ["OTLPGRPC"]`: one exporter, over the gRPC stack every process links |
 
 - Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<project>-core`, `<project>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the template's lower bounds are releases that do.
 - A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
@@ -248,12 +256,12 @@ bookshelf-core/
     │                               HTTP2ServerTransport.Posix.Config+ConfigReader.swift,
     │                               HTTP2ClientTransport.Posix.Config+ConfigReader.swift,
     │                               ServiceConfig+ConfigReader.swift, JWTAuthenticator+ConfigReader.swift,
-    │                               JWTIssuer+ConfigReader.swift
+    │                               JWTIssuer+ConfigReader.swift, InternalCallerInterceptor.swift
     └── BookshelfTesting/           MockDatabase.swift, MockAuthenticator.swift
 ```
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
-- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. It adds swift-crypto for a key's thumbprint ([user tokens](security.md#user-tokens)). `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; executables link it, and `XPostgresTests` for the settings it binds. `BookshelfTransport` adds grpc-swift-2 for `ServiceConfig`, grpc-swift-nio-transport, swift-nio-extras and swift-configuration.
+- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt, jwt-kit, swift-log and swift-operation-context. It adds swift-crypto for a key's thumbprint ([user tokens](security.md#user-tokens)). `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; executables link it, and `XPostgresTests` for the settings it binds. `BookshelfTransport` adds grpc-swift-2 for `ServiceConfig` and the interceptor, grpc-swift-nio-transport, swift-certificates for the peer's common name, swift-nio-extras and swift-configuration.
 - Its API is `public`, with `public import` for every module whose types it exposes.
 - It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<project>-protos`, is released and tagged first; each service and the gateway then raise their requirement. Before the shared packages have a remote, each is a local repository with its releases tagged, and a dependent names it by its `file://` URL and the same `from:`, which resolves as a release does; the URL becomes the remote's in one change once it exists.
 
@@ -262,6 +270,7 @@ bookshelf-core/
 ```
 bookshelf-protos/
 ├── Package.swift
+├── buf.yaml                                          buf's modules, lint and breaking rules (delivery.md)
 └── Sources/
     ├── CatalogProtos/
     │   ├── CatalogProtos.swift                       empty: the generated files are the sources

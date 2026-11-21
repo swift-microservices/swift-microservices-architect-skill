@@ -244,9 +244,10 @@ package struct LoanController: Sendable {
 
 - A controller registers its routes in `addPublicRoutes(to:)`, `addAuthenticatedRoutes(to:)` and `addAdministratorRoutes(to:)`, each taking the group of its tier; the router decides the paths.
 - A handler is a `private func` with the signature `(Request, Context) async throws -> Response`: decode the body or parameters, call the client, convert the answer. Nothing else.
-- A handler makes one upstream call. An answer that needs another service's data is the owning service's to assemble, through its port, so the gateway never joins two services' answers.
+- A handler makes one upstream call. An answer that needs another service's data is the owning service's to assemble, through its port and a batch read for a list ([clients for Core's ports](grpc.md#clients-for-cores-ports)), so the gateway never joins two services' answers.
 - A route belongs to the controller of the resource it answers with, whatever its path: `books/:id/loans` is `LoanController`'s, registered by the router under `books`.
 - A create reads its key from the IETF `Idempotency-Key` header, never a body field, with `requireIdempotencyKey()`, an extension on `HTTPFields` in `Schemas/Shared/` that answers `400` for a request without it.
+- A read of a resource that people edit answers its `etag` as the `ETag` header too, and an update reads it from `If-Match` with `requireIfMatch()`, beside `requireIdempotencyKey()`, which answers `400` without it ([transactions](use-cases.md#transactions)).
 - A query value that is present and malformed answers `400`, like a malformed body; only an absent one takes the service's default.
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
 - An action on a resource that isn't a create, read, update or delete is `POST :id/<verb>` (`:id/return`), as the RPC names it.
@@ -336,13 +337,13 @@ package struct ErrorMiddleware<Context: RequestContext>: RouterMiddleware {
         } catch let error as RPCError {
             let status = HTTPResponse.Status(error.code)
             guard status.kind == .clientError else {
-                context.logger.error("Upstream call failed", metadata: ["error": "\(String(reflecting: error))"])
+                context.logger.error("Upstream call failed", metadata: ["error": "\(error)"])
                 throw Problem(status: status)
             }
 
             throw Problem(status: status, detail: error.message)
         } catch {
-            context.logger.error("Request failed: unknown error", metadata: ["error": "\(String(reflecting: error))"])
+            context.logger.error("Request failed: unknown error", metadata: ["error": "\(error)"])
             throw Problem(status: .internalServerError)
         }
     }
@@ -370,6 +371,7 @@ package struct Problem: HTTPResponseError {
 - An upstream's server error answers its status alone, since a transport's message can name internal hosts. It's logged with its cause, as is anything that isn't an HTTP or RPC error, which answers `500`.
 - Hummingbird's other `HTTPResponseError`s keep their status, such as `413` for a body over the upload limit. Router middleware also wraps the not-found responder, so an unmatched path's `404` is a problem too.
 - `RPCError` gets no retroactive `HTTPResponseError` conformance: the middleware is the one place it becomes a status.
+- A problem's `instance` is the request's id, `urn:bookshelf:request:<context.id>`. It's the `hb.request.id` on every log line the request writes, beside its trace id ([observability](observability.md#the-bootstrap)), so a client that reports a problem names the trace to read.
 - `openapi.yaml` declares the `Problem` schema once and references it from every error response a route documents.
 
 `HTTPResponse.Status.init(_ code: RPCError.Code)`, a `switch` with a `default`, maps the codes:
@@ -380,7 +382,8 @@ package struct Problem: HTTPResponseError {
 | `unauthenticated` | `401` |
 | `permissionDenied` | `403` |
 | `notFound` | `404` |
-| `alreadyExists`, `aborted` | `409` |
+| `alreadyExists` | `409` |
+| `aborted` | `412` |
 | `resourceExhausted` | `429` |
 | `cancelled` | `499` |
 | `unimplemented` | `501` |
@@ -390,7 +393,7 @@ package struct Problem: HTTPResponseError {
 
 ## Upstream clients
 
-The executable builds one `GRPCClient` per upstream service over mTLS, its transport built like any client's ([transports](grpc.md#transports)), with `BearerPropagationInterceptor` applied to the descriptors the gateway calls ([the gateway's root](composition.md#the-gateways-root)).
+The executable builds one `GRPCClient` per upstream service over mTLS, its transport built like any client's ([transports](grpc.md#transports)), with `ClientOTelTracingInterceptor` first ([observability](observability.md#a-trace-across-processes)) and `BearerPropagationInterceptor` applied to the descriptors the gateway calls ([the gateway's root](composition.md#the-gateways-root)).
 
 - Propagation presents the caller's original token, as `BearerAuthenticationMiddleware` bound it, when a route identified a caller; a public route's call goes upstream anonymously.
 - `BookshelfAPI` holds each as the generated client protocol: `Bookshelf_Loans_V1_LoanService.Client(wrapping: loansGRPCClient)`.
@@ -398,4 +401,6 @@ The executable builds one `GRPCClient` per upstream service over mTLS, its trans
 ## The edge
 
 - Clients reach the gateway over TLS, terminated by the edge in front of it (a CDN or reverse proxy, which may itself re-encrypt to the proxy beside the gateway). The gateway listens for plain HTTP on its private interface; it never configures TLS for clients.
-- CORS is the gateway's, in `CORSMiddleware` first on the router, for the origins, methods and headers browsers use, `Idempotency-Key` among them ([the gateway's root](composition.md#the-gateways-root)).
+- Limits per client address are the edge proxy's, before a request reaches the gateway; limits per account are the owning service's ([attempt limits](security.md#attempt-limits)).
+- CORS is the gateway's, in `CORSMiddleware` first on the router, for the origins, methods and headers browsers use, `Idempotency-Key` and `If-Match` among them ([the gateway's root](composition.md#the-gateways-root)).
+- It answers any origin (`.originBased`) and never allows credentials, since the API authenticates by bearer token alone, never a cookie: a page on another origin reaches only what a token it already holds allows. A session cookie would need an origin allowlist from configuration first.

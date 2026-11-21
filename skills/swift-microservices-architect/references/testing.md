@@ -1,10 +1,10 @@
 # Testing
 
-Tests follow the module map: each target is tested on its own, over mocks of the protocols it depends on. [Style](style.md) governs `Sources/`; the test code in `Tests/`, with Swift Testing's `@Test`, `#expect`, traits and parameterized cases, follows the Swift Testing skill (`swift-testing-expert`) instead.
+Tests follow the module map: each target is tested on its own, over mocks of the protocols it depends on. [Style](style.md) governs `Sources/`; the test code in `Tests/`, with Swift Testing's `@Test`, `#expect`, traits and parameterized cases, follows the Swift Testing skill (`swift-testing-pro`) instead.
 
 ## Test targets
 
-Each module has a test target, except `<Project>Transport`, `<Project>Testing`, `<project>-protos`' targets and an executable with no readers worth testing. It depends on the module, the modules whose types its tests name (`XCore` for an adapter's), and the mocks it needs, never another adapter or the executable:
+Each module has a test target, except `<Project>Testing`, `<project>-protos`' targets and an executable with no readers worth testing. It depends on the module, the modules whose types its tests name (`XCore` for an adapter's), and the mocks it needs, never another adapter or the executable:
 
 ```swift
 .testTarget(
@@ -25,6 +25,7 @@ Each module has a test target, except `<Project>Transport`, `<Project>Testing`, 
 |---|---|---|
 | `XCoreTests` | Each use case: its result and every case of its error | `MockDatabase` with a scope of mock repositories, and mocks of its ports; `TemporalTestKit`'s test server for one that starts a workflow, since `TemporalClient` is a concrete type |
 | `XCoreTests`, for workflows | Each workflow's path | `TemporalTestKit`'s time-skipping test server, running the activity container over mocks |
+| `XCoreTests`, for workflow changes | Each workflow replays the histories recorded from its runs | `WorkflowReplayer` over the JSON histories in `Histories/<WorkflowName>/`, each exported with `temporal workflow show --output json` from a run of the workflow's previous release |
 | `XCoreTests`, for activity containers | Each activity's mapping, calling its method directly | Mocks of the container's use case and port protocols |
 | `XGRPCTests` | Each handler: the caller it requires, its conversions, every error case's status; each client for a port: its request, its conversion, the statuses it translates | Mock use cases, and a principal bound in `OperationContext`; a stub of the other service's contract over `GRPCInProcessTransport` |
 | `XPostgresTests` | Statements, repositories, row-level security as each role, migrations | A real Postgres, which no mock can stand in for |
@@ -32,11 +33,11 @@ Each module has a test target, except `<Project>Transport`, `<Project>Testing`, 
 | `GatewayHTTPTests` | Routes in their tiers, conversions, problem details | Mock upstream clients and `MockAuthenticator` |
 
 - A test runs only its module's code, over mocks of the rest: a handler's test doesn't build a use case, and a use case's test never reaches Postgres.
-- A workflow's suite takes the trait `.temporalTimeSkippingTestServer` and reads `TemporalTestServer.timeSkippingTestServer`; a starting use case's takes `.temporalTestServer` and reads `.testServer`. `withConnectedClient(logger:_:)` gives it a `TemporalClient`, and `withConnectedWorker(configuration:activities:workflows:_:)` runs a worker, with `activities: loanActivities.allActivities`. An activity that reads `ActivityExecutionContext` runs inside `withActivityTestEnvironment(info:_:)`.
+- A workflow's suite takes the trait `.temporalTimeSkippingTestServer`, and a starting use case's `.temporalTestServer`; how a test connects a client or runs a worker on it is `TemporalTestKit`'s documentation.
 - A run downloads the test server on first use, so the machine running `XCoreTests` needs network access.
 - The time-skipping server is shared by the suite's tests and holds one clock: a run a test starts and leaves open stalls the next test's clock, so every test sees each run it starts through to its end, and carries `.timeLimit` so a stalled clock fails rather than hangs.
 - `XPostgresTests` share one harness, in `Support/TestDatabase.swift`: it connects as the owner from `POSTGRES_*`, resets the schema, applies `XMigrations.all(…)`, the list the executable applies, and gives each test a `PostgresDatabase` per role, each transaction taking its role with the constant setting `role` and its caller through `PostgresSettings.user(_:)`. A test of row-level security then runs the statements the service runs, as the role that runs them.
-- A statement Postgres refuses inside `withTransaction` arrives as `PostgresTransactionError`, whose `closureError` is the `PSQLError`.
+- A statement Postgres refuses inside the harness's `withTransaction` arrives as the `PSQLError` itself, since `PostgresDatabase` rethrows the closure's error ([transactions](use-cases.md#transactions)).
 - `X<Provider>Tests` test the provider target's mapping the same way, and the executable's readers and defaults, when tested, are in `XTests`.
 - `XPostgresTests` and `XValkeyTests` fail, rather than skip, when `POSTGRES_HOST` or `VALKEY_HOST` is unset. No check is turned off to make CI pass.
 
@@ -46,8 +47,9 @@ Each module has a test target, except `<Project>Transport`, `<Project>Testing`, 
 |---|---|
 | `<Project>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip; refusal of an expired token and of a `sub` that isn't a UUID; the `.user` metadata provider |
 | `<Project>PersistenceTests` | Both branches of `UserSettingsInterceptor`: a bound user's setting, and nothing when none is bound |
+| `<Project>TransportTests` | `InternalCallerInterceptor` admits a listed common name and refuses an unlisted one and a call with no certificate |
 
-`<Project>Transport` and `<Project>Testing` have no test target: every service's startup proves the readers, and the tests that use them prove the mocks.
+`<Project>Testing` has no test target: the tests that use it prove the mocks, and every service's startup proves `<Project>Transport`'s readers.
 
 ```
 Tests/
