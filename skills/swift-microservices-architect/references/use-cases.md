@@ -60,6 +60,7 @@ package enum BorrowBookUseCaseError: Error, Equatable {
     case bookNotFound
     case loanLimitReached
     case idempotencyConflict
+    case alreadyBorrowed
     case catalogUnavailable
     case unknown
 }
@@ -308,6 +309,9 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
             }
         } catch let error as BorrowBookUseCaseError {
             throw error
+        } catch LoanRepositoryError.alreadyBorrowed {
+            logger.warning("Borrowing refused: the member already has this book")
+            throw .alreadyBorrowed
         } catch CatalogClientError.unavailable {
             logger.warning("Borrowing failed: the catalog is unavailable")
             throw .catalogUnavailable

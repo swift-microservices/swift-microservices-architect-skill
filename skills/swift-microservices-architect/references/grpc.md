@@ -191,6 +191,8 @@ package func borrowBook(
             throw RPCError(code: .failedPrecondition, message: "The loan limit has been reached.")
         case .idempotencyConflict:
             throw RPCError(code: .failedPrecondition, message: "The idempotency key was used to borrow another book.")
+        case .alreadyBorrowed:
+            throw RPCError(code: .alreadyExists, message: "The member already has this book on loan.")
         case .catalogUnavailable:
             throw RPCError(code: .unavailable, message: "The catalog is unavailable.")
         case .unknown:
@@ -317,7 +319,7 @@ extension Bookshelf_Loans_V1_ListAllLoansResponse {
 | Malformed or invalid input (`invalidIdempotencyKey`) | `invalidArgument` |
 | The request's own proof fails (`signatureRejected`, `credentialsRejected`) | `unauthenticated` |
 | What the request names doesn't exist (`…NotFound`) | `notFound` |
-| What the request creates, or asks for a second time, exists (`duplicate…`) | `alreadyExists` |
+| What the request creates, or asks for a second time, exists (`duplicate…`, `alreadyBorrowed`) | `alreadyExists` |
 | The resource changed since the caller read it (`versionConflict`) | `aborted` |
 | The resource's state refuses it, whoever asks (`loanLimitReached`, `alreadyReturned`, `idempotencyConflict`) | `failedPrecondition` |
 | Who the caller is refuses it (`forbidden`) | `permissionDenied` |

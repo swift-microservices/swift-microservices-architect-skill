@@ -182,7 +182,7 @@ struct CreateLoanStatement: PostgresPreparedStatement {
 - An idempotency key is unique with its user, `UNIQUE (user_id, idempotency_key)`, and its insert is plain: under the member's lock, the use case finds a retry by its key first ([transactions](use-cases.md#transactions)).
 - A lock on what a use case counts, or on the owner an idempotency key is unique with, is a transaction-scoped advisory lock on that id: `lockLoans(userID:)` runs `SELECT pg_advisory_xact_lock(hashtextextended('loans:' || $1::text, 0))`. The key starts with what it guards, so locks on different things for the same id don't wait on each other.
 - A unique violation the use case acts on is mapped by constraint name: `catch let error as PSQLError where error.serverInfo?[.sqlState] == "23505"`, then a `switch` on `error.serverInfo?[.constraintName]` that throws the repository's case or rethrows.
-- A value unique only while its row is active, such as a member's one active loan of a book, is a partial unique index over the active states: `CREATE UNIQUE INDEX loans_active_user_id_book_id_key ON loans (user_id, book_id) WHERE status <> 'returned'`. Its violation is mapped by name like any other; a check, then an insert, never stands in for it.
+- A value unique only while its row is active, such as a member's one active loan of a book, is a partial unique index over the active states, `loans_active_user_id_book_id_key` in `CreateLoansTable` ([migrations](#migrations)). Its violation is mapped by name like any other, here to `LoanRepositoryError.alreadyBorrowed`; a check, then an insert, never stands in for it.
 - A state transition is one statement whose `WHERE` names the states the row may leave: `UPDATE loans SET status = 'returned' WHERE id = $1 AND status <> 'returned' RETURNING …`. No row back means the row isn't in a state it may leave, such as a loan another transaction returned first, and the repository returns `nil` (`markReturned(id:) -> Loan?`). The method or command names only the destination; a read, a decision in Swift and an unconditional write never stand in for it.
 - The `WHERE` names the source states, never the destination, so a repeat of the same transition finds no row. A transition that a stored value guards names that value too: `markOverdue(id:)` runs `UPDATE loans SET status = 'overdue' WHERE id = $1 AND status = 'active' AND due_date <= now() RETURNING …`, so a loan extended after its run woke stays active.
 - A transition that also writes other columns, or that returns the row to a state it may leave again, keeps each of those writes repeat-safe on its own: it sets a value, never adds to one.
@@ -235,6 +235,13 @@ package struct CreateLoansTable: DatabaseMigration {
                 creation_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 UNIQUE (user_id, idempotency_key)
             )
+            """,
+            logger: logger
+        )
+        try await connection.query(
+            """
+            CREATE UNIQUE INDEX loans_active_user_id_book_id_key ON loans (user_id, book_id)
+            WHERE status <> 'returned'
             """,
             logger: logger
         )
