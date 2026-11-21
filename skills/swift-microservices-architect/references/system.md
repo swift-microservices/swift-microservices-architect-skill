@@ -68,9 +68,10 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 | An answer now from the owner of the data | Unary gRPC to its `XInternalService`, over mTLS, as the calling process |
 | A person's request | The gateway, which forwards the caller's token to the owning service's `XService` ([gateway](gateway.md)) |
 | Work that must happen eventually, waits for time or a signal, retries, or touches several services | A Temporal workflow in Core, started by a use case ([workflows](workflows.md)) |
+| A fact about a service's data that other services react to, each on its own | An event on Kafka, recorded in the transaction that makes the change ([events](events.md)) |
 
-- Durable work is a workflow, not a message on a queue: Temporal holds the retries, the timers and the history.
-- Calls between services form no cycle. Break one by moving ownership, extracting a third capability, or making one direction a workflow.
+- Work that must be seen through is a workflow, never a message on a queue or a topic: Temporal holds the retries, the timers and the history. [Choosing a mechanism](events.md#choosing-a-mechanism) sets workflows and events apart.
+- Calls between services form no cycle. Break one by moving ownership, extracting a third capability, or making one direction a workflow or an event.
 - What each hop proves, and where a user's token may travel: [the trust model](security.md#the-trust-model).
 
 ## Erasing a person's data
@@ -106,6 +107,7 @@ Besides the swift-microservices libraries ([stack](stack.md)), every service and
 | `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user` |
 | `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:certificateReloader:)` for a role proved by the process's certificate, and `(config:role:)` for the password fallback |
 | `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`; `InternalCallerInterceptor`, `SigningKeyRefresher` |
+| `<Project>Events` | The Kafka readers, `OutboxRelay`, `EventHandler`, `EventRejection` and `EventConsumer`, for a service with [events](events.md) |
 | `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) |
 
 It holds none of these: a service's models, repositories, scopes or migrations; contracts; deployment defaults such as mount paths, ports and role names, which stay in each executable's `InMemoryProvider` defaults; generic abstractions, which belong to the swift-microservices libraries; a process identity or service token, since certificates prove processes.
@@ -137,11 +139,15 @@ The plan stays current: each Build order line is ticked once its checklist is do
 |---|---|
 - Commands: `serve`, `health`, `worker run`, `migrate`, `build-indexes`
 - Data: where it lives, the database roles and the use cases each runs, and how each process proves its roles
-- Calls out to: other services' internal RPCs, providers, Temporal, Valkey
+- Calls out to: other services' internal RPCs, providers, Temporal, Valkey, Kafka
 
 ## Shared packages
 - <project>-core: each product and what it holds
 - <project>-protos: one target per contract
+
+## Events
+| Topic | Publisher | Consumers, and what each does with it |
+|---|---|---|
 
 ## Gateway routes
 | Route | Tier | Upstream RPC |
@@ -151,8 +157,8 @@ The plan stays current: each Build order line is ticked once its checklist is do
 - Each boundary and why it holds; each departure from a default or exception to a rule, with its reason
 
 ## Operations
-| Environment | Postgres `max_connections` | Each process's replicas and role pools, and their total | Collector endpoint | Stop timeout |
-|---|---|---|---|---|
+| Environment | Postgres `max_connections` | Each process's replicas and role pools, and their total | Collector endpoint | Stop timeout | Each topic's partitions and retention |
+|---|---|---|---|---|---|
 
 | Tier, or a route set apart | Availability over 30 days | Latency at the 99th percentile |
 |---|---|---|
@@ -177,7 +183,7 @@ The plan stays current: each Build order line is ticked once its checklist is do
 Operations' targets and thresholds are the user's answers; what they measure, the gateway and Temporal already emit:
 
 - Objectives take a row per route tier ([request contexts and tiers](gateway.md#request-contexts-and-tiers)), and one per route whose work sets it apart, such as sign-in, which bcrypt slows. The gateway's `MetricsMiddleware` measures both ([a trace across processes](observability.md#a-trace-across-processes)): availability from its count of requests by route and status, as the share answered without a `5xx`, and latency from its duration, which covers only requests answered without an error, since it counts a thrown problem but doesn't time it.
-- Alerts: error rate and latency per tier, against its objective; failed and timed-out runs, and failing workflow tasks, per namespace; schedule-to-start latency per task queue, which rises when no worker polls or every worker is busy. The workflow alerts read Temporal's own metrics. A nondeterministic run never fails: its workflow task fails on every retry, so only the failing-task alert sees it.
+- Alerts: error rate and latency per tier, against its objective; failed and timed-out runs, and failing workflow tasks, per namespace; schedule-to-start latency per task queue, which rises when no worker polls or every worker is busy; each consumer group's lag per topic, which rises when a handler retries one event or falls behind ([the worker](events.md#the-worker)). The workflow alerts read Temporal's own metrics. A nondeterministic run never fails: its workflow task fails on every retry, so only the failing-task alert sees it.
 - A bad deploy: run Deploy to production with the last commit production ran, never reverting a migration ([a service's CI workflows](delivery.md#a-services-ci-workflows)). Callers and the gateway roll back before a service whose new RPC they call, the reverse of [the order they deploy in](grpc.md#contracts-in-the-protos-package), and the fix goes forward through staging.
 - A stuck workflow: rising schedule-to-start latency means its task queue's worker isn't polling; otherwise its pending activity's last failure names the dependency it waits on, and the activity's retries resume it once that recovers.
 - A nondeterministic workflow: roll back to the image before the change, so the runs that started before it replay and resume; the runs the bad image started then fail on replay and are reset, as `temporal-developer` describes. The change returns behind a patch, with a failed run's history among the replays `XCoreTests` runs ([changing a workflow](workflows.md#changing-a-workflow)).

@@ -22,13 +22,14 @@ The targets inside a service's package, how they depend on each other, its `Pack
 | `XPostgres` | A scope per database role, repositories, prepared statements, row decoding, migrations | `XCore`, `PersistencePostgres`, `PostgresNIO`, `PostgresMigrations`, `AsyncAlgorithms`, `Logging`; `<Project>Authentication` where a table stores a `UserRole` |
 | `XGRPC` | The service's proto services, `Protobuf/` conversions, gRPC clients for Core's ports | `XCore`, its own and its callees' `XProtos`, `GRPCCore`, `SwiftProtobuf`, `Authentication`, `OperationContext`, `<Project>Authentication` |
 | `XValkey` | Repositories over Valkey | `XCore`, `Valkey` |
+| `XKafka` | Handlers for the topics it consumes, publishers for Core's event ports, `Protobuf/` conversions of events ([events](events.md)) | `XCore`, its own and its producers' `XProtos`, `Kafka`, `SwiftProtobuf`, `<Project>Events` |
 | `X<Provider>` | A third-party API behind a Core port (`LoansResend`) | `XCore`, the provider's SDK; `NIOPosix` for work on `NIOThreadPool` |
-| `X` | The executable: commands, configuration defaults and readers, applying the migrations, composition roots | Every target above, `<Project>Transport`, `<Project>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser`; `NIOSSL` with Valkey |
+| `X` | The executable: commands, configuration defaults and readers, applying the migrations, composition roots | Every target above, `<Project>Transport`, `<Project>Persistence`, drivers, transports, `Configuration`, `ServiceLifecycle`, `ArgumentParser`; `NIOSSL` with Valkey; `<Project>Events` with Kafka |
 
-A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC` and `Catalog`.
+A service declares only the targets its plan needs: Catalog is `CatalogCore`, `CatalogPostgres`, `CatalogGRPC`, `CatalogKafka` and `Catalog`.
 
 - Adapter targets never import each other. They meet in the executable, which hands one to another through Core's protocols: `GRPCCatalogClient` from XGRPC goes into `BorrowBookUseCase` and `LoanActivities`, which see only `any CatalogClient`.
-- Generated contract types stay in XGRPC and the executable (descriptors for interceptors, `Client(wrapping:)`); Postgres types stay in XPostgres and the executable; Temporal types in [Core's Temporal files](#what-core-may-link) and the executable.
+- Generated contract types stay in XGRPC, XKafka and the executable (descriptors for interceptors, `Client(wrapping:)`); Postgres types stay in XPostgres and the executable; Temporal types in [Core's Temporal files](#what-core-may-link) and the executable.
 - Nothing outside the package links a service, so a service has one product, its executable, and its cross-target API is `package` ([access control](style.md#access-control-and-imports)).
 
 ## What Core may link
@@ -39,7 +40,7 @@ Core links a library that saves every service re-declaring a concept, when the l
 - doesn't pull full Foundation into the target;
 - is stable enough for its types to appear in use case signatures.
 
-`Persistence`, `<Project>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token or making a signing key qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Valkey`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
+`Persistence`, `<Project>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token or making a signing key qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Valkey`, `Kafka`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
 
 `Temporal` is the one deliberate exception to these criteria: Core commits to it, as it does to the standard library. A workflow is the application's orchestration, and Temporal's determinism rules and macros make a wrapper cost more than it saves. It stays in its own corner of Core, file by file, since a module's types are visible only in files that import it:
 - `import Temporal` appears only in `XCore/Workflows/**` and in the use cases that start, signal, query or update a workflow, in `XUseCase.swift` alone of their five files.
@@ -182,7 +183,7 @@ let package = Package(
 - Every target lists each module it imports, product by product. CI's `--explicit-target-dependency-import-check error` fails only an import the target can't reach ([delivery](delivery.md#tests)), so listing a module reached through another dependency, such as `GRPCCore` through `LoansCore`, is kept by review.
 - Each requirement follows [choosing versions](stack.md#choosing-versions).
 - A target joins `Package.swift` when its first source file is written: SPM refuses a target with no sources, so a package builds target by target, Core first.
-- A provider target (`LoansResend`) and test targets follow the same form, and the executable lists the provider target. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one.
+- A provider target (`LoansResend`), a Kafka target (`LoansKafka`) and test targets follow the same form, and the executable lists each. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one.
 
 ## Swift settings
 
@@ -213,15 +214,16 @@ bookshelf-loans/
 └── Sources/
     ├── LoansCore/
     │   ├── Loans/
-    │   │   ├── Loan.swift, LoanStatus.swift, LoanPolicy.swift
-    │   │   ├── Repository/         LoanRepository.swift, Commands/CreateLoanCommand.swift
-    │   │   └── UseCases/           BorrowBook/, ReturnBook/, ListLoans/, ListAllLoans/, MarkLoanOverdue/, ReceiveNoticeEvent/
+    │   │   ├── Loan.swift, LoanStatus.swift, LoanPolicy.swift, LoanEvent.swift, LoanEventKind.swift
+    │   │   ├── Repository/         LoanRepository.swift, LoanEventRepository.swift, Commands/CreateLoanCommand.swift
+    │   │   └── UseCases/           BorrowBook/, ReturnBook/, ListLoans/, ListAllLoans/, MarkLoanOverdue/, ReceiveNoticeEvent/,
+    │   │                           PublishLoanEvents/
     │   ├── Workflows/
     │   │   └── LoanWorkflow/       LoanWorkflow.swift, LoanActivities.swift, ActivityOptions+Loans.swift
     │   ├── Paging/                 Page.swift, KeyedPage.swift
     │   └── Ports/                  Book.swift, CatalogClient.swift, CatalogClientError.swift,
     │                               Member.swift, IdentityClient.swift, OverdueNotice.swift, NoticeSender.swift,
-    │                               NoticeEvent.swift, NoticeEventVerifier.swift
+    │                               NoticeEvent.swift, NoticeEventVerifier.swift, LoanEventPublisher.swift
     ├── LoansPostgres/
     │   ├── Scopes/                 PostgresLoansScope.swift, PostgresLoansInternalScope.swift, PostgresLoansWorkerScope.swift
     │   ├── Repositories/Loans/     PostgresLoanRepository.swift
@@ -233,6 +235,7 @@ bookshelf-loans/
     │   ├── Loans/                  LoanService.swift, Protobuf/BorrowBookUseCaseInput+Protobuf.swift, Protobuf/Loan+Protobuf.swift
     │   └── Clients/                GRPCCatalogClient.swift, GRPCIdentityClient.swift, Protobuf/Book+Protobuf.swift
     ├── LoansResend/                ResendNoticeSender.swift, ResendNoticeEventVerifier.swift
+    ├── LoansKafka/                 KafkaLoanEventPublisher.swift, Protobuf/LoanEvent+Protobuf.swift
     └── Loans/
         ├── Loans.swift             the @main command
         ├── Configuration/          InMemoryProvider+ApplicationDefaults.swift, LoanPolicy+ConfigReader.swift
@@ -262,11 +265,13 @@ bookshelf-core/
     │                               HTTP2ClientTransport.Posix.Config+ConfigReader.swift,
     │                               ServiceConfig+ConfigReader.swift, InternalCallerInterceptor.swift,
     │                               SigningKeyRefresher.swift
+    ├── BookshelfEvents/            KafkaProducerConfig+ConfigReader.swift, KafkaConsumerConfig+ConfigReader.swift,
+    │                               OutboxRelay.swift, EventHandler.swift, EventRejection.swift, EventConsumer.swift
     └── BookshelfTesting/           MockDatabase.swift, MockAuthenticator.swift
 ```
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
-- `BookshelfAuthentication` depends on swift-authentication, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; executables link it, and `XPostgresTests` for the settings it binds. `BookshelfTransport` adds grpc-swift-2 for `ServiceConfig` and the interceptor, grpc-swift-nio-transport, swift-certificates for the peer's common name, swift-nio-extras, swift-configuration, and jwt-kit and swift-service-lifecycle for `SigningKeyRefresher` ([signing keys](security.md#signing-keys)).
+- `BookshelfAuthentication` depends on swift-authentication, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; executables link it, and `XPostgresTests` for the settings it binds. `BookshelfTransport` adds grpc-swift-2 for `ServiceConfig` and the interceptor, grpc-swift-nio-transport, swift-certificates for the peer's common name, swift-nio-extras, swift-configuration, and jwt-kit and swift-service-lifecycle for `SigningKeyRefresher` ([signing keys](security.md#signing-keys)). `BookshelfEvents` depends on swift-kafka-client, swift-protobuf for the handlers' events, swift-configuration, swift-service-lifecycle and swift-log; only the services with [events](events.md) link it, so no other service builds librdkafka.
 - Its API is `public`, with `public import` for every module whose types it exposes.
 - It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<project>-protos`, is released and tagged first; each service and the gateway then raise their requirement. Before the shared packages have a remote, each is a local repository with its releases tagged, and a dependent names it by its `file://` URL and the same `from:`, which resolves as a release does; the URL becomes the remote's in one change once it exists.
 
@@ -355,6 +360,6 @@ It also lists each use of unchecked concurrency for review, without failing: eve
 - No sentinel stands for absence: `?? ""`, `?? -1`, `.distantPast`, `.distantFuture` or a column's `DEFAULT ''` ([types and values](style.md#types-and-values)).
 - No `ON CONFLICT` in a `Create…Statement` ([repositories and statements](persistence.md#repositories-and-statements)).
 - No policy reads a role from `current_setting` ([row-level security](persistence.md#row-level-security)).
-- Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, and a role's `user` and `password` ([configuration](composition.md#configuration)).
+- Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, a topic's name (`topics.loanEvents`), and a role's `user` and `password` ([configuration](composition.md#configuration)).
 
 It also lists for review, without failing: each Core repository method with two parameters or more that isn't named for what it returns and takes no command or page size, since a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)); and each test file named for no type in `Sources/` ([test targets](testing.md#test-targets)).

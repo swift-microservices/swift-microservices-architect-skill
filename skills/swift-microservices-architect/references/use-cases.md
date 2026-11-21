@@ -148,6 +148,7 @@ package enum CatalogClientError: Error, Equatable {
 | Another service | `CatalogClient` | XGRPC |
 | A provider | `NoticeSender`, `PasswordHasher`, `NoticeEventVerifier` | `X<Provider>` |
 | A store outside the database | `ResetCodeRepository` | XValkey |
+| Kafka, for the outbox's relay | `LoanEventPublisher` | XKafka |
 
 Ports and their implementations are named as [naming](conventions.md#naming) gives them.
 
@@ -156,7 +157,7 @@ Ports and their implementations are named as [naming](conventions.md#naming) giv
 
 ## A use case
 
-There is one use case per operation: one per RPC, and one per database step an activity runs (`MarkLoanOverdue`). A read that `XService` offers anyone and `XInternalService` offers other processes, with the same input and answer, is one use case both services hold, such as Catalog's `GetBook`. Its five files, four when it takes no input, are these ([files](conventions.md#files)):
+There is one use case per operation: one per RPC, and one per database step an activity or an event handler runs (`MarkLoanOverdue`, `RecordBookBorrow`). A read that `XService` offers anyone and `XInternalService` offers other processes, with the same input and answer, is one use case both services hold, such as Catalog's `GetBook`. Its five files, four when it takes no input, are these ([files](conventions.md#files)):
 
 ```swift
 package protocol BorrowBookUseCaseProtocol: Sendable {
@@ -331,7 +332,7 @@ The body reads in the order the requirement states it: refuse what needs no data
 
 ## System use cases
 
-A use case's actor is a person, through an RPC, or the system: time, or a workflow's step, through an activity. Use cases never call other use cases synchronously. One run triggering another later through a workflow isn't a use case calling a use case: they are separate runs with separate transactions.
+A use case's actor is a person, through an RPC, or the system: time or a workflow's step, through an activity, or another service's event, through a handler ([consuming events](events.md#consumers)). Use cases never call other use cases synchronously. One run triggering another later through a workflow isn't a use case calling a use case: they are separate runs with separate transactions.
 
 ```swift
 package protocol MarkLoanOverdueUseCaseProtocol: Sendable {

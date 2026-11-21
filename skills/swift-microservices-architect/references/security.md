@@ -22,14 +22,16 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens 
 | A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate; the authorizer admits the process to its service's namespace only ([the worker](workflows.md#the-worker)) |
 | A process to Postgres | TLS, required (`.require(…)`), against the environment's authority, with the process's certificate, as one of the service's roles | Both sides by certificate; the server's map admits the process to its roles only ([Postgres](#postgres)) |
 | A process to Valkey | TLS, required, against the environment's authority, as its service's ACL user (`authentication.*`) | The server by certificate; the process by its password, admitted to its service's keys only |
+| A worker to Kafka | TLS, required, against the environment's authority, as its service's Kafka user, by SCRAM-SHA-512 (`kafka.authentication.*`) | The server by certificate; the process by its password, admitted to write its service's topics and read the ones the plan lists for it |
 | Inside the database | Row-level security | The tenant, by the setting bound to the transaction |
 
 - Each service has its own Valkey ACL user, named for it, whose key pattern is the service's prefix (`~identity:*`), so a service whose password leaks exposes no other service's keys. The deployment creates the users; the service names them in its defaults.
+- Each service with [events](events.md) has its own Kafka user, named for it, whose ACLs write only its own topics and read only the topics, in its own group, that the plan lists for it. A password proves it rather than the process's certificate: swift-kafka-client loads a certificate once, so a renewed one would reach it only on a restart.
 - The edge proxy and certificate issuance belong to the deployment; this skill fixes what each process presents and checks.
 
 ## Mutual TLS
 
-Every gRPC connection and every connection to Temporal or Postgres is mutual TLS against a private certificate authority per environment. Valkey connections are TLS against that authority, with a password proving the process. Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial and whose common name is its identity (`loans`, `loans-worker`).
+Every gRPC connection and every connection to Temporal or Postgres is mutual TLS against a private certificate authority per environment. Valkey and Kafka connections are TLS against that authority, with a password proving the process. Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial and whose common name is its identity (`loans`, `loans-worker`).
 
 `<Project>Transport` holds the readers every executable uses:
 
