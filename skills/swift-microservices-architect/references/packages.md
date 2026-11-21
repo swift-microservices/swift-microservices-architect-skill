@@ -287,7 +287,7 @@ bookshelf-protos/
     │   ├── bookshelf/catalog/v1/catalog.proto
     │   └── grpc-swift-proto-generator-config.json
     ├── IdentityProtos/                               the same files for bookshelf.identity.v1
-    └── LoansProtos/                                  the same files for bookshelf.loans.v1
+    └── LoansProtos/                                  the same files for bookshelf.loans.v1, plus its events.proto
 ```
 
 Each target:
