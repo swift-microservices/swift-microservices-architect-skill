@@ -16,13 +16,13 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 
 **How Claude loads a skill**, in three stages, each with its own limit:
 
-1. **The listing.** Every session lists each installed skill's `name` and `description` on every turn, and Claude decides from them alone whether to invoke the skill. Claude Code cuts an entry at 1,536 characters, and when the listing outgrows its budget, about 1% of the context window, it drops the descriptions of the least-used skills first.
+1. **The listing.** Every session lists each installed skill's `name` and `description` on every turn, and Claude decides from them alone whether to invoke the skill. Claude Code cuts an entry's text at 1,536 characters, and when the listing outgrows its budget, 1% of the model's context window, it keeps every name but drops descriptions, starting with the skills invoked least.
 2. **Invocation.** The `SKILL.md` body enters the conversation as one message and stays on every later turn, so each line is a recurring cost; Claude Code doesn't re-read it, so its guidance reads as standing instructions. The specification recommends under 500 lines and 5,000 tokens. After compaction Claude Code re-attaches the first 5,000 tokens of each invoked skill, within 25,000 tokens shared by every skill invoked, the most recent first.
 3. **References.** A file in `references/` loads only when `SKILL.md` sends Claude to it. A file reached from another reference may be read in part, such as its first 100 lines.
 
 **Frontmatter**
 
-- Only `name`, `description`, `license` and `metadata`, in YAML that parses. claude.ai and the API accept only the specification's keys and reject any other, such as Claude Code's `when_to_use` or `paths`.
+- Only `name`, `description`, `license` and `metadata`, in YAML that parses. The specification's other keys, `compatibility` and `allowed-tools`, aren't needed. Its validator, `skills-ref validate`, rejects any key outside the specification, such as Claude Code's `when_to_use` or `paths`, which Claude Code reads and other harnesses don't.
 - `metadata` holds `author`, the name in `plugin.json`'s `author`, and `tags`, one to five comma-separated tags, since the specification's `metadata` maps strings to strings.
 - `name` is the folder's name: at most 64 characters of lowercase letters, digits and single hyphens, neither first nor last, without `anthropic` or `claude`.
 - `description` is at most 800 characters, under the specification's 1,024, since the listing is paid on every turn. It's in the third person, with no angle brackets or XML tags. It says what the skill does in one short sentence, then when to use it in the words users type, starting with "Use when" inside the first 60 characters, since some harnesses list only that much, then the stack it builds on, then what it isn't for, and ends by claiming the tasks where the user doesn't name the architecture.
@@ -32,7 +32,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - The skill folder holds only what agents read and run: `SKILL.md`, `references/`, `scripts/` for deterministic checks, and `agents/openai.yaml`, Codex's display name for the skill. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
 - `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: Purpose, Examples (the example system), the shape, a service's package with its hard rules, who owns what, code style, Troubleshooting (the gotchas), Prerequisites, Available Scripts (a table of `| Script | Purpose | Arguments |`), Limitations, References, Related skills and Instructions (the checklists). Purpose, Examples, Troubleshooting, Prerequisites, Available Scripts, Limitations and Instructions are the headings SkillEvaluator's quality check looks for. The Instructions come last, since an agent copies the checklist for its task into its response.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
-- A script in `scripts/` runs on macOS's bash 3.2 and on Linux, and a change to one is tried on a service that passes and one that fails.
+- A script in `scripts/` is run, never read: `SKILL.md` gives its command and arguments, and only its output enters the context. It runs on macOS's bash 3.2 and on Linux, prints each failure under the rule it breaks, and a change to one is tried on a service that passes and one that fails.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
 - Links are relative, with forward slashes and GitHub heading anchors; renaming a heading means updating every link to it.
 
