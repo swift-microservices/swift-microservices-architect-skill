@@ -450,7 +450,7 @@ let cors = CORSMiddleware<BasicRequestContext>(
     allowOrigin: .originBased,
     allowHeaders: allowedHeaders,
     allowMethods: [.get, .post, .put, .delete],
-    exposedHeaders: ["ETag"]
+    exposedHeaders: ["ETag", "Deprecation", "Sunset", "Link"]
 )
 let requestLogging = LogRequestsMiddleware<BasicRequestContext>(logLevel)
 let router = Router(context: BasicRequestContext.self)

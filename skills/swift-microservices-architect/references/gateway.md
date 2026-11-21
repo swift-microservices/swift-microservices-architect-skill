@@ -409,7 +409,7 @@ package struct Problem: HTTPResponseError {
 
 - A breaking change to a route is that route again under `/v2`, beside `/v1`'s; the routes it leaves alone stay at `/v1` only. `openapi.yaml` documents it with a path-level `servers` entry ending in `/v2`, as the JWK Set's path has one at the origin, and names a schema whose shape changed with a `V2` suffix (`LoanResponseV2`), so both versions' types generate side by side.
 - `BookshelfAPI`'s `addV2Routes(to:)` registers it on the router's `v2` group, in its tier. Its handler sits beside `/v1`'s in the resource's controller, and both call the same RPC unless the contract changed too ([contracts](grpc.md#contracts-in-the-protos-package)).
-- From the deploy that ships `/v2`, `/v1`'s route is `deprecated: true` in `openapi.yaml`, and `DeprecationMiddleware`, on the group the controller registers it in, adds three headers to its responses, which CORS lists in `exposedHeaders` so a browser client reads them too:
+- From the deploy that ships `/v2`, `/v1`'s route is `deprecated: true` in `openapi.yaml`, and `DeprecationMiddleware`, on the group the controller registers it in, adds three headers to its responses, which CORS exposes ([the edge](#the-edge)):
   - `Deprecation` (RFC 9745): when the route was deprecated, as a structured-field date, `@` and the Unix time in seconds
   - `Sunset` (RFC 8594): when it will be removed, as an HTTP-date, never before the deprecation
   - `Link`: `<the migration guide's URL>; rel="deprecation"`
