@@ -2,10 +2,6 @@
 
 Guidance the skill doesn't give yet. Until an item lands, the skill says nothing about it. Each item names where its rule would live, following `CLAUDE.md`'s one home per rule.
 
-## Before production (P0)
-
-- **An eval suite.** Cases and graders that check what agents produce with the skill against `main`, rebuilt from scratch, with the rules and the steps that run them in `CLAUDE.md`.
-
 ## Later (P2)
 
 - **An `openapi.yaml` breaking-change check.** A pull request that breaks `/v1` in the gateway's `openapi.yaml` fails CI, against the pull request's base, as `<project>-protos`' buf check fails one that breaks the wire. swift-microservices/ci's `service.yml` has no input for it yet; once it has one, the gateway's `ci.yml` passes it. Home: `delivery.md#a-services-ci-workflows`, linked from `gateway.md#versions`.
