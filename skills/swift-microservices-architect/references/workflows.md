@@ -55,9 +55,10 @@ logger.info("Loan extended", metadata: ["loanID": "\(loan.id)"])
 return loan
 ```
 
-The signal carries nothing: the run reads the new date through an activity. Its handler, and the wait it starts again, are `LoanWorkflow`'s, written with `temporal-developer`.
+The signal carries nothing: its handler ends the run's wait, and the run reads the new date through `markOverdue` ([a workflow](#a-workflow)).
 
 - The use case makes the change itself, as its conditional write in its own transaction, then signals the run after the commit. The row is the record and the signal only wakes the run, whose next activity reads the row. The caller's write stays under row-level security, and the request's values stay out of the workflow's history, which keeps every payload for as long as the namespace retains it.
+- The run's correctness never rests on the signal. A run that wakes at the old due date, its signal lost or racing the extension, finds the loan not due, since the transition names the due date ([state transitions](persistence.md#repositories-and-statements)), and waits again for the date the activity reports.
 - A fact that outlives the run, such as a return, needs no signal: it stays in the database, where the activity that acts on it reads it (`markOverdue`).
 - The signal follows every call that finds the row in the state it reports, a repeat included, so a retried request delivers a signal lost after the first commit. Its handler sets a property, so a second delivery changes nothing.
 - A use case whose run may never have started, its start lost after the commit, starts it with the same id and policies before signalling: `.useExisting` joins the run that's there.
@@ -92,19 +93,31 @@ package struct LoanWorkflow {
         }
     }
 
-    package func run(context: WorkflowContext<Self>, input: Input) async throws {
-        // A run started again after the due date has nothing left to wait for.
-        let timeUntilDue = input.dueDate.timeIntervalSince(context.now)
-        let timeToWait = max(timeUntilDue, 0)
-        try await context.sleep(for: .seconds(timeToWait))
+    private var isDueDateExtended = false
 
+    package mutating func run(context: WorkflowContext<Self>, input: Input) async throws {
         let markOverdueInput = LoanActivities.MarkOverdueInput(loanID: input.loanID)
-        let isMarkedOverdue = try await context.executeActivity(
-            LoanActivities.Activities.MarkOverdue.self,
-            options: .database,
-            input: markOverdueInput
-        )
-        guard isMarkedOverdue else {
+        var markOverdueOutput = LoanActivities.MarkOverdueOutput.notDue(until: input.dueDate)
+        while case .notDue(let dueDate) = markOverdueOutput {
+            // Waits for the due date, or for an extension to move it; a run started again after it doesn't wait.
+            isDueDateExtended = false
+            let timeUntilDue = dueDate.timeIntervalSince(context.now)
+            let timeToWait = max(timeUntilDue, 0)
+            do {
+                try await context.timeout(for: .seconds(timeToWait)) {
+                    try await context.condition { $0.isDueDateExtended }
+                }
+            } catch is CanceledError {
+                // The due date came first.
+            }
+
+            markOverdueOutput = try await context.executeActivity(
+                LoanActivities.Activities.MarkOverdue.self,
+                options: .database,
+                input: markOverdueInput
+            )
+        }
+        guard markOverdueOutput == .overdue else {
             return
         }
 
@@ -119,6 +132,12 @@ package struct LoanWorkflow {
             input: noticeInput
         )
     }
+
+    /// Ends the wait, so the run reads the due date an extension moved.
+    @WorkflowSignal
+    package mutating func extendDueDate(input: Void) {
+        isDueDateExtended = true
+    }
 }
 
 extension LoanWorkflow {
@@ -129,8 +148,7 @@ extension LoanWorkflow {
 }
 ```
 
-- `run(context:input:)` reads as the process: wait, check, act, one activity per step. It's `mutating` when it or a handler changes the workflow's state.
-- A workflow takes a nested `Input` and returns a nested `Output` (or nothing), with explicit initializers.
+- `run(context:input:)` reads as the process: wait, check, act, one activity per step. It's `mutating` when it or a handler changes the workflow's state.- A workflow takes a nested `Input` and returns a nested `Output` (or nothing), with explicit initializers.
 - Every payload is `Codable, Sendable`, and so is every type it holds: a workflow's input and output, a signal's, query's or update's, and an activity's. The SDK requires only `Sendable` and checks `Codable` when it converts the value, so a missing conformance compiles, then fails on every attempt. A domain enum a payload needs is mirrored as a nested enum, or, when two workflows share it, as a type directly in `Workflows/`.
 - State that handlers change is the workflow's private stored properties. A signal is a `@WorkflowSignal mutating func`; a query a `@WorkflowQuery func` taking `input:` and returning a value, which can't mutate; an update, which changes state and answers, a `@WorkflowUpdate`. The macros generate the types callers name, the method's name capitalized.
 
@@ -184,13 +202,27 @@ package struct LoanActivities {
         …
     }
 
-    /// Reports whether the loan is overdue now: one returned in the meantime stays returned.
+    package enum MarkOverdueOutput: Codable, Equatable, Sendable {
+        case notDue(until: Date)
+        case overdue
+        case returned
+    }
+
+    /// Reports the loan as the use case left it: one extended in the meantime isn't due yet,
+    /// and one returned stays returned.
     @Activity
-    package func markOverdue(input: MarkOverdueInput) async throws -> Bool {
+    package func markOverdue(input: MarkOverdueInput) async throws -> MarkOverdueOutput {
         do throws(MarkLoanOverdueUseCaseError) {
             let markLoanOverdueInput = MarkLoanOverdueUseCaseInput(loanID: input.loanID)
             let loan = try await markLoanOverdueUseCase(input: markLoanOverdueInput)
-            return loan.status == .overdue
+            switch loan.status {
+            case .active:
+                return .notDue(until: loan.dueDate)
+            case .overdue:
+                return .overdue
+            case .returned:
+                return .returned
+            }
         } catch {
             switch error {
             case .loanNotFound:
@@ -234,7 +266,7 @@ package struct LoanActivities {
 
 - An activity runs a [system use case](use-cases.md#system-use-cases) when the step reads or writes this service's data, on the worker's database, and calls a port when the step is one effect another system owns; a use case that would only forward to the port adds nothing. It makes no business decision: the use case decides, and the activity reports what it decided, never discarding what the use case returned, since the workflow's next step depends on that answer.
 - Its input is a small struct nested in the container, named for the activity (`MarkOverdueInput`), holding ids and values, never commands; the activity builds what the use case or port takes.
-- It returns a primitive (`Bool`) or a small nested output holding only what the workflow reads, never a domain model, which isn't `Codable`.
+- It returns a primitive or a small nested output holding only what the workflow reads (`MarkOverdueOutput`), never a domain model, which isn't `Codable`.
 - It maps its use case's error as a handler does, with `do throws(E)` and an exhaustive `switch` ([errors](style.md#errors)): a permanent failure, a case no retry can change, becomes `ApplicationError(message:type:isNonRetryable: true)`, and every other case is rethrown, so Temporal retries it.
 - It's safe to run twice: writes are conditional or keyed, and external effects carry an idempotency key derived from the workflow's subject (`loans-overdue-notice-<loan id>`). When one subject gets the effect more than once, such as a member's successive reset codes, the key adds the effect's own stored id: never a value made at send time, which a retry wouldn't repeat, and never a secret or part of one.
 - Activities are registered by name, the method's name capitalized (`MarkOverdue`).
