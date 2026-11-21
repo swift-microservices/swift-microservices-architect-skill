@@ -110,7 +110,7 @@ do {
 
 - A Swift toolchain at the package's `swift-tools-version`; for `XPostgresTests` and `XValkeyTests`, Postgres 18 and Valkey 9 or later, through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
 - Network access for an XCore with workflows: its build fetches Temporal's sdk-core binary and its tests the test server ([what Core may link](references/packages.md#what-core-may-link), [test targets](references/testing.md#test-targets)).
-- The [related skills](#related-skills) `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`; ask the user once to install a missing one (`npx skills add <source> --skill <name>`) and carry on.
+- The [related skills](#related-skills) `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`; ask the user once to install a missing one (`npx skills@1.9.0 add <source> --skill <name>`) and carry on.
 
 ## Available Scripts
 

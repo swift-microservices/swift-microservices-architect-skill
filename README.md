@@ -46,7 +46,7 @@ codex plugin add swift-microservices-architect@swift-microservices-architect-ski
 **skills CLI**
 
 ```bash
-npx skills add https://github.com/swift-microservices/swift-microservices-architect-skill --skill swift-microservices-architect
+npx skills@1.9.0 add https://github.com/swift-microservices/swift-microservices-architect-skill --skill swift-microservices-architect
 ```
 
 **Manually**

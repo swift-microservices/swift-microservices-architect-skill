@@ -33,6 +33,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: Purpose, Examples (the example system), the shape, a service's package with its hard rules, who owns what, code style, Troubleshooting (the gotchas), Prerequisites, Available Scripts (a table of `| Script | Purpose | Arguments |`), Limitations, References, Related skills and Instructions (the checklists). Purpose, Examples, Troubleshooting, Prerequisites, Available Scripts, Limitations and Instructions are the headings SkillEvaluator's quality check looks for. The Instructions come last, since an agent copies the checklist for its task into its response.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
 - A script in `scripts/` is run, never read: `SKILL.md` gives its command and arguments, and only its output enters the context. It runs on macOS's bash 3.2 and on Linux, prints each failure under the rule it breaks, and a change to one is tried on a service that passes and one that fails.
+- A one-off command the skill gives an agent pins a released version, such as `npx skills@1.9.0 add`, as the specification's [guide to scripts](https://agentskills.io/skill-creation/using-scripts) asks; SkillSpector reports an unpinned one as a rug-pull risk.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
 - Links are relative, with forward slashes and GitHub heading anchors; renaming a heading means updating every link to it.
 
@@ -92,6 +93,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
    - that Prerequisites names, and `README.md`'s Works well with links, exactly the skills Related skills lists
    - every link and anchor
+   - that every `npx`, `bunx` or `uvx` command in the skill and `README.md` pins a version
    - that the descriptions and the four versions in `SKILL.md` and the Claude Code and Codex manifests agree, and that the Codex marketplace lists the plugin
    - that no Swift example builds a value inside an argument or declares a variable before a `do` for its catches to fill
    - `claude plugin validate .`, whose warnings about the missing icon, `CLAUDE.md` and untracked `.DS_Store` files are expected
