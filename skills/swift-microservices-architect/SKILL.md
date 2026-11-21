@@ -70,7 +70,7 @@ A service has only the targets it needs, each importing only what [its row](refe
 | Tenant isolation | Row-level security; `<Project>Persistence` binds the caller per transaction, and each audience's use cases run as [its database role](references/persistence.md#database-roles) |
 | Durable, delayed or multi-service work | A Temporal workflow in XCore's `Workflows/` |
 | Facts other services react to | An [event](references/events.md) |
-| What every service needs identically | `<project>-core`: identity, tenant binding, transport readers |
+| What every service needs identically | `<project>-core`: identity, tenant binding, transport readers, `<Project>Events` |
 
 ## Code style
 

@@ -67,6 +67,8 @@ enum LoanEventKind {
 ```
 
 - A service's events are messages in its own proto package, in `events.proto`, one `<Resource>Event` per resource, under the contract's [message and change rules](grpc.md#contracts-in-the-protos-package). An incompatible change is a `v2` message on a `v2` topic, published beside `v1` until its last consumer has moved.
+- An event stays in its publisher's package however many services consume it: neither `<project>-core` nor a contract target of its own holds one, so its one owner decides what it means and when it changes.
+- A message's value is the event's plain protobuf encoding, with no schema registry's prefix. A consumer outside the project's Swift packages, such as a warehouse connector, decodes it with the descriptors `buf build` makes from `<project>-protos`.
 - One topic per resource, named as [naming](conventions.md#naming) gives it and keyed by the resource's id, so a resource's events share a partition. The deployment creates each topic with the partitions and retention the plan records; nothing relies on the broker creating one.
 - A kind is a fact in the past tense (`BORROWED`), never a request (`SEND_NOTICE`) or an instruction to a consumer.
 - An event carries its own `id`, the resource's id, and only the fields its consumers need. It carries ids, never personal data: a topic keeps its messages for its retention, beyond the reach of [erasure](system.md#erasing-a-persons-data). A consumer that needs a member's name asks Identity.
