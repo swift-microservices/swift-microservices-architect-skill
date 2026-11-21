@@ -129,6 +129,8 @@ Each runs from the package's root and exits non-zero on any failure:
 
 ## References
 
+Read a reference when the task reaches its row, or when a checklist item names it, never all of them up front: each one costs context for the rest of the task.
+
 | Reference | Read when |
 |---|---|
 | [system.md](references/system.md) | Planning a backend, adding or splitting a service, deciding how services talk or where data lives |
