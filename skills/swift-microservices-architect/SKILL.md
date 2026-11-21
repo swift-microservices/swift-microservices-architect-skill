@@ -91,7 +91,7 @@ do {
 
 - One `do` holds the work through its `return`, and each `catch` ends its path: nothing is declared before the `do` for a `catch` to fill, and a `do` nests only around a workflow's start ([errors](references/style.md#errors)).
 - Build, then call: a value a call takes is a named `let`, never a conversion, `try` or `await` in the arguments ([build, then call](references/style.md#build-then-call)).
-- No helper methods in use cases, workflows or activities, and no `Result` juggling, steering flags, `try?`, nested `do` in a `catch`, or force unwraps.
+- No helper methods in use cases, workflows or activities, and no `Result` juggling, steering flags, `try?` or force unwraps.
 - Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault`, `NonisolatedNonsendingByDefault` and strict memory safety ([Swift settings](references/packages.md#swift-settings)); `package` access across a service's targets.
 - Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows.
 
@@ -103,6 +103,7 @@ do {
 - Policies combine with `OR`: a session acting for an organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
+- A signing key changed outside `RotateSigningKeysUseCase` fails live tokens: a key signs only once every verifier holds it, and outlives its tokens ([signing keys](references/security.md#signing-keys)).
 - A plain or scoped `import Foundation` in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
 
 ## Prerequisites
@@ -142,7 +143,7 @@ Read a reference only when the task reaches its row or a checklist names it.
 | [workflows.md](references/workflows.md) | A workflow, activity container or worker, or starting or reaching a run |
 | [composition.md](references/composition.md) | A command, composition root, configuration, logging, health checks or the ServiceGroup |
 | [observability.md](references/observability.md) | Bootstrapping telemetry or tracing a request across processes |
-| [security.md](references/security.md) | mTLS, database logins, tokens, secrets, attempt limits or webhooks |
+| [security.md](references/security.md) | mTLS, database logins, tokens and signing keys, secrets, attempt limits or webhooks |
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |
 | [delivery.md](references/delivery.md) | CI, releases, deployment, the Containerfile or Dependabot |
