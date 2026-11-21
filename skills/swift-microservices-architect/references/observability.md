@@ -27,4 +27,5 @@ Each hop continues the trace its caller started, so one borrow reads as one trac
 - The interceptors keep `includeRequestMetadata` and `includeResponseMetadata` off: request metadata holds the bearer token, which never reaches a span ([user tokens](security.md#user-tokens)).
 - The deployment's probes record no spans: the health service's descriptor isn't traced, and the gateway's `/health` comes before its middleware ([health](composition.md#health)).
 - A root never replaces the Temporal configurations' `interceptors`, which would drop the SDK's tracing.
+- An event carries no trace: the outbox stores none, so the relay and each `EventConsumer` start their own spans, and swift-kafka-client's metrics, such as `consumer.lag`, go through the bootstrapped `MetricsSystem` ([events](events.md#the-worker)).
 - A gRPC call's duration and status are on its span, so services record no metrics of their own for calls; the gateway's `MetricsMiddleware` covers the public API.

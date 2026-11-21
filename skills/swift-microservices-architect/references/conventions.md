@@ -17,9 +17,9 @@
 | The plan's repository | `<project>-plan`, the plan its `README.md` | `bookshelf-plan` |
 | Package kind | Public library, system library or service; CI workflow files and jobs as [delivery](delivery.md#ci-workflows) names them | `bookshelf-core` is a system library |
 | Service image | `ghcr.io/<owner>/<project>-<x>` | `ghcr.io/bookshelf/bookshelf-loans` |
-| Service targets | `XCore`, `XPostgres`, `XGRPC`, `XValkey`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansGRPC`, `LoansResend`, `LoansCoreTests` |
+| Service targets | `XCore`, `XPostgres`, `XGRPC`, `XValkey`, `XKafka`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansGRPC`, `LoansKafka`, `LoansResend`, `LoansCoreTests` |
 | Executable product and command | `x`; subcommands `serve`, `worker run`, `migrate`, `health`, `build-indexes` | `loans migrate` |
-| `<project>-core` products | `<Project>Authentication`, `<Project>Persistence`, `<Project>Transport`, `<Project>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |
+| `<project>-core` products | `<Project>Authentication`, `<Project>Persistence`, `<Project>Transport`, `<Project>Events`, `<Project>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |
 | Contract target, proto package and file | `XProtos`; `<project>.<x>.v1`; `<project>/<x>/v1/<x>.proto` | `LoansProtos`, `bookshelf.loans.v1` |
 | Proto services | `<Resource>Service` and `<Resource>InternalService`; the service's name when its RPCs aren't about one resource | `LoanService`, `BookInternalService`, `IdentityService` |
 | RPCs | The standard methods' verbs (`Get`, `List`, `Create`, `Update`, `Delete`, `BatchGet` for several by id), or a domain verb and noun; an administrators' list of everyone's is `ListAll…`; an internal read keyed differently from the public one of its name says its key (`Get…ByID`) | `GetBook`, `ListLoans`, `ListAllLoans`, `BorrowBook` |
@@ -42,6 +42,10 @@
 | Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `currentState(input:)` |
 | Workflow id, task queue, Temporal namespace | `<x>-<workflow>-<id>`; `x`; `<project>-<x>` | `loans-loan-0193…`; `loans`; `bookshelf-loans` |
 | Schedule id, scheduled workflow | `<x>-<process>`; `<Process>Workflow` | `loans-purge-notice-events`; `PurgeNoticeEventsWorkflow` |
+| Event, its kinds | `<Resource>Event` in `<project>/<x>/v1/events.proto`, and a Core model of the same name; `<Resource>EventKind`, whose cases are facts in the past tense | `LoanEvent`, `LOAN_EVENT_KIND_BORROWED`, `LoanEventKind.borrowed` |
+| Topic, its configuration key | `<project>.<x>.v1.<resource>-events`; `kafka.topics.<resource>Events` | `bookshelf.loans.v1.loan-events`; `kafka.topics.loanEvents` |
+| Outbox and relay | Table `<resource>_event_outbox`; repository `<Resource>EventRepository`, its command `Record<Resource>EventCommand`; `Publish<Resource>EventsUseCase` over the port `<Resource>EventPublisher`, implemented by `Kafka<Resource>EventPublisher` | `loan_event_outbox`, `PublishLoanEventsUseCase`, `KafkaLoanEventPublisher` |
+| Event handler, consumer group, Kafka user | `<Resource>EventHandler`, in the consuming service's XKafka; group and user `<x>` | `LoanEventHandler` in `CatalogKafka`; `catalog` |
 | Named activity options | The kind of step, never where it's used | `ActivityOptions.database`, `.notification` |
 | Postgres scopes | `Postgres<X>Scope`, `Postgres<X>InternalScope`, `Postgres<X>WorkerScope` | `PostgresLoansScope` |
 | Mock | `Mock` + the protocol's name, without `Protocol` | `MockCatalogClient`, `MockBorrowBookUseCase`, `MockDatabase` |
@@ -69,6 +73,7 @@
 | XPostgres | `Scopes/`, `Repositories/<Area>/` and `Repositories/PostgresRepositoryError.swift`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/` for the area's own tables and policies, `Migrations/Role/`, `Migrations/XMigrations.swift` for their order and `Migrations/XIndexes.swift` for the indexes built concurrently |
 | XGRPC | A folder per proto service's resource (`Loans/`) with `XService`, `XInternalService` and `Protobuf/`; a `Protobuf/` at the target's root for what several of them convert (`PageSize.swift`, `PageInfo+Protobuf.swift`); `Clients/` with `Clients/Protobuf/` |
 | XValkey, X<Provider> | Flat, one file per type |
+| XKafka | Flat, one file per handler or publisher, with `Protobuf/` for the events' conversions |
 | X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift` and the signing key set's conversion, `Serve/JWKS+Protobuf.swift` (Identity's `JWKS+SigningKey.swift`), `Worker/Worker.swift`, `Worker/Run.swift`, `<Command>/<Command>.swift` for a short-lived command |
 | Test target | `Mocks/`, `Support/` for a harness or fixtures several suites share, then a file per tested type, never one per group of them: `BorrowBookUseCaseTests.swift` |
 | GatewayHTTP | `openapi.yaml`, `openapi-generator-config.yaml`, `<Project>API.swift`, `Contexts/`, `Controllers/`, `Middlewares/`, `Schemas/Requests/`, `Schemas/Responses/`, `Schemas/Shared/` |

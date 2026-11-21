@@ -38,6 +38,7 @@ Small libraries that give every service the same shape for identity, request-sco
 | [swift-protobuf](https://github.com/apple/swift-protobuf) | `SwiftProtobuf` | Messages, well-known types (`Google_Protobuf_Timestamp`, `Google_Protobuf_Empty`) | `<project>-protos`, XGRPC, the gateway |
 | [swift-temporal-sdk](https://github.com/apple/swift-temporal-sdk) | `Temporal`, `TemporalTestKit` | Workflows, activities, `TemporalClient`, `TemporalWorker`; the test servers | XCore in a service with workflows, executables; `Temporal` and `TemporalTestKit` in `XCoreTests` |
 | [valkey-swift](https://github.com/valkey-io/valkey-swift) | `Valkey` | `ValkeyClient`, commands, pipelines, transactions | XValkey, executables |
+| [swift-kafka-client](https://github.com/swift-server/swift-kafka-client) | `Kafka` | `KafkaProducer`, `KafkaConsumer` and their configurations, over a librdkafka it builds from source | XKafka, `<Project>Events`, executables with XKafka |
 | [swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | `NIOSSL` | `TLSConfiguration` for the Postgres and Valkey clients | `<Project>Persistence`, executables with XValkey |
 | postgres-nio | `PostgresNIO` | `PostgresClient` pools, prepared statements, row decoding | XPostgres, executables |
 | [postgres-migrations](https://github.com/hummingbird-project/postgres-migrations) | `PostgresMigrations` | `DatabaseMigration`, `DatabaseMigrations` | XPostgres, executables |
@@ -61,6 +62,7 @@ These link full Foundation on Linux whatever their traits, so the products that 
 - postgres-nio, and so postgres-migrations and swift-persistence-postgres: every service with XPostgres
 - swift-openapi-generator's generated files, which `public import Foundation`: the gateway
 - swift-temporal-sdk through 1.5.0, whose scoped `import struct Foundation.Data` imports link it: every service with workflows
+- swift-kafka-client through 1.0.0, whose scoped `import struct Foundation.UUID` imports link it: `<Project>Events`, and every service with XKafka
 
 Every other package in the stack is Foundation-free with the traits [traits and Foundation](packages.md#traits-and-foundation) declares, and CI's check finds one that isn't.
 

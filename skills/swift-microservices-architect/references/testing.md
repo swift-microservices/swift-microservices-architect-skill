@@ -30,6 +30,7 @@ Each module has a test target, except `<Project>Testing`, `<project>-protos`' ta
 | `XGRPCTests` | Each handler: the caller it requires, its conversions, every error case's status; each client for a port: its request, its conversion, the statuses it translates | Mock use cases, and a principal bound in `OperationContext`; a stub of the other service's contract over `GRPCInProcessTransport` |
 | `XPostgresTests` | Statements, repositories, row-level security as each role, migrations | A real Postgres, which no mock can stand in for |
 | `XValkeyTests` | Each repository's commands, expiries and atomic reads | A real Valkey, since `ValkeyClientProtocol` can't be mocked by hand |
+| `XKafkaTests` | Each event handler, calling `receive(_:)` directly: the kinds it ignores, its conversion's rejections, every case's outcome; each publisher's conversion | Mock use cases, and events the test builds; no broker, since the producer is concrete and a handler never sees it |
 | `GatewayHTTPTests` | Routes in their tiers, conversions, problem details | Mock upstream clients and `MockAuthenticator` |
 
 - A test runs only its module's code, over mocks of the rest: a handler's test doesn't build a use case, and a use case's test never reaches Postgres.
@@ -47,6 +48,7 @@ Each module has a test target, except `<Project>Testing`, `<project>-protos`' ta
 | `<Project>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip; refusal of an expired token and of a `sub` that isn't a UUID; the `.user` metadata provider |
 | `<Project>PersistenceTests` | Both branches of `UserSettingsInterceptor`: a bound user's setting, and nothing when none is bound |
 | `<Project>TransportTests` | `InternalCallerInterceptor` admits a listed common name and refuses an unlisted one and a call with no certificate |
+| `<Project>EventsTests` | `EventConsumer` stores an offset only once its handler returns or rejects, retries any other error, and skips a value that doesn't decode; the readers' settings. Over librdkafka's in-process mock cluster, which `@_spi(Internal) import Kafka` reaches in tests |
 
 `<Project>Testing` has no test target: the tests that use it prove the mocks, and every service's startup proves `<Project>Transport`'s readers.
 

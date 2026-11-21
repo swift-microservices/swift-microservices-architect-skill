@@ -13,7 +13,7 @@ Ask for a plan, a new service, an endpoint, a background process or a review, an
 - **Boundaries the compiler enforces.** A service is one Swift package. Its Core target holds the models, use cases and Temporal workflows and imports no driver or transport; adapters for Postgres, gRPC and Valkey sit around it; one executable wires them together. Each target declares what it imports, so most crossings fail the build, and the skill's boundary and style scripts catch the rest.
 - **Code that reads like the requirement.** Use cases read top to bottom, the way Apple's sample code does: typed throws, one `catch` per outcome, no helper methods.
 - **Security on every hop.** Mutual TLS on gRPC, Temporal and Postgres, TLS to Valkey, the caller's token verified again by every service, and row-level security under every tenant query.
-- **Durable work on Temporal.** Anything that waits, retries or spans services is a workflow in Core, written directly against the Temporal SDK, never a fire-and-forget task.
+- **Durable work on Temporal, facts on Kafka.** Anything that waits, retries or spans services is a workflow in Core, written directly against the Temporal SDK, never a fire-and-forget task. A fact other services react to on their own is an event, recorded in the transaction that makes the change and published to Kafka from an outbox.
 - **Modern Swift.** Swift 6 language mode with strict concurrency, structured concurrency only, `package` access, and owned code importing `FoundationEssentials`, so a service drops full Foundation once its dependencies do.
 
 The skill's examples follow Bookshelf, a small lending library. Its loans service is one package:
@@ -60,6 +60,7 @@ The agent loads the skill when a task matches it, or when asked: in Claude Code,
 - "Plan a backend for a lending library with accounts, a book catalog and loans."
 - "Add an endpoint for returning a book."
 - "When a loan passes its due date, mark it overdue and email the member."
+- "Let the catalog list the most borrowed books."
 - "Set up CI/CD for the loans service."
 - "Review this service's architecture and code style."
 
@@ -86,13 +87,14 @@ On a backend that already runs, the agent follows the checklist for the task: ad
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details, versions and the retirement of routes |
 | Workflows | Temporal workflows and activities in Core, how use cases start and reach them, determinism, activity options, the worker |
+| Events | When a fact is an event rather than a workflow or a call, contracts on Kafka, the transactional outbox and its relay, consumers that tolerate redelivery |
 | Composition | Commands, configuration, logging, and graceful shutdown |
 | Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs and the rotation of their signing keys, secrets, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
 | Delivery | GitHub Actions CI, semantic-version releases, images on GitHub Container Registry, deploys through Dokploy |
 | Style | How the code reads, and how everything is named |
 
-It builds on [Hummingbird](https://github.com/hummingbird-project/hummingbird), [gRPC Swift 2](https://github.com/grpc/grpc-swift-2), the [Temporal Swift SDK](https://github.com/apple/swift-temporal-sdk), [PostgresNIO](https://github.com/vapor/postgres-nio), [valkey-swift](https://github.com/valkey-io/valkey-swift), [Swift Configuration](https://github.com/apple/swift-configuration), [Swift Service Lifecycle](https://github.com/swift-server/swift-service-lifecycle) and the [swift-microservices](https://github.com/swift-microservices) libraries.
+It builds on [Hummingbird](https://github.com/hummingbird-project/hummingbird), [gRPC Swift 2](https://github.com/grpc/grpc-swift-2), the [Temporal Swift SDK](https://github.com/apple/swift-temporal-sdk), [PostgresNIO](https://github.com/vapor/postgres-nio), [valkey-swift](https://github.com/valkey-io/valkey-swift), [Swift Kafka Client](https://github.com/swift-server/swift-kafka-client), [Swift Configuration](https://github.com/apple/swift-configuration), [Swift Service Lifecycle](https://github.com/swift-server/swift-service-lifecycle) and the [swift-microservices](https://github.com/swift-microservices) libraries.
 
 Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, backups, client SDKs and frontends.
 
@@ -129,6 +131,7 @@ skills/swift-microservices-architect/
     ├── grpc.md                 contracts, handlers, conversions, clients, transports
     ├── gateway.md              the Hummingbird gateway
     ├── workflows.md            Temporal workflows, activities, the worker
+    ├── events.md               choosing an event or a workflow, the outbox, consumers
     ├── composition.md          commands, composition roots, configuration, lifecycle, health
     ├── observability.md        swift-otel, and one request's trace across processes
     ├── security.md             mTLS, tokens and signing keys, authorization, secrets, webhooks

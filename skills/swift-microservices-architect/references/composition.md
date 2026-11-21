@@ -37,7 +37,7 @@ struct Loans: AsyncParsableCommand {
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
 - `migrate` applies pending migrations as the owner ([Postgres](security.md#postgres)) and exits ([migrations](persistence.md#migrations)): a short-lived command, which each deploy runs before serve and the worker start ([a service's CI workflows](delivery.md#a-services-ci-workflows)).
 - `build-indexes` builds the indexes XPostgres lists for building concurrently, as the owner, since only a table's owner may index it. It's a short-lived command an operator runs after the deploy that lists a new index, never a step of the deploy, so a build that takes minutes holds up no deploy.
-- A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
+- A service with workflows or [events](events.md#the-worker) adds the group `worker`, whose default subcommand `run` starts its background work, the Temporal worker, the relay and the event consumers: `loans worker run`. The serve process and the worker are separate processes from one image.
 - An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived command, a subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections, no Observability and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
 - A short-lived command's operands, such as whom it acts on, are its `@Option`s and go into the use case's input; only a value configuration also carries goes through the provider. It reports through its log line and exit status, and prints to standard output only a value the operator must read.
 - Any other short-lived command connects as `<x>_internal`, since no caller is bound, and reads a secret it needs through the `ConfigReader` with `isSecret: true`, never from a flag, which the process list shows.
@@ -360,7 +360,7 @@ extension InMemoryProvider {
 
 A root lists its long-lived components in one `ServiceGroup` and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
 
-- Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `SigningKeyRefresher`, `TemporalClient`, `TemporalWorker`.
+- Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `SigningKeyRefresher`, `TemporalClient`, `TemporalWorker`, `KafkaProducer`, `KafkaConsumer`, `OutboxRelay`, `EventConsumer`.
 - Order is dependency order: the observability service first, so it flushes last, then certificate reloaders, database clients, upstream and Valkey clients, the Temporal client, the signing key refresher, and the server, application or worker last, so it drains before the clients it uses close.
 - `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. Running the group is the root's last line.
 - A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
@@ -374,7 +374,7 @@ Each serve process reports its health over gRPC, and the gateway over HTTP, so t
 - The gateway answers `GET /health` with `200 OK` once its refresher holds the first key set, and `503 Service Unavailable` before, outside `/v1` and every tier, on a route registered before the router's middleware, which applies only to the routes added after it ([the gateway's root](#the-gateways-root)).
 - Health reports the process, never its dependencies: a status that followed Postgres or an upstream would mark every replica unhealthy when one dependency fails, and the platform would restart them all at once. The first key set is the process's own state, and a later failed refresh changes no status.
 - The image holds no probe tool, so each executable has a short-lived `health` command ([commands](#commands)), which the deployment runs as the health check of every serve application and of the gateway. A service's `health` dials its own server on `127.0.0.1` with its own certificate pair, the client config's HTTP/2 `authority` set to its certificate's name from `grpc.server.hostname`, calls `Check`, and exits non-zero unless the status is `SERVING`. The gateway's `health` sends `GET /health` with AsyncHTTPClient.
-- The worker serves nothing and has no health check; Temporal shows whether it polls.
+- The worker serves nothing and has no health check; Temporal shows whether it polls, and a consumer's lag whether it consumes ([the worker](events.md#the-worker)).
 
 ## The worker's root
 
@@ -425,6 +425,7 @@ let worker = try TemporalWorker(
 - The root builds each activity container from system use cases and port implementations, here XGRPC's and the provider target's, so no adapter target imports another, and registers the workflows. `activityContainers:` takes each container as its own argument.
 - The SDK's reader leaves `gracefulShutdownPeriod` at zero, which cancels in-flight activities at every deploy and retries them, repeating their effects. The root sets it from `temporal.worker.gracefulShutdownPeriodSeconds`, defaulting to the longest activity's `startToCloseTimeout` (30), and the deployment's stop timeout exceeds it.
 - It applies the service's schedules before running its `ServiceGroup` ([recurring work](workflows.md#recurring-work)).
+- A service with events adds their section, and a service with events and no workflows builds no Temporal client or worker ([the worker](events.md#the-worker)).
 - The worker builds no server and no authenticator: it serves no RPCs, and the users it acts for are named in workflow inputs.
 
 ## The gateway's root

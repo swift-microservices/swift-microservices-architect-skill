@@ -25,13 +25,14 @@ service=$1
 project=$2
 core="Sources/${service}Core"
 grpc="${service}GRPC"
+kafka="${service}Kafka"
 executable="Sources/${service}"
 import_prefix='^(package |public )?import'
 temporal_import="${import_prefix} Temporal\$"
 . "$(dirname "$0")/common.sh"
 
 report "Core imports no adapter technology or contract" "$(
-    grep -rlE "${import_prefix} (GRPC[A-Za-z]*|Hummingbird[A-Za-z]*|PostgresNIO|PersistencePostgres|Valkey|Configuration|ServiceLifecycle|SwiftProtobuf|AsyncHTTPClient|[A-Za-z]+Protos)\$" "$core" 2>/dev/null
+    grep -rlE "${import_prefix} (GRPC[A-Za-z]*|Hummingbird[A-Za-z]*|PostgresNIO|PersistencePostgres|Valkey|Kafka|Configuration|ServiceLifecycle|SwiftProtobuf|AsyncHTTPClient|[A-Za-z]+Protos)\$" "$core" 2>/dev/null
 )"
 
 report "Temporal stays out of the adapter targets" "$(
@@ -74,17 +75,17 @@ own_module_imports() {
         case "$name" in
         "$service") continue ;;
         "${service}Core") allowed='__none__' ;;
-        "$grpc") allowed="${service}Core|${service}Protos" ;;
+        "$grpc" | "$kafka") allowed="${service}Core|${service}Protos" ;;
         *) allowed="${service}Core" ;;
         esac
         grep -rnE "${import_prefix} (${own_modules})\$" "$target" 2>/dev/null | grep -vE "import (${allowed})\$"
     done
 }
 
-report "Adapters import no sibling adapter, and only ${grpc} imports the contract" "$(own_module_imports)"
+report "Adapters import no sibling adapter, and only ${grpc} and ${kafka} import the contract" "$(own_module_imports)"
 
-report "Generated contract types stay in XGRPC, the gateway's HTTP target and the executable" "$(
-    grep -rlE "${project}_[A-Za-z]+_V[0-9]+_" Sources 2>/dev/null | grep -vE "^Sources/(${grpc}|${service}HTTP|${service})/"
+report "Generated contract types stay in XGRPC, XKafka, the gateway's HTTP target and the executable" "$(
+    grep -rlE "${project}_[A-Za-z]+_V[0-9]+_" Sources 2>/dev/null | grep -vE "^Sources/(${grpc}|${kafka}|${service}HTTP|${service})/"
 )"
 
 if [ "$service" = Gateway ]; then

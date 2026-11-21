@@ -21,7 +21,7 @@ Work is a workflow when it must happen even if every process restarts, and it:
 - retries a call that can fail for a while (a provider, another service),
 - or spans several services, each step's effect owned by a different one.
 
-A request that only needs an answer stays a synchronous RPC.
+A request that only needs an answer stays a synchronous RPC, and a fact other services react to on their own is an [event](events.md#choosing-a-mechanism).
 
 Temporal's history is the workflow's state. No column mirrors a run's progress, no scanner restarts workflows from rows, and no reconciler compares the two; a loan's `status` is the loan's, written by the use cases its activities run. A record people read or page through, such as who decided what and when, is a domain table all the same, written by those use cases: only a column that tracks where a run has got to is ruled out.
 

@@ -130,7 +130,7 @@ report "One top-level type per file" "$(
 )"
 
 # A ConfigReader read names its key first; a root reads only its own keys, such as a host, a
-# port, its server's name, the task queue and the worker's shutdown period, and a reader
+# port, its server's name, the task queue, a topic's name and the worker's shutdown period, and a reader
 # (Configuration/, Type+ConfigReader.swift) reads the rest. A call that wraps its arguments
 # puts forKey: at the start of the next line.
 configuration_reads='
@@ -149,7 +149,7 @@ FNR == 1 { opened = 0 }
         key = argument
         if (key ~ /^"[^"]*"$/) {
             key = substr(key, 2, length(key) - 2)
-            if (key ~ /^(logLevel|host|hostname|port|db|worker\.(taskqueue|gracefulShutdownPeriodSeconds))$/) continue
+            if (key ~ /^(logLevel|host|hostname|port|db|topics\.[A-Za-z]+|worker\.(taskqueue|gracefulShutdownPeriodSeconds))$/) continue
             if (key ~ /(^|\.)(user|password)$/) continue
         }
         print FILENAME ":" FNR ": " argument
