@@ -303,7 +303,9 @@ extension Bookshelf_Loans_V1_ListAllLoansResponse {
     init(_ page: KeyedPage<Loan>) {
         self.init()
         self.loans = page.items.map(Bookshelf_Loans_V1_Loan.init)
-        self.nextPageToken = page.nextCursor?.uuidString.lowercased() ?? ""
+        if let nextCursor = page.nextCursor {
+            self.nextPageToken = nextCursor.uuidString.lowercased()
+        }
     }
 }
 ```
