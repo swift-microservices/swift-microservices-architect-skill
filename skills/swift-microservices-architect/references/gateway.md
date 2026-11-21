@@ -408,6 +408,7 @@ The executable builds one `GRPCClient` per upstream service over mTLS, its trans
 
 - Propagation presents the caller's original token, as `BearerAuthenticationMiddleware` bound it, when a route identified a caller; a public route's call goes upstream anonymously.
 - `BookshelfAPI` holds each as the generated client protocol: `Bookshelf_Loans_V1_LoanService.Client(wrapping: loansGRPCClient)`.
+- Each service's cap on concurrent calls holds the gateway's excess calls to it in their connection, within their deadline ([transports](grpc.md#transports)), so a slow service delays only its own routes. The gateway adds no limit of its own: Hummingbird's `MaximumAvailableConnections` bounds connections, not requests, and a connection past it waits unanswered in the listen backlog, holding the edge's request with it.
 
 ## The edge
 
