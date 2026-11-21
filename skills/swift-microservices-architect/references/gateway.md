@@ -414,6 +414,7 @@ package struct Problem: HTTPResponseError {
   - `Sunset` (RFC 8594): when it will be removed, as an HTTP-date, never before the deprecation
   - `Link`: `<the migration guide's URL>; rel="deprecation"`
 - The sunset date is the user's. When it passes, one pull request removes the route and its handler, and the path answers `404` like any unmatched path.
+- CI fails a pull request whose `openapi.yaml` breaks a client of its base's ([a service's CI workflows](delivery.md#a-services-ci-workflows)).
 
 ## Upstream clients
 
