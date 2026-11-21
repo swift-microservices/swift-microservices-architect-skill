@@ -29,7 +29,8 @@ bookshelf-gateway/Sources/
 │   ├── openapi.yaml, openapi-generator-config.yaml
 │   ├── BookshelfAPI.swift          the router builder
 │   ├── Contexts/                   IdentityRequestContext.swift, AdministratorRequestContext.swift
-│   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift, ResendWebhookController.swift
+│   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift, ResendWebhookController.swift,
+│   │                               SigningKeyController.swift
 │   ├── Middlewares/                ErrorMiddleware/: ErrorMiddleware.swift, Problem.swift, HTTPResponse.Status+RPCError.swift
 │   └── Schemas/                    Requests/, Responses/, Shared/: Type+RPC.swift conversions
 └── Gateway/
@@ -101,7 +102,7 @@ Each group of routes runs in the context that states what it guarantees:
 
 | Tier | Context | Guarantees |
 |---|---|---|
-| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, sign-out, public reads, signed webhooks |
+| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, sign-out, public reads, signed webhooks, the JWK Set |
 | A caller | `IdentityRequestContext`, behind `BearerAuthenticationMiddleware` and `IsAuthenticatedMiddleware` | `identity` is set |
 | Administrators | `AdministratorRequestContext`, converted at the verb | A non-optional administrator `identity` |
 
@@ -186,7 +187,7 @@ package struct BookshelfAPI: Sendable {
 }
 ```
 
-The router builder takes its clients and the authenticator in its initializer; the executable builds them, which keeps the whole surface buildable over stub clients.
+The router builder takes its clients and the authenticator in its initializer; the executable builds them, which keeps the whole surface buildable over stub clients. Its `addWellKnownRoutes(to:)` registers the routes that live at the origin's root, as RFC 8615 places well-known resources, on the router's `.well-known` group beside `v1`.
 
 ## Controllers
 
@@ -281,6 +282,12 @@ package struct ResendWebhookController: Sendable {
 
 - The conversion copies the bytes and the provider's signature headers unchanged, refusing a request missing one as `400`; the service verifies them ([webhooks](security.md#webhooks)).
 - A body over the limit answers `413` through `ErrorMiddleware`.
+
+`SigningKeyController`, also in the first tier, serves Identity's public keys at `GET /.well-known/jwks.json`:
+
+- Its handler calls `IdentityService`'s `ListSigningKeys` and answers `JWKSetResponse`, an RFC 7517 JWK Set with the keys the refreshers build ([signing keys](security.md#signing-keys)).
+- It answers with `Cache-Control: public, max-age=300`, the refresh interval, so a verifier outside the system that caches the set holds it no longer than a process does.
+- `openapi.yaml` documents the path with a path-level `servers` entry at the origin, since it's outside `/v1`.
 
 ## Conversions
 

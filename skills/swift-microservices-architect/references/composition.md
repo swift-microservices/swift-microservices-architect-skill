@@ -461,6 +461,7 @@ router.add(middleware: MetricsMiddleware())
 router.add(middleware: ErrorMiddleware())
 router.add(middleware: requestLogging)
 api.addRoutes(to: router.group("v1"))
+api.addWellKnownRoutes(to: router.group(".well-known"))
 
 // MARK: - Hummingbird
 let httpServerConfig = config.scoped(to: "http.server")
