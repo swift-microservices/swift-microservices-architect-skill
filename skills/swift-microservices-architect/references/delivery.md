@@ -97,6 +97,7 @@ jobs:
 - A library with DocC catalogs lists their targets in `docs_check_targets`, and Soundness fails on any DocC warning in them. Each of `<project>-core`'s products has one (`Sources/BookshelfTransport/BookshelfTransport.docc`), since every service builds on its public API.
 - `<project>-protos` has no tests and only builds: its `ci.yml` passes `linux_build_command: swift build -c release`, and `swift build` stands in for `swift test`, which fails on a package with no tests.
 - `<project>-protos` also has a `buf.yaml` at its root, which `library.yml` reads to run buf: it lints the `.proto` files and fails a pull request that breaks the wire, such as a renumbered field or a reused tag, which the Swift API breakage check can't see. Its `buf.yaml` lists each target's folder as a module (`Sources/LoansProtos`), lints with `STANDARD` except `RPC_RESPONSE_STANDARD_NAME` and `RPC_REQUEST_RESPONSE_UNIQUE`, since an RPC returns its resource ([contracts](grpc.md#contracts-in-the-protos-package)), and checks `WIRE_JSON` for breaking changes.
+- Once services have separate owners, `<project>-protos`' `.github/CODEOWNERS` gives each target's folder to the owners of its service (`/Sources/LoansProtos/ @bookshelf/loans`), and its ruleset requires a code owner's review, so a contract changes only with its service's approval. A sole maintainer leaves it out: GitHub never counts an author's own review.
 
 ## A service's CI workflows
 

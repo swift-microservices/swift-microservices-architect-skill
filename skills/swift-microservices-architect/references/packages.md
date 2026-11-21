@@ -279,6 +279,7 @@ bookshelf-core/
 
 ```
 bookshelf-protos/
+├── .github/CODEOWNERS                                each target's folder to its service's owners (delivery.md)
 ├── Package.swift
 ├── buf.yaml                                          buf's modules, lint and breaking rules (delivery.md)
 └── Sources/
