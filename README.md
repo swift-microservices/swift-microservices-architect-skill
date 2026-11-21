@@ -77,7 +77,7 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details |
 | Workflows | Temporal workflows and activities in Core, how use cases start and reach them, determinism, activity options, the worker |
 | Composition | Commands, configuration, logging, and graceful shutdown |
-| Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs, secrets, webhook signatures |
+| Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs and the rotation of their signing keys, secrets, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
 | Delivery | GitHub Actions CI, semantic-version releases, images on GitHub Container Registry, deploys through Dokploy |
 | Style | How the code reads, and how everything is named |
@@ -121,7 +121,7 @@ skills/swift-microservices-architect/
     ├── workflows.md            Temporal workflows, activities, the worker
     ├── composition.md          commands, composition roots, configuration, lifecycle, health
     ├── observability.md        swift-otel, and one request's trace across processes
-    ├── security.md             mTLS, tokens, authorization, secrets, webhooks
+    ├── security.md             mTLS, tokens and signing keys, authorization, secrets, webhooks
     ├── style.md                how the code reads
     ├── testing.md              test targets and mocks
     ├── delivery.md             CI/CD for each kind of package

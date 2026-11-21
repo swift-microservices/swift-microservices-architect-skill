@@ -61,6 +61,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
   - the gateway: `BookshelfAPI`, `LoanController`, the request contexts, `ErrorMiddleware`
   - an internal service: Catalog's `BookInternalService`; paged lists: `ListAllLoans` by key, `ListLoans` by page number
   - a provider's webhook: Resend's notice events to Loans, `ResendWebhookController`, `NoticeEventVerifier`
+  - signing keys and their rotation: Identity's `signing_keys`, `RotateSigningKeysUseCase`, `JWTCredentialIssuer`, `SigningKeyRefresher`, the gateway's `SigningKeyController`
   - CI/CD: `bookshelf-core` for a library's CI workflows, Loans for a service's
 
   Reuse these, and add an example only when none of them can show a new idea. Never bring in names, services, endpoints or details from the systems the skill is used on; write the rule they illustrate instead.

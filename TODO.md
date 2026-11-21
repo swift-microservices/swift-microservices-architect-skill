@@ -2,10 +2,6 @@
 
 Guidance the skill doesn't give yet. Until an item lands, the skill says nothing about it. Each item names where its rule would live, following `CLAUDE.md`'s one home per rule.
 
-## Deferred
-
-- **JWT key rotation.** The skill assumes the signing key never changes. Every process loads its keys once, at startup, so a rotation would run in this order: add the new public key file and restart every process that verifies tokens; switch Identity's private key; once the last token the old key signed has expired, remove the old public key file and restart again. Home: `security.md#user-tokens`.
-
 ## Before production (P0)
 
 - **An eval suite.** Cases and graders that check what agents produce with the skill against `main`, rebuilt from scratch, with the rules and the steps that run them in `CLAUDE.md`.
