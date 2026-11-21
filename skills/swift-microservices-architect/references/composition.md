@@ -56,10 +56,9 @@ struct Serve: AsyncParsableCommand {
 
     func run() async throws {
         // MARK: - Configuration
-        let secrets = try await DirectoryFilesProvider(directoryPath: "/run/secrets", allowMissing: true)
-        let config = ConfigReader(providers: [
+        let config = try await ConfigReader(providers: [
             EnvironmentVariablesProvider(),
-            secrets,
+            DirectoryFilesProvider(directoryPath: "/run/secrets", allowMissing: true),
             InMemoryProvider.applicationDefaults,
         ])
 

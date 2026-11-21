@@ -42,7 +42,7 @@ let rows = try await connection.execute(statement, logger: logger)
 
 - Arguments are names, literals, properties, closures, static members built from those (`.seconds(30)`, `.dns(host: host, port: port)`) and initializers over constants (`ErrorMiddleware()`, `RetryPolicy(initialInterval: .seconds(1), …)`).
 - Anything else is a `let` first: an initializer that takes a variable, a conversion, a method's result, a `try` or an `await`. That holds for statements, requests, inputs, commands, configurations, transports, clients and use cases alike.
-- Two forms stay inline: interpolation in a log line (`"\(error)"`), and Hummingbird's route builder (`loanController.addAuthenticatedRoutes(to: authenticated.group("loans"))`).
+- Three forms stay inline: interpolation in a log line (`"\(error)"`), Hummingbird's route builder (`loanController.addAuthenticatedRoutes(to: authenticated.group("loans"))`), and a root's configuration providers, built in the `ConfigReader`'s list under one `try await` ([configuration](composition.md#configuration)).
 
 ## Errors
 
