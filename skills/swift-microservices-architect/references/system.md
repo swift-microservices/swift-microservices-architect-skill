@@ -116,7 +116,9 @@ Both packages: [the project's core package](packages.md#the-projects-core-packag
 
 ## The plan
 
-Planning a backend, or a change that adds or splits a service, produces this document before any code is written:
+Planning a backend, or a change that adds or splits a service, produces this document before any code is written. It's the `README.md` of its own repository, `<project>-plan`, since every package is a repository of its own and none holds the whole system. Work in a package reads it from the checkout beside that package's, or asks the user where it is.
+
+The plan stays current: each Build order line is ticked once its checklist is done, and a departure from a default joins Decisions in the change that makes it.
 
 ```markdown
 # <System> backend
@@ -159,9 +161,14 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 |---|---|---|---|
 - Runbooks, as numbered steps: a bad deploy, a stuck or nondeterministic workflow, certificate renewal
 - Backups and point-in-time recovery of Postgres and Temporal's store, each service's Temporal namespace and its retention, and whether Temporal's authorizer confines each identity to its namespace: the user's answers
+- Each environment's certificate authority, a developer's machine included, and how a developer runs Postgres, Valkey and Temporal: the user's answers
 
 ## Build order
-1. <package>
+1. [ ] <project>-core and <project>-protos: Start a project
+2. [ ] The token issuer: Add a service
+3. [ ] Each other service, before its callers, a line each: Add a service
+4. [ ] <project>-gateway: Add the gateway
+5. [ ] Production: Prepare for production
 
 ## Questions
 - Each question for the user, with the answer the plan assumes

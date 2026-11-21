@@ -11,11 +11,11 @@ metadata:
 
 ## Purpose
 
-Decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together, from Core's use cases to its adapters, composition roots, tests and deployment. In a backend built another way, keep its structure and conventions unless the user asks to change them, and take a shape from this skill only for what the backend lacks.
+Decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together, from Core's use cases to its adapters, composition roots, tests and deployment. In a backend built another way, keep its structure and conventions unless the user asks to change them, and take from this skill only the shapes it lacks.
 
 ## Examples
 
-`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Project>` and `<project>` for the project. The examples are Bookshelf, a lending library:
+`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`); `<Project>` and `<project>` for the project. The examples are Bookshelf, a lending library:
 
 | Package | Holds |
 |---|---|
@@ -32,7 +32,7 @@ Decides how a Swift backend splits into services and modules, where code lives a
 Clients ── HTTPS ──► edge (TLS ends) ── HTTP ──► Gateway (Hummingbird, OpenAPI)
 Gateway ── gRPC, mTLS, the caller's JWT ──► each service's XService
 Service, worker ── gRPC, mTLS ──► another service's XInternalService
-Service, worker ── mTLS ──► Temporal          Service, worker ──► its own data, wherever it lives
+Service, worker ── mTLS ──► Temporal    Service, worker ──► its own data, wherever it lives
 ```
 
 ## A service's package
@@ -71,7 +71,7 @@ A service has only the targets it needs, and each imports only what [its row](re
 
 ## Code style
 
-Code reads like the requirement it implements, with Apple's WWDC sample code as the bar ([style](references/style.md)). Use cases map errors this way; a handler or activity maps a use case's error with `do throws(XUseCaseError)` and an exhaustive `switch` ([errors](references/style.md#errors)):
+Code reads like the requirement it implements, with Apple's WWDC sample code as the bar. Use cases map errors this way; a handler or activity maps a use case's error with `do throws(XUseCaseError)` and an exhaustive `switch`:
 
 ```swift
 do {
@@ -92,7 +92,7 @@ do {
 - One `do` holds the work through its `return`, and each `catch` ends its path: nothing is declared before the `do` for a `catch` to fill, and a `do` nests only around a workflow's start ([errors](references/style.md#errors)).
 - Build, then call: a value a call takes is a named `let`, never a conversion, `try` or `await` in the arguments ([build, then call](references/style.md#build-then-call)).
 - No helper methods in use cases, workflows or activities, and no `Result` juggling, steering flags, `try?` or force unwraps.
-- Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault`, `NonisolatedNonsendingByDefault` and strict memory safety ([Swift settings](references/packages.md#swift-settings)); `package` access across a service's targets.
+- Swift 6 mode with the upcoming features and strict memory safety of [Swift settings](references/packages.md#swift-settings); `package` access across a service's targets.
 - Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows.
 
 ## Troubleshooting
@@ -104,12 +104,11 @@ do {
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
 - A signing key changed outside `RotateSigningKeysUseCase` fails live tokens: a key signs only once every verifier holds it, and outlives its tokens ([signing keys](references/security.md#signing-keys)).
-- A plain or scoped `import Foundation` in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
 
 ## Prerequisites
 
 - A Swift toolchain at the package's `swift-tools-version`; for `XPostgresTests` and `XValkeyTests`, Postgres 18 and Valkey 9 or later, through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
-- Network access for an XCore with workflows: its build fetches Temporal's sdk-core binary and its tests the test server ([what Core may link](references/packages.md#what-core-may-link), [test targets](references/testing.md#test-targets)).
+- Network access for an XCore with workflows: its build fetches Temporal's sdk-core and its tests the test server ([what Core may link](references/packages.md#what-core-may-link)).
 - The [related skills](#related-skills) `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`; ask the user once to install a missing one (`npx skills@1.9.0 add <source> --skill <name>`) and carry on.
 
 ## Available Scripts
@@ -125,7 +124,7 @@ Each is in this skill's `scripts/`, runs from the package's root and exits non-z
 ## Limitations
 
 - A workflow start or signal lost after its transaction commits is recovered only when the client retries the request ([transactions](references/use-cases.md#transactions)).
-- Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, certificate issuance, observability backends, backups, client SDKs and frontends; ask the user, never invent them.
+- Not covered: Dokploy's setup, compose files, networks, the edge proxy, certificate issuance, observability backends, backups, client SDKs and frontends; ask the user, never invent them.
 
 ## References
 
@@ -151,7 +150,7 @@ Read a reference only when the task reaches its row or a checklist names it.
 
 ## Related skills
 
-They cover the code inside the shapes, and this skill's shapes and rules win over their examples. Load each when its task comes up:
+They cover the code inside the shapes; this skill's shapes and rules win over their examples. Load each when its task comes up:
 - A workflow's design: its history, signals and updates, waiting, compensation, versioning: `temporal-developer` ([source](https://github.com/temporalio/skill-temporal-developer))
 - A table's policy, grants, indexes and column types, and what a migration locks: `supabase-postgres-best-practices` ([source](https://github.com/supabase/agent-skills))
 - The Valkey command for an operation, its expiry and atomicity: `valkey` ([source](https://github.com/valkey-io/valkey-skills))
@@ -161,7 +160,7 @@ They cover the code inside the shapes, and this skill's shapes and rules win ove
 
 ## Instructions
 
-Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off when done; each `.md` file it names is in `references/`.
+Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off when done; each `.md` file it names is in `references/`. A new backend runs **Plan a backend**, then each Build order line's checklist (system.md#the-plan); with no task, propose the next unticked line.
 
 **Plan a backend**
 
@@ -169,11 +168,19 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
 - [ ] Name each service; check its target names against every module in the graph
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, short-lived state
-- [ ] With workflows in the plan: load temporal-developer before shaping them
+- [ ] Load temporal-developer before shaping the plan's workflows
 - [ ] Per service: its targets and commands; whether it stores data, where, its roles and how processes prove them (system.md#data-placement)
 - [ ] <project>-core's products, <project>-protos' contracts, the gateway's routes by tier
-- [ ] Build order: <project>-core and <project>-protos, the token issuer, each service before its callers, the gateway
 - [ ] Write the plan from system.md#the-plan; check it against the hard rules and put its questions to the user before any code
+```
+
+**Start a project**
+
+```
+- [ ] The plan's answers on certificate authorities and local runs
+- [ ] <project>-core: the plan's products, tested with swift-testing-pro (packages.md#the-projects-core-package)
+- [ ] <project>-protos: a target per contract (packages.md#the-contracts-package)
+- [ ] Set up CI/CD for each and tag its first release; scripts/check_style.sh and swift-format lint
 ```
 
 **Add a service**
@@ -187,9 +194,9 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
 - [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer, a Valkey command chosen with valkey
 - [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' lists, Migrate, Serve with its health service, Health, BuildIndexes, and Run with a worker (composition.md)
-- [ ] Gateway: routes for the public RPCs (gateway.md)
+- [ ] Gateway, once built: routes for the public RPCs (gateway.md)
 - [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-pro
-- [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
+- [ ] Set up CI/CD as a service
 - [ ] Verify
 ```
 
@@ -219,6 +226,17 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
 - [ ] Executable: TemporalClient and the task queue into Serve's use cases; the worker group and its Run root
 - [ ] Tests: the workflow and the starting use case on the test server, its activities over mocks, written with swift-testing-pro
+- [ ] Verify
+```
+
+**Add the gateway**
+
+```
+- [ ] Package <project>-gateway (packages.md#the-gateway-package)
+- [ ] GatewayHTTP: openapi.yaml first, then each route's tier, controller, conversions and errors (gateway.md)
+- [ ] Gateway: its command and Serve root (composition.md#the-gateways-root)
+- [ ] GatewayHTTPTests over mocks, written with swift-testing-pro
+- [ ] Set up CI/CD as a service
 - [ ] Verify
 ```
 
@@ -256,7 +274,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] Each adapter only converts and delegates; every error case is mapped
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
 - [ ] Workflows checked with temporal-developer, tests with swift-testing-pro, and actors, Mutexes and unchecked concurrency with swift-concurrency-pro
-- [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), FoundationEssentials imports, package access, naming (conventions.md)
+- [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), package access, naming (conventions.md)
 - [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (shapes), minor (naming, layout, logging), each with a file and line or an empty grep, the rule and the fix; change code only when asked
 - [ ] scripts/swift_ci.sh build and test; report each result, or why it couldn't run
 ```

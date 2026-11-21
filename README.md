@@ -63,13 +63,23 @@ The agent loads the skill when a task matches it, or when asked: `/swift-microse
 - "Set up CI/CD for the loans service."
 - "Review this service's architecture and code style."
 
-To plan a backend, add a service, an operation or a durable process, set up CI/CD or review a backend, the agent follows the skill's checklist. One that adds a feature starts by looking up the established standard for it, such as an RFC or OWASP's guidance, and one that changes code ends with a build and a test run repeated until both pass. A plan ends with the questions you answer before any code is written.
+A new backend goes from idea to production through the skill's checklists, in this order:
+
+1. **Plan a backend** writes the plan into a repository of its own, `<project>-plan`, and ends with the questions you answer before any code is written.
+2. **Start a project** creates the shared `<project>-core` and `<project>-protos` packages.
+3. **Add a service**, for the token issuer and then each service before its callers.
+4. **Add the gateway**, the public HTTP API.
+5. **Prepare for production**.
+
+The plan's Build order lists these steps and ticks each one once its checklist's build, tests and checks pass, so invoking the skill with no task picks up at the next step.
+
+On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. One that adds a feature starts by looking up the established standard for it, such as an RFC or OWASP's guidance, and one that changes code ends with a build and a test run repeated until both pass.
 
 ## What it covers
 
 | Area | Covers |
 |---|---|
-| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan with its objectives, alerts and runbooks |
+| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan with its objectives, alerts, runbooks and build order |
 | Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
 | Persistence | Postgres roles proved by certificates, row-level security for user and organization tenants, statements, paging, migrations, Valkey |

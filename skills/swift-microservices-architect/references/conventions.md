@@ -14,6 +14,7 @@
 | Service | A noun for the capability, clashing with no module in the package graph ([naming a service](system.md#naming-a-service)) | `Identity`, `Catalog`, `Loans`; not `Authentication` |
 | Service package and repository | `<project>-<x>`; the gateway's `<project>-gateway` | `bookshelf-loans`, `bookshelf-gateway` |
 | Shared packages | `<project>-core`, `<project>-protos` | `bookshelf-core` |
+| The plan's repository | `<project>-plan`, the plan its `README.md` | `bookshelf-plan` |
 | Package kind | Public library, system library or service; CI workflow files and jobs as [delivery](delivery.md#ci-workflows) names them | `bookshelf-core` is a system library |
 | Service image | `ghcr.io/<owner>/<project>-<x>` | `ghcr.io/bookshelf/bookshelf-loans` |
 | Service targets | `XCore`, `XPostgres`, `XGRPC`, `XValkey`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansGRPC`, `LoansResend`, `LoansCoreTests` |
