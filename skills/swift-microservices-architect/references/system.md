@@ -101,12 +101,12 @@ Besides the swift-microservices libraries ([stack](stack.md)), every service and
 
 **`<project>-core`** holds what every service would otherwise write identically:
 
-| Product | Holds | Linked by |
-|---|---|---|
-| `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, the EdDSA `JWTAuthenticator` and `JWTIssuer` initializers | XCore, XGRPC, executables |
-| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:certificateReloader:)` for a role proved by the process's certificate, and `(config:role:)` for the password fallback | Executables with Postgres |
-| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token keys; `InternalCallerInterceptor` | Executables |
-| `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) | Test targets |
+| Product | Holds |
+|---|---|
+| `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user` |
+| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:certificateReloader:)` for a role proved by the process's certificate, and `(config:role:)` for the password fallback |
+| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`; `InternalCallerInterceptor`, `SigningKeyRefresher` |
+| `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) |
 
 It holds none of these: a service's models, repositories, scopes or migrations; contracts; deployment defaults such as mount paths, ports and role names, which stay in each executable's `InMemoryProvider` defaults; generic abstractions, which belong to the swift-microservices libraries; a process identity or service token, since certificates prove processes.
 
@@ -133,7 +133,7 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 ### <project>-<x>
 | Target | Holds |
 |---|---|
-- Commands: `serve [--migrate-database]`, `worker run`
+- Commands: `serve`, `health`, `worker run`, `migrate`, `build-indexes`
 - Data: where it lives, the database roles and the use cases each runs, and how each process proves its roles
 - Calls out to: other services' internal RPCs, providers, Temporal, Valkey
 
@@ -151,6 +151,13 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 ## Operations
 | Environment | Postgres `max_connections` | Each process's replicas and role pools, and their total | Collector endpoint | Stop timeout |
 |---|---|---|---|---|
+
+| Tier, or a route set apart | Availability over 30 days | Latency at the 99th percentile |
+|---|---|---|
+
+| Alert | Source | Fires when | Runbook |
+|---|---|---|---|
+- Runbooks, as numbered steps: a bad deploy, a stuck or nondeterministic workflow, certificate renewal
 - Backups and point-in-time recovery of Postgres and Temporal's store, each service's Temporal namespace and its retention, and whether Temporal's authorizer confines each identity to its namespace: the user's answers
 
 ## Build order
@@ -159,6 +166,15 @@ Planning a backend, or a change that adds or splits a service, produces this doc
 ## Questions
 - Each question for the user, with the answer the plan assumes
 ```
+
+Operations' targets and thresholds are the user's answers; what they measure, the gateway and Temporal already emit:
+
+- Objectives take a row per route tier ([request contexts and tiers](gateway.md#request-contexts-and-tiers)), and one per route whose work sets it apart, such as sign-in, which bcrypt slows. The gateway's `MetricsMiddleware` measures both ([a trace across processes](observability.md#a-trace-across-processes)): availability from its count of requests by route and status, as the share answered without a `5xx`, and latency from its duration, which covers only requests answered without an error, since it counts a thrown problem but doesn't time it.
+- Alerts: error rate and latency per tier, against its objective; failed and timed-out runs, and failing workflow tasks, per namespace; schedule-to-start latency per task queue, which rises when no worker polls or every worker is busy. The workflow alerts read Temporal's own metrics. A nondeterministic run never fails: its workflow task fails on every retry, so only the failing-task alert sees it.
+- A bad deploy: run Deploy to production with the last commit production ran, never reverting a migration ([a service's CI workflows](delivery.md#a-services-ci-workflows)). Callers and the gateway roll back before a service whose new RPC they call, the reverse of [the order they deploy in](grpc.md#contracts-in-the-protos-package), and the fix goes forward through staging.
+- A stuck workflow: rising schedule-to-start latency means its task queue's worker isn't polling; otherwise its pending activity's last failure names the dependency it waits on, and the activity's retries resume it once that recovers.
+- A nondeterministic workflow: roll back to the image before the change, so the runs that started before it replay and resume; the runs the bad image started then fail on replay and are reset, as `temporal-developer` describes. The change returns behind a patch, with a failed run's history among the replays `XCoreTests` runs ([changing a workflow](workflows.md#changing-a-workflow)).
+- Certificate renewal, which the deployment performs in the order [mutual TLS](security.md#mutual-tls) gives: a renewed pair at the mount paths needs no deploy.
 
 Review the plan against the hard rules in `SKILL.md`, and put its questions to the user, before writing code.
 

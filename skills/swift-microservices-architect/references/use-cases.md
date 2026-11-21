@@ -39,7 +39,7 @@ package enum LoanStatus: String, Equatable, Sendable {
 }
 ```
 
-- A model is a `package struct` of `let` properties, `Equatable` and `Sendable`, with an explicit `package init`.
+- A model is `Equatable` and `Sendable`, shaped as [types and values](style.md#types-and-values) gives it.
 - It's named for what it is in the service's language ([naming](conventions.md#naming)).
 - Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text. A validated value, such as an `EmailAddress`, travels as itself through models, commands and ports, never as the `String` it was made from. A field earns such a type once two use cases validate it: the input carries the raw value, and each use case makes the type in a `guard`, throwing its case (`invalidEmail`).
 - A rule more than one use case applies lives on a model or a policy, never in a use case for another to copy: `LoanPolicy.dueDate(borrowedAt:)`, a failable `EmailAddress(_:)` that normalizes and validates.
@@ -60,6 +60,7 @@ package enum BorrowBookUseCaseError: Error, Equatable {
     case bookNotFound
     case loanLimitReached
     case idempotencyConflict
+    case alreadyBorrowed
     case catalogUnavailable
     case unknown
 }
@@ -100,13 +101,12 @@ package struct CreateLoanCommand: Sendable {
 
 - A repository is the persistence of one area, in Core's terms ([naming](conventions.md#naming)). A read of one row returns an optional (`loan(id:)`), of several an array (`activeLoans(userID:)`).
 - A write that takes more than an id takes a command, an update of several fields included (`ExtendLoanCommand`). A write that changes several rows returns them, never only their ids.
-- Methods use untyped `async throws`: a driver throws errors the domain doesn't name, and `XRepositoryError` carries the few it does.
 - A scope builds the repository on its transaction's connection ([database roles](persistence.md#database-roles)); nothing keeps one past the transaction.
 
 A read of a list that can grow large returns one page, with its metadata, as one of Core's page types in `Paging/` ([lists and pages](grpc.md#lists-and-pages)):
 
 ```swift
-/// One numbered page of a list, and where it sits in the whole list.
+/// One page of a list by page number, and where it sits in the whole list.
 package struct Page<Item: Sendable>: Sendable {
     package let items: [Item]
     package let page: Int
@@ -126,7 +126,6 @@ package struct KeyedPage<Item: Sendable>: Sendable {
     …
 }
 ```
-
 
 ## Ports
 
@@ -152,12 +151,12 @@ package enum CatalogClientError: Error, Equatable {
 
 Ports and their implementations are named as [naming](conventions.md#naming) gives them.
 
-- A port returns Core models in the consumer's words and uses untyped `async throws`.
+- A port returns Core models in the consumer's words.
 - A port isn't in a scope: it isn't part of the transaction, so the use case holds it directly.
 
 ## A use case
 
-There is one use case per operation: one per RPC, and one per database step an activity runs (`MarkLoanOverdue`). A read that `XService` offers anyone and `XInternalService` offers other processes, with the same input and answer, is one use case both services hold, such as Catalog's `GetBook`. Its five files, four when it takes no input, sit in `UseCases/<Name>/`:
+There is one use case per operation: one per RPC, and one per database step an activity runs (`MarkLoanOverdue`). A read that `XService` offers anyone and `XInternalService` offers other processes, with the same input and answer, is one use case both services hold, such as Catalog's `GetBook`. Its five files, four when it takes no input, are these ([files](conventions.md#files)):
 
 ```swift
 package protocol BorrowBookUseCaseProtocol: Sendable {
@@ -172,10 +171,7 @@ package struct BorrowBookUseCaseInput: Sendable {
     package let bookID: UUID
     package let idempotencyKey: String
 
-    package init(bookID: UUID, idempotencyKey: String) {
-        self.bookID = bookID
-        self.idempotencyKey = idempotencyKey
-    }
+    package init(bookID: UUID, idempotencyKey: String) { … }
 }
 
 package protocol BorrowBookUseCaseScope: Sendable {
@@ -185,13 +181,13 @@ package protocol BorrowBookUseCaseScope: Sendable {
 
 with the error above and the implementation below.
 
-- A use case is named like its RPC ([naming](conventions.md#naming)). Two use cases that share steps each spell them out: what they share by rule is a model's or a policy's method, and what they share in storage is one repository method.
+- A use case is named like its RPC ([naming](conventions.md#naming)). Two use cases that share steps each spell them out; what they share in storage is one repository method.
 - `callAsFunction` takes `subject: UserIdentity` first when its RPC requires a caller ([authorization](#authorization)), then `input:` when the request carries values. A use case that needs neither takes neither.
 - It returns a domain model, an array of them, a page of them, or nothing. A result that combines values is a domain type named for what it is (`Session`), never `XUseCaseOutput`.
 - The input is a plain value of what the request carries, with an optional for a value the request may leave out. Wire validity, such as an id that isn't a UUID, is the conversion's to refuse ([conversions](grpc.md#conversions)); business validity is the use case's, as an error case.
 - The implementation is generic over its database, `XUseCase<DatabaseType>` where `DatabaseType: Database` and `DatabaseType.Scope: XUseCaseScope`. It holds its ports as `any Port`, a `Logger`, and a policy when its rules are tunable.
 - One that starts a workflow also holds what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
-- Its scope protocol lists only what it uses. The scopes of the database roles it may run on adopt the protocol, so composing it on any other database doesn't compile ([database roles](persistence.md#database-roles)).
+- Its scope protocol lists only what it uses; [database roles](persistence.md#database-roles) gives the scopes that adopt it.
 - An adapter holds it as `any XUseCaseProtocol` in a property named for the type (`borrowBookUseCase`) and calls it like a function: `try await borrowBookUseCase(subject: subject, input: input)`.
 
 ## The body of a use case
@@ -270,7 +266,8 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                     throw BorrowBookUseCaseError.loanLimitReached
                 }
 
-                let dueDate = policy.dueDate(borrowedAt: .now)
+                let borrowDate = Date.now
+                let dueDate = policy.dueDate(borrowedAt: borrowDate)
                 let command = CreateLoanCommand(
                     userID: subject.userID,
                     bookID: book.id,
@@ -308,6 +305,9 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
             }
         } catch let error as BorrowBookUseCaseError {
             throw error
+        } catch LoanRepositoryError.alreadyBorrowed {
+            logger.warning("Borrowing refused: the member already has this book")
+            throw .alreadyBorrowed
         } catch CatalogClientError.unavailable {
             logger.warning("Borrowing failed: the catalog is unavailable")
             throw .catalogUnavailable
@@ -335,7 +335,7 @@ A use case's actor is a person, through an RPC, or the system: time, or a workfl
 
 ```swift
 package protocol MarkLoanOverdueUseCaseProtocol: Sendable {
-    /// Marks a loan past its due date overdue, unless it was returned first.
+    /// Marks a loan overdue once its due date has passed, unless it was returned or extended first.
     func callAsFunction(input: MarkLoanOverdueUseCaseInput) async throws(MarkLoanOverdueUseCaseError) -> Loan
 }
 
@@ -349,14 +349,14 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 - A system use case takes no `subject`. Its input names what it acts on, and the user a step is recorded for, such as who confirmed, when the use case that reached the run authorized that user first ([reaching a run](workflows.md#reaching-a-run-from-a-use-case)).
 - Activities call system use cases only, never user-facing ones. A use case that checks the caller (`ReturnBook`) is never invoked from an activity with an invented identity.
 - When a person and the system both need the same effect, each audience has its own use case: `MarkLoanOverdueUseCase` for the worker, and `MarkLoanOverdueByAdministratorUseCase`, which takes `subject` and checks the role. They share the domain rule, on a model or a policy, and the repository's conditional write (`markOverdue(id:)`), and neither calls the other.
-- The worker scope adopts the system use cases' scope protocols, so wiring one on the tenant database fails to compile ([database roles](persistence.md#database-roles)).
+- A system use case runs on the worker's database ([database roles](persistence.md#database-roles)).
 
 ## Transactions
 
 - A transaction holds a pooled connection until it ends, so it contains only database work. Remote calls go before it (the catalog lookup) or after it commits (the workflow start).
 - A decision that must be atomic with its write happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
 - A rule over a count, such as the loan limit, first locks what it counts (`lockLoans(userID:)`), since `SELECT … FOR UPDATE` locks only rows that already exist; the lock ends with the transaction. A rule a constraint can state, such as a unique index, is that constraint, mapped to a case.
-- A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`), reading the row in the same transaction first when a missing row answers differently (`loanNotFound`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue or returned, and throws `loanNotFound` only when there's no loan.
+- A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`), reading the row in the same transaction first when a missing row answers differently (`loanNotFound`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue, returned or not yet due, and throws `loanNotFound` only when there's no loan.
 - An edit a person makes to what they read, such as an administrator's change to a book in Catalog's `UpdateBook`, is checked against the version they read, so two edits never silently overwrite each other. The row carries `version`, the read returns it as the resource's `etag`, the update's input carries it, and the repository's conditional write names it: `UPDATE books SET …, version = version + 1 WHERE id = $1 AND version = $2`. No row back is `bookNotFound` when a read in the same transaction finds none, and `versionConflict` otherwise.
 - An idempotent create with no count to guard follows the same order: lock the owner its key is unique with, or the key itself when it has no owner, look the key up, then insert. A unique constraint a concurrent request can still trip is mapped to its case, never left to `unknown`.
 - Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).

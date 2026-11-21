@@ -15,7 +15,7 @@ Decides how a Swift backend splits into services and modules, where code lives a
 
 ## Examples
 
-`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Project>` and `<project>` for the project. The examples are Bookshelf, a small lending library:
+`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Project>` and `<project>` for the project. The examples are Bookshelf, a lending library:
 
 | Package | Holds |
 |---|---|
@@ -91,25 +91,26 @@ do {
 
 - One `do` holds the work through its `return`, and each `catch` ends its path: nothing is declared before the `do` for a `catch` to fill, and a `do` nests only around a workflow's start ([errors](references/style.md#errors)).
 - Build, then call: a value a call takes is a named `let`, never a conversion, `try` or `await` in the arguments ([build, then call](references/style.md#build-then-call)).
-- No helper methods in use cases, workflows or activities, and no `Result` juggling, steering flags, `try?`, nested `do` in a `catch`, or force unwraps.
+- No helper methods in use cases, workflows or activities, and no `Result` juggling, steering flags, `try?` or force unwraps.
 - Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault`, `NonisolatedNonsendingByDefault` and strict memory safety ([Swift settings](references/packages.md#swift-settings)); `package` access across a service's targets.
-- Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows it.
+- Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows.
 
 ## Troubleshooting
 
 - A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls hang until their deadline.
 - The worker's `gracefulShutdownPeriod` defaults to zero, so every deploy cancels in-flight activities and repeats their effects ([the worker's root](references/composition.md#the-workers-root)).
-- The database owner bypasses row-level security, so only `serve --migrate-database` connects as the owner, and every other process as its roles.
-- Policies combine with `OR`: on a table with a user's and an organization's, a session acting for the organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
+- The database owner bypasses row-level security: only `migrate` and `build-indexes` connect as it, never serve or the worker ([migrations](references/persistence.md#migrations)).
+- Policies combine with `OR`: a session acting for an organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
+- A signing key changed outside `RotateSigningKeysUseCase` fails live tokens: a key signs only once every verifier holds it, and outlives its tokens ([signing keys](references/security.md#signing-keys)).
 - A plain or scoped `import Foundation` in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
 
 ## Prerequisites
 
-- A Swift toolchain at the package's `swift-tools-version`; for `XPostgresTests` and `XValkeyTests`, Postgres 18 or later and Valkey, through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
+- A Swift toolchain at the package's `swift-tools-version`; for `XPostgresTests` and `XValkeyTests`, Postgres 18 and Valkey 9 or later, through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
 - Network access for an XCore with workflows: its build fetches Temporal's sdk-core binary and its tests the test server ([what Core may link](references/packages.md#what-core-may-link), [test targets](references/testing.md#test-targets)).
-- The [related skills](#related-skills) `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`; ask the user once to install a missing one (`npx skills add <source> --skill <name>`) and carry on.
+- The [related skills](#related-skills) `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`; ask the user once to install a missing one (`npx skills@1.9.0 add <source> --skill <name>`) and carry on.
 
 ## Available Scripts
 
@@ -124,11 +125,11 @@ Each is in this skill's `scripts/`, runs from the package's root and exits non-z
 ## Limitations
 
 - A workflow start or signal lost after its transaction commits is recovered only when the client retries the request ([transactions](references/use-cases.md#transactions)).
-- Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, certificate issuance, observability backends, backups, client SDKs and frontends; ask the user rather than invent them.
+- Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, certificate issuance, observability backends, backups, client SDKs and frontends; ask the user, never invent them.
 
 ## References
 
-Read a reference only when the task reaches its row or a checklist item names it.
+Read a reference only when the task reaches its row or a checklist names it.
 
 | Reference | Read when |
 |---|---|
@@ -138,11 +139,11 @@ Read a reference only when the task reaches its row or a checklist item names it
 | [use-cases.md](references/use-cases.md) | Writing a model, error, repository, port or use case; transactions and authorization |
 | [persistence.md](references/persistence.md) | Writing a scope, statement, migration, policy or tenant table; pools; Valkey |
 | [grpc.md](references/grpc.md) | Changing a contract, handler, conversion, client, paged list or transport |
-| [gateway.md](references/gateway.md) | A route, request context, controller, webhook route or error mapping |
+| [gateway.md](references/gateway.md) | A route or a breaking change to one, a request context, controller, webhook route or error mapping |
 | [workflows.md](references/workflows.md) | A workflow, activity container or worker, or starting or reaching a run |
 | [composition.md](references/composition.md) | A command, composition root, configuration, logging, health checks or the ServiceGroup |
 | [observability.md](references/observability.md) | Bootstrapping telemetry or tracing a request across processes |
-| [security.md](references/security.md) | mTLS, database logins, tokens, secrets, attempt limits or webhooks |
+| [security.md](references/security.md) | mTLS, database logins, tokens and signing keys, secrets, attempt limits or webhooks |
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |
 | [delivery.md](references/delivery.md) | CI, releases, deployment, the Containerfile or Dependabot |
@@ -160,7 +161,7 @@ They cover the code inside the shapes, and this skill's shapes and rules win ove
 
 ## Instructions
 
-Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off as they're done; each `.md` file it names is in `references/`.
+Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off when done; each `.md` file it names is in `references/`.
 
 **Plan a backend**
 
@@ -185,7 +186,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md), the SQL with supabase-postgres-best-practices
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
 - [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer, a Valkey command chosen with valkey
-- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' list, Serve with its health service, Health, and Run with a worker (composition.md)
+- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' lists, Migrate, Serve with its health service, Health, BuildIndexes, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-pro
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)
@@ -211,7 +212,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 
 ```
 - [ ] The feature's established approach (style.md#reading-like-the-requirement)
-- [ ] Design the workflow with temporal-developer: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow); without a Swift reference there, read the SDK's documentation
+- [ ] Design the workflow with temporal-developer and the SDK's documentation: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow)
 - [ ] Each person's change is written by its use case, then signalled if the run waits on it, or sent as an update if only the run can decide (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
 - [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)

@@ -25,7 +25,9 @@ struct Loans: AsyncParsableCommand {
         subcommands: [
             Serve.self,
             Worker.self,
+            Migrate.self,
             Health.self,
+            BuildIndexes.self,
         ],
         defaultSubcommand: Serve.self
     )
@@ -33,12 +35,48 @@ struct Loans: AsyncParsableCommand {
 ```
 
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
-- `serve --migrate-database` applies pending migrations as the owner, proved by the migrator's certificate, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
+- `migrate` applies pending migrations as the owner ([Postgres](security.md#postgres)) and exits ([migrations](persistence.md#migrations)): a short-lived command, which each deploy runs before serve and the worker start ([a service's CI workflows](delivery.md#a-services-ci-workflows)).
+- `build-indexes` builds the indexes XPostgres lists for building concurrently, as the owner, since only a table's owner may index it. It's a short-lived command an operator runs after the deploy that lists a new index, never a step of the deploy, so a build that takes minutes holds up no deploy.
 - A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
 - An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived command, a subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections, no Observability and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
 - A short-lived command's operands, such as whom it acts on, are its `@Option`s and go into the use case's input; only a value configuration also carries goes through the provider. It reports through its log line and exit status, and prints to standard output only a value the operator must read.
-- A short-lived command connects as `<x>_internal`, since no caller is bound, and reads a secret it needs through the `ConfigReader` with `isSecret: true`, never from a flag, which the process list shows.
+- Any other short-lived command connects as `<x>_internal`, since no caller is bound, and reads a secret it needs through the `ConfigReader` with `isSecret: true`, never from a flag, which the process list shows.
 - Each command's `run()` is a composition root: the only code that reads configuration, constructs concrete types and runs them. Nothing below it reads configuration, builds a client or starts a task.
+
+`Migrate/Migrate.swift`, a short-lived command:
+
+```swift
+struct Migrate: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "migrate",
+        abstract: "Apply pending database migrations, then exit"
+    )
+
+    func run() async throws {
+        // MARK: - Configuration
+        …  // config, as in Serve
+
+        // MARK: - Logging
+        …  // logger, as in Serve
+
+        // MARK: - Infrastructure
+        let postgresConfig = config.scoped(to: "postgres")
+        let migratorTLSConfig = postgresConfig.scoped(to: "owner.tls")
+        …  // migratorCertificateReloader from migratorTLSConfig, as Serve's certificateReloader
+        let ownerPostgresConfiguration = try PostgresClient.Configuration(
+            config: postgresConfig,
+            role: "owner",
+            certificateReloader: migratorCertificateReloader
+        )
+
+        // MARK: - Composition
+        try await PostgresClient.withClient(configuration: ownerPostgresConfiguration, logger: logger) { client in
+            let migrations = Migrations(client: client, …, logger: logger)
+            try await migrations.apply()
+        }
+    }
+}
+```
 
 ## The composition root
 
@@ -50,9 +88,6 @@ struct Serve: AsyncParsableCommand {
         commandName: "serve",
         abstract: "Serve the loans gRPC services"
     )
-
-    @Flag(help: "Apply pending database migrations before serving")
-    var migrateDatabase = false
 
     func run() async throws {
         // MARK: - Configuration
@@ -97,43 +132,13 @@ struct Serve: AsyncParsableCommand {
         )
 
         let postgresConfig = config.scoped(to: "postgres")
-        if migrateDatabase {
-            let migratorTLSConfig = postgresConfig.scoped(to: "owner.tls")
-            let migratorCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(
-                config: migratorTLSConfig,
-                logger: logger
-            )
-            let migratorCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
-                configuration: migratorCertificateReloaderConfiguration
-            )
-            let ownerPostgresConfiguration = try PostgresClient.Configuration(
-                config: postgresConfig,
-                role: "owner",
-                certificateReloader: migratorCertificateReloader
-            )
-            try await PostgresClient.withClient(configuration: ownerPostgresConfiguration, logger: logger) { client in
-                let migrations = Migrations(client: client, …, logger: logger)
-                try await migrations.apply()
-            }
-        }
         let servicePostgresConfiguration = try PostgresClient.Configuration(
             config: postgresConfig,
             role: "service",
             certificateReloader: certificateReloader
         )
-        let internalPostgresConfiguration = try PostgresClient.Configuration(
-            config: postgresConfig,
-            role: "internal",
-            certificateReloader: certificateReloader
-        )
         let postgresClient = PostgresClient(configuration: servicePostgresConfiguration, backgroundLogger: logger)
-        let internalPostgresClient = PostgresClient(
-            configuration: internalPostgresConfiguration,
-            backgroundLogger: logger
-        )
-
-        let jwtConfig = config.scoped(to: "jwt")
-        let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
+        …  // internalPostgresClient the same way, for the role "internal"
 
         let catalogConfig = config.scoped(to: "grpc.catalog")
         let catalogHost = try catalogConfig.requiredString(forKey: "host")
@@ -151,22 +156,26 @@ struct Serve: AsyncParsableCommand {
             transport: catalogTransport,
             interceptorPipeline: [.apply(catalogTracing, to: .all)]
         )
+        …  // identityGRPCClient the same way, from "grpc.identity"
+
+        let jwtConfig = config.scoped(to: "jwt")
+        let keys = JWTKeyCollection()
+        let authenticator = JWTAuthenticator<UserIdentity>(keys: keys)
+        let identityClient = Bookshelf_Identity_V1_IdentityInternalService.Client(wrapping: identityGRPCClient)
+        let healthService = HealthService()
+        let signingKeyRefresher = SigningKeyRefresher(config: jwtConfig, keys: keys, logger: logger) {
+            let request = Bookshelf_Identity_V1_ListSigningKeysRequest()
+            let response = try await identityClient.listSigningKeys(request)
+            return try JWKS(response)
+        } onFirstRefresh: {
+            healthService.provider.updateStatus(.serving, forService: "")
+        }
 
         let temporalConfig = config.scoped(to: "temporal")
         let temporalTLSConfig = temporalConfig.scoped(to: "tls")
         let temporalHost = try temporalConfig.requiredString(forKey: "host")
         let temporalPort = try temporalConfig.requiredInt(forKey: "port")
-        let temporalCertificateReloaderConfiguration = try TimedCertificateReloader.Configuration(
-            config: temporalTLSConfig,
-            logger: logger
-        )
-        let temporalCertificateReloader = try TimedCertificateReloader.makeReloaderValidatingSources(
-            configuration: temporalCertificateReloaderConfiguration
-        )
-        let temporalSecurity: HTTP2ClientTransport.Posix.TransportSecurity = try .mTLS(
-            config: temporalTLSConfig,
-            certificateReloader: temporalCertificateReloader
-        )
+        …  // temporalCertificateReloader and temporalSecurity from temporalTLSConfig, as the tls pair's above
         let temporalClientConfiguration = try TemporalClient.Configuration(configReader: temporalConfig)
         let temporalClient = try TemporalClient(
             target: .dns(host: temporalHost, port: temporalPort),
@@ -232,8 +241,6 @@ struct Serve: AsyncParsableCommand {
         let serverTracing = ServerOTelTracingInterceptor(serverHostname: serverHostname, networkTransportMethod: "tcp")
         let bearerAuthentication = BearerAuthenticationInterceptor(authenticator: authenticator)
         let userSettings = UserSettingsInterceptor()
-        let healthService = HealthService()
-        healthService.provider.updateStatus(.serving, forService: "")
         let server = GRPCServer(
             transport: serverTransport,
             services: [loanService, healthService],
@@ -253,7 +260,9 @@ struct Serve: AsyncParsableCommand {
                 postgresClient,
                 internalPostgresClient,
                 catalogGRPCClient,
+                identityGRPCClient,
                 temporalClient,
+                signingKeyRefresher,
                 server,
             ],
             gracefulShutdownSignals: [.sigterm, .sigint],
@@ -266,8 +275,8 @@ struct Serve: AsyncParsableCommand {
 }
 ```
 
-- **Configuration, Logging, Observability, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order ([observability](observability.md)), and a short-lived command has Configuration, Logging, Infrastructure and Composition ([commands](#commands)).
-- Infrastructure builds what talks to the outside: certificate reloaders, database clients per role, the authenticator, upstream clients, the Temporal and Valkey clients.
+- **Configuration, Logging, Observability, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order ([observability](observability.md)): the server is `gRPC` in a service's root, `Worker` in the worker's and `Router` and `Hummingbird` in the gateway's. A short-lived command's are in [commands](#commands).
+- Infrastructure builds what talks to the outside: certificate reloaders, database clients per role, upstream clients, the authenticator and its signing key refresher, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
 - The use cases that start workflows take what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
 - Each use case is a `let` named like the property that holds it, on the database its audience requires; the service then takes the names. Every value in a root is built this way ([build, then call](style.md#build-then-call)).
@@ -289,10 +298,10 @@ extension InMemoryProvider {
             "grpc.server.port": 50051,
             "grpc.server.hostname": "loans",
             "grpc.catalog.port": 50051,
+            "grpc.identity.port": 50051,
             "tls.certificatePath": "/run/tls/cert.pem",
             "tls.privateKeyPath": "/run/tls/key.pem",
             "tls.trustRootsPath": "/run/tls/ca.pem",
-            "jwt.publicKeysPath": "/run/secrets/jwt-public",
             "postgres.port": 5432,
             "postgres.db": "bookshelf_loans",
             "postgres.tls.trustRootsPath": "/run/tls/ca.pem",
@@ -322,18 +331,18 @@ extension InMemoryProvider {
 - A list default is a `ConfigValue` of its own, since `ConfigValue` has no array literal: `"grpc.server.internalCallers": .init(.stringArray(["loans", "loans-worker"]), isSecret: false)` in Catalog's defaults. A bare array literal fails to compile, and takes every other entry's type inference down with it.
 - A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
 - A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)`, with the key names that library chose. A service's own readers are in the executable's `Configuration/`: its policies' (`LoanPolicy+ConfigReader.swift`), and its provider clients', as extensions on the provider target's types (`ResendNoticeEventVerifier+ConfigReader.swift`), since a provider target never reads configuration.
-- `ValkeyClientConfiguration(configReader:)` leaves TLS off, and connects unauthenticated unless both `authentication.username` and `authentication.password` are set, so the root reads it into a `var` and sets `tls = try .enable(tlsConfiguration, tlsServerName: host)` from a NIOSSL `TLSConfiguration` with the environment's trust roots before building its one `ValkeyClient` ([the trust model](security.md#the-trust-model)).
+- `ValkeyClientConfiguration(configReader:)` leaves TLS off, and connects unauthenticated unless both `authentication.username`, the service's ACL user from the defaults, and `authentication.password`, a secret, are set, so the root reads it into a `var` and sets `tls = try .enable(tlsConfiguration, tlsServerName: host)` from a NIOSSL `TLSConfiguration` with the environment's trust roots before building its one `ValkeyClient` ([the trust model](security.md#the-trust-model)).
 - Readers every executable shares are `<Project>Transport`'s and `<Project>Persistence`'s, under these keys, relative to the scopes the roots give them:
 
 | Reader | Scopes | Keys, with tuning defaults |
 |---|---|---|
 | `TimedCertificateReloader.Configuration(config:logger:)` | `tls`, `temporal.tls`, `postgres.owner.tls` | `certificatePath`, `privateKeyPath`; `refreshIntervalSeconds` (60) |
 | The server's and the client's `TransportSecurity.mTLS(config:certificateReloader:)` | `tls`, `temporal.tls` | `trustRootsPath` |
-| `HTTP2ServerTransport.Posix.Config(config:)` | `grpc.server` | `maxConnectionAgeSeconds` (1800), `connectionGraceTimeSeconds` (30), `minPingIntervalSeconds` (10) |
+| `HTTP2ServerTransport.Posix.Config(config:)` | `grpc.server` | `maxConnectionAgeSeconds` (1800), `connectionGraceTimeSeconds` (30), `minPingIntervalSeconds` (10), `maxConcurrentStreams` (100) |
 | `HTTP2ClientTransport.Posix.Config(config:)`, `ServiceConfig(config:)` | `grpc.<upstream>` | `keepaliveTimeSeconds` (30), `keepaliveTimeoutSeconds` (10); `deadlineSeconds` (10), with round-robin balancing ([transports](grpc.md#transports)) |
 | `InternalCallerInterceptor(config:)` | `grpc.server` | `internalCallers`, the common names of the processes that call `XInternalService` |
-| `JWTAuthenticator<UserIdentity>(config:)`, Identity's `JWTIssuer<UserIdentity>(config:)` | `jwt` | `publicKeysPath`, a directory of PEM files; `privateKeyPath` |
-| `PostgresClient.Configuration(config:role:certificateReloader:)` | `postgres` | `host`, `port`, `db`, `tls.trustRootsPath`, `<role>.user`; `<role>.maximumConnections` (10), `statementTimeoutSeconds` (5), `idleInTransactionTimeoutSeconds` (10), `lockTimeoutSeconds` (5) ([connections and timeouts](persistence.md#connections-and-timeouts)); the password fallback's `(config:role:)` adds `<role>.password`, a secret (the file `postgres-service-password`) |
+| `SigningKeyRefresher(config:keys:logger:fetch:onFirstRefresh:)` | `jwt` | `refreshIntervalSeconds` (300) ([signing keys](security.md#signing-keys)) |
+| `PostgresClient.Configuration(config:role:certificateReloader:)` | `postgres` | `host`, `port`, `db`, `tls.trustRootsPath`, `<role>.user`; `<role>.maximumConnections` (10), `statementTimeoutSeconds` (5), `idleInTransactionTimeoutSeconds` (10), `lockTimeoutSeconds` (5) ([connections and timeouts](persistence.md#connections-and-timeouts)); the password fallback's `(config:role:)` adds `<role>.password`, a secret |
 
 - A `<project>-core` reader requires every value a deployment sets, such as a path, host, port or user, and defaults only tuning; the executable's defaults hold the deployment's values.
 - Keys are named as [naming](conventions.md#naming) gives them, and environment and secret file names derive from them: `postgres.service.user` is `POSTGRES_SERVICE_USER`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`, and the secret `postgres.service.password` is the file `postgres-service-password`.
@@ -351,8 +360,8 @@ extension InMemoryProvider {
 
 A root lists its long-lived components in one `ServiceGroup` and nothing else: no detached tasks, shutdown calls, `defer` blocks or ordering code.
 
-- Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `TemporalClient`, `TemporalWorker`.
-- Order is dependency order: the observability service first, so it flushes last, then certificate reloaders, database clients, upstream and store clients, the Temporal client, and the server, application or worker last, so it drains before the clients it uses close.
+- Every owned component with a `run()` is in the root's one `ServiceGroup`: `PostgresClient`, `ValkeyClient`, `GRPCClient` and `GRPCServer` (through `GRPCServiceLifecycle`), Hummingbird's `Application`, `TimedCertificateReloader`, `SigningKeyRefresher`, `TemporalClient`, `TemporalWorker`.
+- Order is dependency order: the observability service first, so it flushes last, then certificate reloaders, database clients, upstream and Valkey clients, the Temporal client, the signing key refresher, and the server, application or worker last, so it drains before the clients it uses close.
 - `gracefulShutdownSignals: [.sigterm, .sigint]`, from `UnixSignals`. Running the group is the root's last line.
 - A process-wide singleton a library owns, such as `HTTPClient.shared` or `NIOThreadPool.singleton`, is borrowed and never shut down, and noted as such.
 - A long-running component of the service's own is a `Service` whose `run()` returns on graceful shutdown: its loop iterates `sequence.cancelOnGracefulShutdown()`, or wraps its work in `withGracefulShutdownHandler`.
@@ -361,10 +370,10 @@ A root lists its long-lived components in one `ServiceGroup` and nothing else: n
 
 Each serve process reports its health over gRPC, and the gateway over HTTP, so the deployment sends traffic only to a process that's up:
 
-- Serve registers grpc-swift-extras' `HealthService` beside its services and marks the server serving before the group runs, as [the composition root](#the-composition-root) shows. No interceptor applies to its descriptor, so a probe needs no token.
-- The gateway answers `GET /health` with `200 OK`, outside `/v1` and every tier ([the gateway's root](#the-gateways-root)).
-- Health reports the process, never its dependencies: a status that followed Postgres or an upstream would mark every replica unhealthy when one dependency fails, and the platform would restart them all at once.
-- The image holds no probe tool, so each executable has a short-lived `health` command ([commands](#commands)), which the deployment runs as the health check of every serve application and of the gateway. A service's dials its own server on `127.0.0.1` with its own certificate pair, the client config's HTTP/2 `authority` set to its certificate's name from `grpc.server.hostname`, calls `Check`, and exits non-zero unless the status is `SERVING`. The gateway's sends `GET /health` with AsyncHTTPClient.
+- Serve registers grpc-swift-extras' `HealthService` beside its services and marks the server serving from its signing key refresher's `onFirstRefresh`, once it can verify a token, as [the composition root](#the-composition-root) shows ([signing keys](security.md#signing-keys)). No interceptor applies to its descriptor, so a probe needs no token.
+- The gateway answers `GET /health` with `200 OK` once its refresher holds the first key set, and `503 Service Unavailable` before, outside `/v1` and every tier, on a route registered before the router's middleware, which applies only to the routes added after it ([the gateway's root](#the-gateways-root)).
+- Health reports the process, never its dependencies: a status that followed Postgres or an upstream would mark every replica unhealthy when one dependency fails, and the platform would restart them all at once. The first key set is the process's own state, and a later failed refresh changes no status.
+- The image holds no probe tool, so each executable has a short-lived `health` command ([commands](#commands)), which the deployment runs as the health check of every serve application and of the gateway. A service's `health` dials its own server on `127.0.0.1` with its own certificate pair, the client config's HTTP/2 `authority` set to its certificate's name from `grpc.server.hostname`, calls `Check`, and exits non-zero unless the status is `SERVING`. The gateway's `health` sends `GET /health` with AsyncHTTPClient.
 - The worker serves nothing and has no health check; Temporal shows whether it polls.
 
 ## The worker's root
@@ -415,7 +424,7 @@ let worker = try TemporalWorker(
 
 - The root builds each activity container from system use cases and port implementations, here XGRPC's and the provider target's, so no adapter target imports another, and registers the workflows. `activityContainers:` takes each container as its own argument.
 - The SDK's reader leaves `gracefulShutdownPeriod` at zero, which cancels in-flight activities at every deploy and retries them, repeating their effects. The root sets it from `temporal.worker.gracefulShutdownPeriodSeconds`, defaulting to the longest activity's `startToCloseTimeout` (30), and the deployment's stop timeout exceeds it.
-- Before its `ServiceGroup`, it applies the service's schedules over a short-lived Temporal client ([recurring work](workflows.md#recurring-work)).
+- It applies the service's schedules before running its `ServiceGroup` ([recurring work](workflows.md#recurring-work)).
 - The worker builds no server and no authenticator: it serves no RPCs, and the users it acts for are named in workflow inputs.
 
 ## The gateway's root
@@ -424,8 +433,8 @@ let worker = try TemporalWorker(
 
 ```swift
 // MARK: - Infrastructure
-let jwtConfig = config.scoped(to: "jwt")
-let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
+let keys = JWTKeyCollection()
+let authenticator = JWTAuthenticator<UserIdentity>(keys: keys)
 let propagation = BearerPropagationInterceptor<UserIdentity>()
 …  // each upstream's transport, as in a service's Serve
 let loansTracing = ClientOTelTracingInterceptor(serverHostname: loansHost, networkTransportMethod: "tcp")
@@ -437,6 +446,12 @@ let loansGRPCClient = GRPCClient(
     ]
 )
 …  // identityGRPCClient and catalogGRPCClient the same way
+let jwtConfig = config.scoped(to: "jwt")
+let signingKeyRefresher = SigningKeyRefresher(config: jwtConfig, keys: keys, logger: logger) {
+    …  // ListSigningKeys on IdentityService over identityGRPCClient, converted with JWKS(_:), as in a service's Serve
+} onFirstRefresh: {
+    …  // marks GET /health ready
+}
 
 // MARK: - Composition
 let identityClient = Bookshelf_Identity_V1_IdentityService.Client(wrapping: identityGRPCClient)
@@ -454,17 +469,20 @@ let allowedHeaders: [HTTPField.Name] = …  // content type, authorization, Idem
 let cors = CORSMiddleware<BasicRequestContext>(
     allowOrigin: .originBased,
     allowHeaders: allowedHeaders,
-    allowMethods: [.get, .post, .put, .delete]
+    allowMethods: [.get, .post, .put, .delete],
+    exposedHeaders: ["ETag", "Deprecation", "Sunset", "Link"]
 )
 let requestLogging = LogRequestsMiddleware<BasicRequestContext>(logLevel)
 let router = Router(context: BasicRequestContext.self)
+// First, so no middleware traces, measures or logs a probe.
+router.get("health") { _, _ in … }  // 200 once the first key set is in, 503 before
 router.add(middleware: cors)
 router.add(middleware: TracingMiddleware())
 router.add(middleware: MetricsMiddleware())
 router.add(middleware: ErrorMiddleware())
 router.add(middleware: requestLogging)
-router.get("health") { _, _ in HTTPResponse.Status.ok }
 api.addRoutes(to: router.group("v1"))
+api.addWellKnownRoutes(to: router.group(".well-known"))
 
 // MARK: - Hummingbird
 let httpServerConfig = config.scoped(to: "http.server")
@@ -472,7 +490,7 @@ let applicationConfiguration = ApplicationConfiguration(reader: httpServerConfig
 let application = Application(router: router, configuration: applicationConfiguration, logger: logger)
 
 // MARK: - Lifecycle
-// observability, certificateReloader, every upstream client, application
+// observability, certificateReloader, every upstream client, signingKeyRefresher, application
 ```
 
 The gateway's root has the same Logging and Observability sections as a service's. Its defaults hold `http.server.host` and `http.server.port`; Hummingbird's configuration reader comes from its `ConfigurationSupport` trait.

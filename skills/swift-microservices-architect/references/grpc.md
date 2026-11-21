@@ -191,6 +191,8 @@ package func borrowBook(
             throw RPCError(code: .failedPrecondition, message: "The loan limit has been reached.")
         case .idempotencyConflict:
             throw RPCError(code: .failedPrecondition, message: "The idempotency key was used to borrow another book.")
+        case .alreadyBorrowed:
+            throw RPCError(code: .alreadyExists, message: "The member already has this book on loan.")
         case .catalogUnavailable:
             throw RPCError(code: .unavailable, message: "The catalog is unavailable.")
         case .unknown:
@@ -203,7 +205,7 @@ package func borrowBook(
 1. Require a caller for the caller's own and administrators' RPCs (`requireUser()`); anyone's require nothing.
 2. Convert the request before the `do`: a malformed request is refused as `invalidArgument` by the conversion.
 3. The `do` declares the use case's error, `do throws(BorrowBookUseCaseError)`, and holds the use case call and the response's conversion, which doesn't throw. Its one `catch` switches over the error, a `case` per case in the order the enum declares them.
-4. No `default`, and no logging: the use case logged what happened. The `switch` is exhaustive, so a case added to the error fails the build of every handler that maps it.
+4. No `default` ([errors](style.md#errors)), and no logging: the use case logged what happened.
 
 ## An internal service
 
@@ -239,9 +241,9 @@ package struct BookInternalService: Bookshelf_Catalog_V1_BookInternalService.Sim
 }
 ```
 
-- A handler requires no caller; only `InternalCallerInterceptor` runs on its descriptor ([interceptors](#interceptors)).
+- A handler requires no caller; `InternalCallerInterceptor` admits the caller on its descriptor, where no bearer or settings interceptor runs ([interceptors](#interceptors)).
 - Its use cases take no `subject:`. One that acts for a user takes the user's id in its input, as Identity's `GetMember` takes `user_id` ([authorization](use-cases.md#authorization)).
-- The server registers it beside `XService`: `services: [bookService, bookInternalService]`.
+- The server registers it beside `XService`: `services: [bookService, bookInternalService, healthService]`.
 
 ## Conversions
 
@@ -284,9 +286,9 @@ A list that can grow large pages; one a rule keeps small, such as a member's act
 | By page number | Simple lists a client steps through by number: a member's own loans (`ListLoans`) | `page_size`, `page` | `page_info`: page, page size, total count, total pages | `loans(userID:page:pageSize:)` → `Page<Loan>` |
 | By key | Large or fast-growing lists: every member's loans (`ListAllLoans`) | `page_size`, `page_token` | `next_page_token`, empty after the last page | `loans(startingAfter:pageSize:)` → `KeyedPage<Loan>` |
 
-- By page number, a client can jump to any page, but rows added between requests shift the pages, and a deep page scans every row before it. Pages count from 1.
-- By key, the token is the page's last id, opaque to clients, and rows added between pages don't shift them, so none repeats. A page carries a token only when another page follows.
-- `page_size` 0 asks for the service's default and more than its maximum gets the maximum, both constants in `PageSize.swift`, in the `Protobuf/` at the target's root that holds what several areas convert; `page` 0, a field the client left out, asks for the first page. A negative size or page, or a token the service didn't issue, is `invalidArgument`.
+- By page number, pages count from 1.
+- By key, the token is the page's last id, opaque to clients. A page carries a token only when another page follows.
+- `page_size` 0 asks for the service's default and more than its maximum gets the maximum, both constants in `PageSize.swift` ([folders](conventions.md#folders)); `page` 0, a field the client left out, asks for the first page. A negative size or page, or a token the service didn't issue, is `invalidArgument`.
 - A list the client orders reads `order_by` into a Core enum in its conversion, and the statement maps the enum ([paged statements](persistence.md#paged-statements)).
 - The input carries what the repository's read takes, the use case returns the repository's page, and the response conversion copies its metadata ([paged statements](persistence.md#paged-statements)):
 
@@ -303,7 +305,9 @@ extension Bookshelf_Loans_V1_ListAllLoansResponse {
     init(_ page: KeyedPage<Loan>) {
         self.init()
         self.loans = page.items.map(Bookshelf_Loans_V1_Loan.init)
-        self.nextPageToken = page.nextCursor?.uuidString.lowercased() ?? ""
+        if let nextCursor = page.nextCursor {
+            self.nextPageToken = nextCursor.uuidString.lowercased()
+        }
     }
 }
 ```
@@ -315,7 +319,7 @@ extension Bookshelf_Loans_V1_ListAllLoansResponse {
 | Malformed or invalid input (`invalidIdempotencyKey`) | `invalidArgument` |
 | The request's own proof fails (`signatureRejected`, `credentialsRejected`) | `unauthenticated` |
 | What the request names doesn't exist (`…NotFound`) | `notFound` |
-| What the request creates, or asks for a second time, exists (`duplicate…`) | `alreadyExists` |
+| What the request creates, or asks for a second time, exists (`duplicate…`, `alreadyBorrowed`) | `alreadyExists` |
 | The resource changed since the caller read it (`versionConflict`) | `aborted` |
 | The resource's state refuses it, whoever asks (`loanLimitReached`, `alreadyReturned`, `idempotencyConflict`) | `failedPrecondition` |
 | Who the caller is refuses it (`forbidden`) | `permissionDenied` |
@@ -336,7 +340,7 @@ A refusal that turns on who the caller is, such as approving a request the calle
 
 ## Clients for Core's ports
 
-A port to another service is a struct in XGRPC's `Clients/`, generic over the transport, wrapping the generated client of the other service's internal contract:
+A port to another service is implemented by a struct in XGRPC's `Clients/`, generic over the transport, wrapping the generated client of the other service's internal contract:
 
 ```swift
 /// `CatalogClient` over Catalog's internal contract, as this process, proved by its certificate.
@@ -367,7 +371,7 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 - A list that shows another service's data for each item reads it in one call, never a call per item. The owner's internal contract offers a batch read, `BatchGetBooks`, which takes `ids` up to the list's maximum page size and returns the books it found; the port reads `books(ids: Set<UUID>) async throws -> [UUID: Book]`, and an id with no book is absent from the dictionary.
 - `notFound` on a lookup becomes `nil`, matching the port's optional.
 - The response conversion (`Book+Protobuf.swift` in `Clients/Protobuf/`) throws on a malformed message, such as an id that isn't a UUID or an unset field the domain needs, rather than inventing a value.
-- Every call has a deadline: the client's `ServiceConfig` sets one for all methods, and a port that needs a tighter bound passes `CallOptions` with its own `timeout`.
+- Every call has a deadline: the client's `ServiceConfig` sets one for all methods, and a method that needs a tighter bound passes `CallOptions` with its own `timeout`.
 
 ## Transports
 
@@ -375,6 +379,7 @@ The executable builds the server's and each client's transport from `<Project>Tr
 
 - One `clientSecurity` serves every client of the process, and each upstream gets its own scoped configuration (`grpc.catalog`) with its host, port, transport config and service config.
 - The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.
+- The server's config caps each connection's concurrent calls (`maxConcurrentStreams`), so a slowdown never piles more calls onto a replica than it can work through. A grpc-swift caller holds a call past the cap in its connection until another call on it ends, and the call's deadline bounds the wait: one that waits it out ends `deadlineExceeded`, which the client maps to `…Unavailable` and the gateway answers `504`. Each caller holds one connection per replica, so a replica runs at most the cap times its callers.
 - A client's host is the name in the peer certificate's DNS names. Its config sends keepalive pings on idle connections; its `ServiceConfig` waits for a ready connection, bounded by a deadline, so a transient reconnect doesn't fail a call and a down upstream still does.
 - A client's host resolves to every replica of the upstream, such as Docker Swarm's `tasks.<service>` rather than the service's one virtual address, and the upstream's certificate names it. Its `ServiceConfig` balances `.roundRobin` across those addresses: the default picks the first and sends every call down one connection, so one replica takes a caller's whole load.
 - A client neither retries nor hedges: its `ServiceConfig` sets only the deadline, wait-for-ready and round-robin balancing. Each call chain has one owner of retries: Temporal for activities, and the app calling the public API, with an idempotency key, for public creates. A port call inside an activity never retries on its own.

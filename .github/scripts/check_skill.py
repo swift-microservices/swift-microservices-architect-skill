@@ -6,8 +6,8 @@ Run from anywhere after every change to the skill, and fix until it passes:
     python3 .github/scripts/check_skill.py
 
 It checks what a script can: the frontmatter, SKILL.md's size, the references and their
-Contents lists, the related skills in Prerequisites and README.md, links and anchors, the
-plugin manifests, and the code style of every Swift example. It exits non-zero when any check fails. The review that needs judgment is the
+Contents lists, the related skills in Prerequisites and README.md, links and anchors, pinned
+package-runner commands, the plugin manifests, and the code style of every Swift example. It exits non-zero when any check fails. The review that needs judgment is the
 checklist in CLAUDE.md.
 """
 
@@ -265,6 +265,16 @@ def check_checklist_references(skill_text: str) -> None:
                 fail(f"SKILL.md:{number}: no script at {script}")
 
 
+def check_pinned_commands() -> None:
+    """Checks that every package-runner command pins a released version, so it can't run a newer, compromised release."""
+    command = re.compile(r"\b(npx|bunx|uvx)\s+(?:-\S+\s+)*([^\s`]+)")
+    for path in [ROOT / "README.md", *sorted(SKILL.rglob("*.md"))]:
+        for number, line in enumerate(read(path).splitlines(), 1):
+            for runner, package in command.findall(line):
+                if "@" not in package[1:] and "==" not in package:
+                    fail(f"{relative(path)}:{number}: {runner} {package} pins no version; name a released one ({package}@<version>)")
+
+
 # MARK: - Manifests
 
 
@@ -399,6 +409,7 @@ def main() -> int:
     check_related_skills(skill_text, readme_text)
     check_links()
     check_checklist_references(skill_text)
+    check_pinned_commands()
     check_manifests(description)
     check_swift_examples()
     check_plugin()

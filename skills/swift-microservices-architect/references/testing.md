@@ -1,6 +1,6 @@
 # Testing
 
-Tests follow the module map: each target is tested on its own, over mocks of the protocols it depends on. [Style](style.md) governs `Sources/`; the test code in `Tests/`, with Swift Testing's `@Test`, `#expect`, traits and parameterized cases, follows the Swift Testing skill (`swift-testing-pro`) instead.
+Tests follow the module map. [Style](style.md) governs `Sources/`; the test code in `Tests/`, with Swift Testing's `@Test`, `#expect`, traits and parameterized cases, follows the Swift Testing skill (`swift-testing-pro`) instead.
 
 ## Test targets
 
@@ -35,7 +35,6 @@ Each module has a test target, except `<Project>Testing`, `<project>-protos`' ta
 - A test runs only its module's code, over mocks of the rest: a handler's test doesn't build a use case, and a use case's test never reaches Postgres.
 - A workflow's suite takes the trait `.temporalTimeSkippingTestServer`, and a starting use case's `.temporalTestServer`; how a test connects a client or runs a worker on it is `TemporalTestKit`'s documentation.
 - A run downloads the test server on first use, so the machine running `XCoreTests` needs network access.
-- The time-skipping server is shared by the suite's tests and holds one clock: a run a test starts and leaves open stalls the next test's clock, so every test sees each run it starts through to its end, and carries `.timeLimit` so a stalled clock fails rather than hangs.
 - `XPostgresTests` share one harness, in `Support/TestDatabase.swift`: it connects as the owner from `POSTGRES_*`, resets the schema, applies `XMigrations.all(…)`, the list the executable applies, and gives each test a `PostgresDatabase` per role, each transaction taking its role with the constant setting `role` and its caller through `PostgresSettings.user(_:)`. A test of row-level security then runs the statements the service runs, as the role that runs them.
 - A statement Postgres refuses inside the harness's `withTransaction` arrives as the `PSQLError` itself, since `PostgresDatabase` rethrows the closure's error ([transactions](use-cases.md#transactions)).
 - `X<Provider>Tests` test the provider target's mapping the same way, and the executable's readers and defaults, when tested, are in `XTests`.
@@ -59,7 +58,6 @@ Tests/
 
 ## Mocks
 
-- A mock conforms to the protocol it stands in for and is named for it: `MockLoanRepository`, `MockCatalogClient`, `MockBorrowBookUseCase` for `BorrowBookUseCaseProtocol`.
+- A mock conforms to the protocol it stands in for ([naming](conventions.md#naming)).
 - It's hand-written: it returns, or throws, what its initializer was given. One that records its calls is a `final class` keeping them in a `Mutex`, so it stays `Sendable` without `@unchecked`. There's no mocking framework.
-- A mock lives in the `Mocks/` folder of the test target that uses it, never in a module's sources.
 - A mock every service would write alike comes from a shared package's testing product instead. `<Project>Testing` holds `MockDatabase<Scope>`, which runs a transaction's closure on the scope a test gives it, and `MockAuthenticator`, which maps tokens to identities. A library whose protocols services depend on may ship such a product too.

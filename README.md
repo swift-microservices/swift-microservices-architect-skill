@@ -46,7 +46,7 @@ codex plugin add swift-microservices-architect@swift-microservices-architect-ski
 **skills CLI**
 
 ```bash
-npx skills add https://github.com/swift-microservices/swift-microservices-architect-skill --skill swift-microservices-architect
+npx skills@1.9.0 add https://github.com/swift-microservices/swift-microservices-architect-skill --skill swift-microservices-architect
 ```
 
 **Manually**
@@ -69,15 +69,15 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 
 | Area | Covers |
 |---|---|
-| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan |
+| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan with its objectives, alerts and runbooks |
 | Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
 | Persistence | Postgres roles proved by certificates, row-level security for user and organization tenants, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
-| Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details |
+| Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details, versions and the retirement of routes |
 | Workflows | Temporal workflows and activities in Core, how use cases start and reach them, determinism, activity options, the worker |
 | Composition | Commands, configuration, logging, and graceful shutdown |
-| Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs, secrets, webhook signatures |
+| Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs and the rotation of their signing keys, secrets, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
 | Delivery | GitHub Actions CI, semantic-version releases, images on GitHub Container Registry, deploys through Dokploy |
 | Style | How the code reads, and how everything is named |
@@ -121,7 +121,7 @@ skills/swift-microservices-architect/
     ├── workflows.md            Temporal workflows, activities, the worker
     ├── composition.md          commands, composition roots, configuration, lifecycle, health
     ├── observability.md        swift-otel, and one request's trace across processes
-    ├── security.md             mTLS, tokens, authorization, secrets, webhooks
+    ├── security.md             mTLS, tokens and signing keys, authorization, secrets, webhooks
     ├── style.md                how the code reads
     ├── testing.md              test targets and mocks
     ├── delivery.md             CI/CD for each kind of package
@@ -140,7 +140,7 @@ skillevaluator tier1 skills/swift-microservices-architect --no-llm --skillspecto
 skillevaluator tier2 skills/swift-microservices-architect -o /tmp/skillevaluator
 ```
 
-The last two are NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install skillevaluator`); Tier 2 needs an NVIDIA API key, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
+The last two are NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install 'skillevaluator[tier2]'`); Tier 2 needs an NVIDIA API key, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
 
 Each pull request carries one semver label, which sets the next release's version.
 

@@ -12,17 +12,17 @@ Every change to the skill ends with [the checks](#after-every-change), repeated 
 
 ## Skill best practices
 
-These come from Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), [skills in Claude Code](https://code.claude.com/docs/en/skills), the [Agent Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) and the [Agent Skills specification](https://agentskills.io/specification), as this skill applies them, with [Codex's skills](https://learn.chatgpt.com/docs/build-skills) for what Codex reads and NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) for the Tier 1 and Tier 2 checks a skill passes before it's published. The guidance changes, so recheck the sources before changing the skill's structure or frontmatter.
+These come from Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), [skills in Claude Code](https://code.claude.com/docs/en/skills), the [Agent Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) and the [Agent Skills specification](https://agentskills.io/specification) and its [authoring guides](https://agentskills.io/skill-creation/best-practices), as this skill applies them, with [Codex's skills](https://learn.chatgpt.com/docs/build-skills) for what Codex reads and NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) for the Tier 1 and Tier 2 checks a skill passes before it's published. The guidance changes, so recheck the sources before changing the skill's structure or frontmatter.
 
 **How Claude loads a skill**, in three stages, each with its own limit:
 
-1. **The listing.** Every session lists each installed skill's `name` and `description` on every turn, and Claude decides from them alone whether to invoke the skill. Claude Code cuts an entry's text at 1,536 characters, and when the listing outgrows its budget, 1% of the model's context window, it keeps every name but drops descriptions, starting with the skills invoked least.
+1. **The listing.** Every session lists each installed skill's `name` and `description` on every turn, and Claude decides from them alone whether to invoke the skill. Claude Code cuts an entry's text at 1,536 characters, and when the listing outgrows its budget, 1% of the model's context window, it keeps every name but drops descriptions, starting with the skills invoked least. Codex fits its listing in 2% of the context window, or 8,000 characters when the window is unknown, by shortening descriptions first, so a description's opening carries its triggers.
 2. **Invocation.** The `SKILL.md` body enters the conversation as one message and stays on every later turn, so each line is a recurring cost; Claude Code doesn't re-read it, so its guidance reads as standing instructions. The specification recommends under 500 lines and 5,000 tokens. After compaction Claude Code re-attaches the first 5,000 tokens of each invoked skill, within 25,000 tokens shared by every skill invoked, the most recent first.
 3. **References.** A file in `references/` loads only when `SKILL.md` sends Claude to it. A file reached from another reference may be read in part, such as its first 100 lines.
 
 **Frontmatter**
 
-- Only `name`, `description`, `license` and `metadata`, in YAML that parses. The specification's other keys, `compatibility` and `allowed-tools`, aren't needed. Its validator, `skills-ref validate`, rejects any key outside the specification, such as Claude Code's `when_to_use` or `paths`, which Claude Code reads and other harnesses don't.
+- Only `name`, `description`, `license` and `metadata`, in YAML that parses. The specification's other keys, `compatibility` and `allowed-tools`, aren't needed: Prerequisites states the environment. Its validator, `skills-ref validate`, rejects any key outside the specification, such as Claude Code's `when_to_use` or `paths`, which Claude Code reads and other harnesses don't, and so do claude.ai and the Claude API when a skill is uploaded.
 - `metadata` holds `author`, the name in `plugin.json`'s `author`, and `tags`, one to five comma-separated tags, since the specification's `metadata` maps strings to strings.
 - `name` is the folder's name: at most 64 characters of lowercase letters, digits and single hyphens, neither first nor last, without `anthropic` or `claude`.
 - `description` is at most 800 characters, under the specification's 1,024, since the listing is paid on every turn. It's in the third person, with no angle brackets or XML tags. It says what the skill does in one short sentence, then when to use it in the words users type, starting with "Use when" inside the first 60 characters, since some harnesses list only that much, then the stack it builds on, then what it isn't for, and ends by claiming the tasks where the user doesn't name the architecture.
@@ -32,7 +32,8 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - The skill folder holds only what agents read and run: `SKILL.md`, `references/`, `scripts/` for deterministic checks, and `agents/openai.yaml`, Codex's display name for the skill. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
 - `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: Purpose, Examples (the example system), the shape, a service's package with its hard rules, who owns what, code style, Troubleshooting (the gotchas), Prerequisites, Available Scripts (a table of `| Script | Purpose | Arguments |`), Limitations, References, Related skills and Instructions (the checklists). Purpose, Examples, Troubleshooting, Prerequisites, Available Scripts, Limitations and Instructions are the headings SkillEvaluator's quality check looks for. The Instructions come last, since an agent copies the checklist for its task into its response.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
-- A script in `scripts/` is run, never read: `SKILL.md` gives its command and arguments, and only its output enters the context. It runs on macOS's bash 3.2 and on Linux, prints each failure under the rule it breaks, and a change to one is tried on a service that passes and one that fails.
+- A script in `scripts/` is run, never read: `SKILL.md` gives its command and arguments, and only its output enters the context. It runs on macOS's bash 3.2 and on Linux, takes no interactive input, prints each failure under the rule it breaks, and a change to one is tried on a service that passes and one that fails.
+- A one-off command the skill gives an agent pins a released version, such as `npx skills@1.9.0 add`, as the specification's [guide to scripts](https://agentskills.io/skill-creation/using-scripts) asks; SkillSpector reports an unpinned one as a rug-pull risk.
 - A reference over 100 lines starts with a `## Contents` list of its `##` sections.
 - Links are relative, with forward slashes and GitHub heading anchors; renaming a heading means updating every link to it.
 
@@ -61,6 +62,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
   - the gateway: `BookshelfAPI`, `LoanController`, the request contexts, `ErrorMiddleware`
   - an internal service: Catalog's `BookInternalService`; paged lists: `ListAllLoans` by key, `ListLoans` by page number
   - a provider's webhook: Resend's notice events to Loans, `ResendWebhookController`, `NoticeEventVerifier`
+  - signing keys and their rotation: Identity's `signing_keys`, `RotateSigningKeysUseCase`, `JWTCredentialIssuer`, `SigningKeyRefresher`, the gateway's `SigningKeyController`
   - CI/CD: `bookshelf-core` for a library's CI workflows, Loans for a service's
 
   Reuse these, and add an example only when none of them can show a new idea. Never bring in names, services, endpoints or details from the systems the skill is used on; write the rule they illustrate instead.
@@ -91,21 +93,24 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
    - that Prerequisites names, and `README.md`'s Works well with links, exactly the skills Related skills lists
    - every link and anchor
+   - that every `npx`, `bunx` or `uvx` command in the skill and `README.md` pins a version
    - that the descriptions and the four versions in `SKILL.md` and the Claude Code and Codex manifests agree, and that the Codex marketplace lists the plugin
    - that no Swift example builds a value inside an argument or declares a variable before a `do` for its catches to fill
    - `claude plugin validate .`, whose warnings about the missing icon, `CLAUDE.md` and untracked `.DS_Store` files are expected
-2. SkillEvaluator's Tier 1 passes, with SkillSpector's reviewed exceptions in `.github/skillspector-baseline.yaml`, kept outside the skill so the skill can't waive its own findings. A new security finding is fixed, or reviewed and added to the baseline as a rule matching one phrase in one file:
+2. SkillEvaluator's Tier 1 passes, with SkillSpector's reviewed exceptions in `.github/skillspector-baseline.yaml`, kept outside the skill so the skill can't waive its own findings. A new security finding is fixed, or reviewed and added to the baseline as a rule matching one phrase in one file. Run it on a clean checkout, such as one from `git worktree add --detach`, since an ignored file such as `.DS_Store` leaves SkillSpector's scan incomplete:
 
    ```
-   uv tool install skillevaluator
+   uv tool install 'skillevaluator[tier2]'
    skillevaluator tier1 skills/swift-microservices-architect --no-llm --skillspector-baseline .github/skillspector-baseline.yaml -o /tmp/skillevaluator
    ```
 
-3. SkillEvaluator's Tier 2 passes, with no cluster judged redundant: a rule repeated within the skill moves to its one home. It embeds the skill through NVIDIA's API, so it needs a key from [build.nvidia.com](https://build.nvidia.com). To compare the skill against the related skills too, check each one out into a folder of its own under one directory, build a catalog from it, and pass it with `--catalog`; content the skill shares with one is technique, which stays in the related skill:
+   The advisories this file's rules decide stay: a description past the quality check's 200 characters, links between references, which all sit in `SKILL.md`'s References table, the `run_script` call of a harness this skill doesn't ship for, the emoji in the semver labels, whose names the label check matches exactly, and OpenClaw's read cap under 100,000 tokens of context.
+
+3. SkillEvaluator's Tier 2 passes, with no cluster judged `DUPLICATE`: a rule repeated within the skill moves to its one home. It embeds the skill through NVIDIA's API, so it needs a key from [build.nvidia.com](https://build.nvidia.com). To compare the skill against the related skills too, check each one out, copy each skill's own folder into one directory, taking the copy without symlinks, which the tool refuses, build a catalog from it, and pass it with `--catalog`; content the skill shares with one is technique, which stays in the related skill:
 
    ```
    export SKILL_EVAL_EMBEDDING_PROVIDER=nv_build NVIDIA_API_KEY=<key>
-   skillevaluator tier2 similarity-check <related skills> --type skill --full-body --save-catalog /tmp/related-skills.json
+   skillevaluator tier2 similarity-check <related skills folder> --type skill --full-body --save-catalog /tmp/related-skills.json
    skillevaluator tier2 skills/swift-microservices-architect --catalog /tmp/related-skills.json --full-body -o /tmp/skillevaluator
    ```
 

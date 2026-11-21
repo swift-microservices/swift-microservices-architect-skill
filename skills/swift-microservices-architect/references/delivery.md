@@ -1,6 +1,6 @@
 # Delivery
 
-How each package is tested, released and deployed. A repository's CI workflows call only `swift-microservices/ci`, whose CI pipelines, `library.yml` and `service.yml`, build on swiftlang's and Apple's workflows. A repository declares its inputs and secrets and nothing else, so a change every repository needs, such as a flag or a check, lands once in `swift-microservices/ci`. [Its README](https://github.com/swift-microservices/ci#readme) gives each of its workflows' jobs and inputs, and what each requires of a repository.
+How each package is tested, released and deployed. A repository's CI workflows call only `swift-microservices/ci`, whose CI pipelines, `library.yml` and `service.yml`, build on swiftlang's and Apple's CI workflows. A repository declares its inputs and secrets and nothing else, so a change every repository needs, such as a flag or a check, lands once in `swift-microservices/ci`. [Its README](https://github.com/swift-microservices/ci#readme) gives each of its CI workflows' jobs and inputs, and what each requires of a repository.
 
 ## Contents
 - Package kinds
@@ -39,7 +39,7 @@ Each repository's `.github/workflows/` holds these, each file's `name:` in paren
 - Soundness checks every file's license header against `.license_header_template`, which holds the compact SPDX header with `@@` for the comment marker and `YEARS` for the year. `.licenseignore` lists `LICENSE` and `Package.swift`, whose tools-version line must come first.
 - A library's pull request carries exactly one label: `⚠️ semver/major`, `🆕 semver/minor`, `🔨 semver/patch` or `semver/none`. Below 1.0, a breaking change is minor and an addition patch; a doc-comment fix is patch; a change to the README, tests or CI is none.
 - Release tags the next version without a `v` and writes its notes grouped by `.github/release.yml`; the first release and every major one are tagged by hand. A tag never moves: a bad release is fixed forward with a new version.
-- Secrets: `PACKAGES_TOKEN`, passed only by a package with private dependencies, which is all that marks them: a fine-grained token owned by `<owner>`, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy its applications.
+- Secrets: `PACKAGES_TOKEN`, which only a package with private dependencies passes: a fine-grained token owned by `<owner>`, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy its applications and read their containers, which the deploy reads to wait for the new image.
 
 ## Tests
 
@@ -51,14 +51,14 @@ The CI pipelines run the tests, and they're the gate:
 | `--explicit-target-dependency-import-check error` | Every kind | Importing no module outside the target's dependency closure |
 | `-Xswiftc -require-explicit-sendable` | Libraries | Every `public` type stating whether it's `Sendable` |
 
-- The toolchain is the package's `swift-tools-version`. CI tests on it, a service and a system library on Ubuntu noble and linux/arm64, where services run, and the `Containerfile` builds on it, so moving a package to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.
-- `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, 18 or later, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it. `XValkeyTests` need a real Valkey: a service with XValkey passes `valkey_image: valkey/valkey:<major>-alpine` too, the major its Valkey runs, and the tests reach it through `VALKEY_HOST` and `VALKEY_PORT`, unset without it.
+- The toolchain is the package's `swift-tools-version`. CI tests on it, on Ubuntu noble and linux/arm64 for a service and a system library, where services run, and the `Containerfile` builds on it, so moving a package to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.
+- `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, 18 or later, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it. `XValkeyTests` need a real Valkey: a service with XValkey passes `valkey_image: valkey/valkey:<major>-alpine` too, the major its Valkey runs, 9 or later, and the tests reach it through `VALKEY_HOST` and `VALKEY_PORT`, unset without it.
 
 ## Foundation linking
 
 Both CI pipelines build an executable that links every library product, and a service's executable product, and fail when one links full Foundation or ICU ([traits and Foundation](packages.md#traits-and-foundation)).
 
-- `foundation_linking_check_excluded_products` names a product that links full Foundation only through a dependency: `BookshelfPersistence` over PostgresNIO, or a service's executable while a package it depends on still does ([full Foundation](stack.md#full-foundation)). The check skips it and says so.
+- `foundation_linking_check_excluded_products` names a product that links full Foundation only through a dependency: `BookshelfPersistence` over PostgresNIO, or a service's executable while a package it depends on does ([full Foundation](stack.md#full-foundation)). The check skips it and says so.
 - A product leaves the list in the pull request that raises the dependency to a release that stops linking full Foundation.
 
 ## A library's CI workflows
@@ -130,7 +130,8 @@ jobs:
     with:
       environment: staging
       image_repository: ghcr.io/bookshelf/bookshelf-loans
-      application_ids: '["<loans serve>", "<loans worker>"]'
+      application_ids: '["<loans migrate>", "<loans serve>", "<loans worker>"]'
+      run_to_completion_application_ids: '["<loans migrate>"]'
     secrets:
       DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
       DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
@@ -149,10 +150,11 @@ jobs:
       image_repository: ghcr.io/bookshelf/bookshelf-loans
 ```
 
-- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest. An environment runs it as one Dokploy application per command ([commands](composition.md#commands)): `loans serve --migrate-database` at one replica, first in `application_ids` and alone mounting the migrator's certificate ([Postgres](security.md#postgres)); `loans worker run`; and, when serve needs more replicas, `loans serve` without the flag ([migrations](persistence.md#migrations)). `deploy_dokploy.yml` deploys each application only once a container of the new image in the one before it passes its health check, so the migrating application's `loans health` check holds the worker and the other replicas until migrations are applied ([health](composition.md#health)).
+- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest. An environment runs it as one Dokploy application per command ([commands](composition.md#commands)), in `application_ids`' order: `loans migrate` at one replica, alone mounting the migrator's certificate ([Postgres](security.md#postgres)), then `loans serve` and `loans worker run`. `run_to_completion_application_ids` lists `loans migrate`, so `deploy_dokploy.yml` deploys serve only once migrate's container of the new image exits 0, and a failed migration stops the deploy with serve and the worker on the previous image ([migrations](persistence.md#migrations)). Each other application waits for the one before it to run, and to pass its `loans health` check where it has one ([health](composition.md#health)). The migrate application has no health check, and its Swarm settings in Dokploy give it a restart policy whose condition is `none` and an update config whose failure action is `continue`, as swift-microservices/ci requires of an application that runs to completion.
 - Every image build keeps the image's SBOM as a workflow artifact and fails on a critical vulnerability that has a fixed version, which a base image update or a dependency bump resolves. `attest_image.yml` signs each published image's build provenance and pushes it beside the image, so the deployment can verify an image with `gh attestation verify oci://<image> --owner <owner>`.
-- The gateway's `ci.yml` has no `postgres_image` and one application per environment, since it has no worker, and excludes `gateway` while its generated OpenAPI code links full Foundation.
-- `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls `deploy_dokploy.yml` with `environment: production`, that `commit`, the `image_repository`, the production `application_ids` and the Dokploy secrets. It deploys only a commit that staging ran.
+- The gateway's `ci.yml` has no `postgres_image` and one application per environment, since it has no worker or database, and excludes `gateway` while its generated OpenAPI code links full Foundation.
+- The gateway's `ci.yml` also passes `openapi_breakage_check_path: Sources/GatewayHTTP/openapi.yaml`, so oasdiff fails a pull request whose `openapi.yaml` breaks a client of the base's, such as a route removed or an input newly required ([versions](gateway.md#versions)). Removing a route the base marks `deprecated: true` passes, as its sunset's pull request does. `oasdiff breaking main:Sources/GatewayHTTP/openapi.yaml Sources/GatewayHTTP/openapi.yaml --fail-on ERR` runs the same check locally.
+- `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls `deploy_dokploy.yml` with `environment: production`, that `commit`, the `image_repository`, the production `application_ids` and `run_to_completion_application_ids`, and the Dokploy secrets. It deploys only a commit that staging ran, and may skip the commits between ([migrations](persistence.md#migrations)).
 - `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package, keeping its 30 newest versions. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).
 
 ## The Containerfile
