@@ -449,7 +449,8 @@ let allowedHeaders: [HTTPField.Name] = …  // content type, authorization, Idem
 let cors = CORSMiddleware<BasicRequestContext>(
     allowOrigin: .originBased,
     allowHeaders: allowedHeaders,
-    allowMethods: [.get, .post, .put, .delete]
+    allowMethods: [.get, .post, .put, .delete],
+    exposedHeaders: ["ETag"]
 )
 let requestLogging = LogRequestsMiddleware<BasicRequestContext>(logLevel)
 let router = Router(context: BasicRequestContext.self)
