@@ -331,7 +331,7 @@ package struct ErrorMiddleware<Context: RequestContext>: RouterMiddleware {
         do {
             return try await next(request, context)
         } catch let error as HTTPError {
-            throw Problem(status: error.status, detail: error.body)
+            throw Problem(status: error.status, detail: error.body, headers: error.headers)
         } catch let error as any HTTPResponseError {
             throw Problem(status: error.status)
         } catch let error as RPCError {
@@ -353,8 +353,9 @@ package struct ErrorMiddleware<Context: RequestContext>: RouterMiddleware {
 package struct Problem: HTTPResponseError {
     package let status: HTTPResponse.Status
     package let detail: String?
+    package let headers: HTTPFields
 
-    package init(status: HTTPResponse.Status, detail: String? = nil) {
+    package init(status: HTTPResponse.Status, detail: String? = nil, headers: HTTPFields = [:]) {
         …
     }
 
@@ -368,6 +369,7 @@ package struct Problem: HTTPResponseError {
 
 - Each `catch` throws its `Problem`, and nothing follows the `do`: the router renders a thrown `HTTPResponseError` with its `response(from:context:)`, and CORS adds its headers on the way out.
 - A refusal answers in its own words: an `HTTPError`'s message, which the gateway or Hummingbird wrote, and a `4xx` upstream's message, which the service wrote for clients ([status codes](grpc.md#status-codes)).
+- An `HTTPError`'s headers, such as `WWW-Authenticate`, `Allow` or `Retry-After`, go out on its problem: `response(from:context:)` writes them beside the content type.
 - An upstream's server error answers its status alone, since a transport's message can name internal hosts. It's logged with its cause, as is anything that isn't an HTTP or RPC error, which answers `500`.
 - Hummingbird's other `HTTPResponseError`s keep their status, such as `413` for a body over the upload limit. Router middleware also wraps the not-found responder, so an unmatched path's `404` is a problem too.
 - `RPCError` gets no retroactive `HTTPResponseError` conformance: the middleware is the one place it becomes a status.
