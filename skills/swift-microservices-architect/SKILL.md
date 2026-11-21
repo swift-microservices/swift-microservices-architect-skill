@@ -139,7 +139,7 @@ Read a reference only when the task reaches its row or a checklist names it.
 | [use-cases.md](references/use-cases.md) | Writing a model, error, repository, port or use case; transactions and authorization |
 | [persistence.md](references/persistence.md) | Writing a scope, statement, migration, policy or tenant table; pools; Valkey |
 | [grpc.md](references/grpc.md) | Changing a contract, handler, conversion, client, paged list or transport |
-| [gateway.md](references/gateway.md) | A route, request context, controller, webhook route or error mapping |
+| [gateway.md](references/gateway.md) | A route or a breaking change to one, a request context, controller, webhook route or error mapping |
 | [workflows.md](references/workflows.md) | A workflow, activity container or worker, or starting or reaching a run |
 | [composition.md](references/composition.md) | A command, composition root, configuration, logging, health checks or the ServiceGroup |
 | [observability.md](references/observability.md) | Bootstrapping telemetry or tracing a request across processes |

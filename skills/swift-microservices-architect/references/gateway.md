@@ -11,6 +11,7 @@ The public HTTP API: a Hummingbird application that verifies the caller, chooses
 - Controllers
 - Conversions
 - Errors
+- Versions
 - Upstream clients
 - The edge
 
@@ -91,7 +92,7 @@ components:
 ```
 
 - It declares one `UUID` schema (`type: string`, `format: uuid`) that every id references, which the generator makes a `String`, so ids cross HTTP as the services write them, lowercase ([conversions](#conversions)).
-- `servers` ends in `/v1`, and paths are written without it.
+- `servers` ends in `/v1`, and paths are written without it; a `/v2` route has its own ([versions](#versions)).
 - A create a client may retry declares the `Idempotency-Key` header as a required parameter, once under `components/parameters` ([controllers](#controllers)).
 - A page's schema is `<Resource>PageResponse`, its items under the resource's plural beside `pageInfo` or `nextPageToken`.
 - Every operation has an `operationId` and a `security` entry for its tier: `[]` for no caller, `[{bearerAuth: []}]` for a caller or an administrator ([request contexts](#request-contexts-and-tiers)).
@@ -401,6 +402,18 @@ package struct Problem: HTTPResponseError {
 | `unavailable` | `503` |
 | `deadlineExceeded` | `504` |
 | `unknown`, `internalError`, `dataLoss`, anything else | `500` |
+
+## Versions
+
+`/v1` changes only in ways a client built against it ignores: a new route, an optional request field or query parameter, a new response field. Any other change breaks clients, such as a field or route removed or renamed, a type changed, an input newly required or a status given a new meaning, and never lands in place:
+
+- A breaking change to a route is that route again under `/v2`, beside `/v1`'s; the routes it leaves alone stay at `/v1` only. `openapi.yaml` documents it with a path-level `servers` entry ending in `/v2`, as the JWK Set's path has one at the origin, and names a schema whose shape changed with a `V2` suffix (`LoanResponseV2`), so both versions' types generate side by side.
+- `BookshelfAPI`'s `addV2Routes(to:)` registers it on the router's `v2` group, in its tier. Its handler sits beside `/v1`'s in the resource's controller, and both call the same RPC unless the contract changed too ([contracts](grpc.md#contracts-in-the-protos-package)).
+- From the deploy that ships `/v2`, `/v1`'s route is `deprecated: true` in `openapi.yaml`, and `DeprecationMiddleware`, on the group the controller registers it in, adds three headers to its responses, which CORS lists in `exposedHeaders` so a browser client reads them too:
+  - `Deprecation` (RFC 9745): when the route was deprecated, as a structured-field date, `@` and the Unix time in seconds
+  - `Sunset` (RFC 8594): when it will be removed, as an HTTP-date, never before the deprecation
+  - `Link`: `<the migration guide's URL>; rel="deprecation"`
+- The sunset date is the user's. When it passes, one pull request removes the route and its handler, and the path answers `404` like any unmatched path.
 
 ## Upstream clients
 

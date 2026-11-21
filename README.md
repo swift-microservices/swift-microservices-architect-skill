@@ -74,7 +74,7 @@ To plan a backend, add a service, an operation or a durable process, set up CI/C
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
 | Persistence | Postgres roles proved by certificates, row-level security for user and organization tenants, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
-| Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details |
+| Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details, versions and the retirement of routes |
 | Workflows | Temporal workflows and activities in Core, how use cases start and reach them, determinism, activity options, the worker |
 | Composition | Commands, configuration, logging, and graceful shutdown |
 | Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs and the rotation of their signing keys, secrets, webhook signatures |
