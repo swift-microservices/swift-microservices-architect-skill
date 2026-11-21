@@ -140,7 +140,7 @@ skillevaluator tier1 skills/swift-microservices-architect --no-llm --skillspecto
 skillevaluator tier2 skills/swift-microservices-architect -o /tmp/skillevaluator
 ```
 
-The last two are NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install skillevaluator`); Tier 2 needs an NVIDIA API key, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
+The last two are NVIDIA's [SkillEvaluator](https://docs.nvidia.com/skills/skillevaluator/) (`uv tool install 'skillevaluator[tier2]'`); Tier 2 needs an NVIDIA API key, as [CLAUDE.md](CLAUDE.md#after-every-change) describes.
 
 Each pull request carries one semver label, which sets the next release's version.
 
