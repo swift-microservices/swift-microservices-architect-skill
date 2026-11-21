@@ -126,8 +126,8 @@ bookshelf_loans   loans-migrator   loans_owner
 ```
 
 - The deployment provides these lines; the service names the identities and roles in them ([naming](conventions.md#naming)).
-- The migrator is an identity of its own, whose pair only the one process running `serve --migrate-database` and the `build-indexes` command mount, so no other replica can connect as the owner.
-- `PostgresClient.Configuration(config:role:certificateReloader:)` presents the reloader's pair over required TLS. Serve and the worker pass their `tls` reloader, so each new connection presents a renewed pair; `serve --migrate-database` and `build-indexes` pass a reloader of the migrator's pair, which their short-lived client uses and which is never run.
+- The migrator is an identity of its own, whose pair only the `migrate` and `build-indexes` commands mount, never serve or the worker, so no process that serves requests or runs activities can connect as the owner.
+- `PostgresClient.Configuration(config:role:certificateReloader:)` presents the reloader's pair over required TLS. Serve and the worker pass their `tls` reloader, so each new connection presents a renewed pair; `migrate` and `build-indexes` pass a reloader of the migrator's pair, which their short-lived client uses and which is never run.
 - Where a managed Postgres takes no client certificates, each role proves itself with a SCRAM-SHA-256 password from the secret store instead: `PostgresClient.Configuration(config:role:)` reads it as a secret, and migrations set it ([migrations](persistence.md#migrations)).
 
 ## User tokens

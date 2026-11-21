@@ -99,7 +99,7 @@ do {
 
 - A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls hang until their deadline.
 - The worker's `gracefulShutdownPeriod` defaults to zero, so every deploy cancels in-flight activities and repeats their effects ([the worker's root](references/composition.md#the-workers-root)).
-- The database owner bypasses row-level security: only `serve --migrate-database` and `build-indexes` connect as it; the migrating serve's health check waits out its migrations ([migrations](references/persistence.md#migrations)).
+- The database owner bypasses row-level security: only `migrate` and `build-indexes` connect as it, never serve or the worker ([migrations](references/persistence.md#migrations)).
 - Policies combine with `OR`: a session acting for an organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
@@ -186,7 +186,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 - [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md), the SQL with supabase-postgres-best-practices
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
 - [ ] XCore's Workflows/, XValkey, X<Provider> as the plan needs; a workflow designed with temporal-developer, a Valkey command chosen with valkey
-- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' lists, Serve with its health service, Health, BuildIndexes, and Run with a worker (composition.md)
+- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' lists, Migrate, Serve with its health service, Health, BuildIndexes, and Run with a worker (composition.md)
 - [ ] Gateway: routes for the public RPCs (gateway.md)
 - [ ] A test target per module testing.md lists, over mocks, a file per tested type, written with swift-testing-pro
 - [ ] Its CI workflows, Containerfile, .swift-format and Dependabot as a service (delivery.md, style.md#formatting)

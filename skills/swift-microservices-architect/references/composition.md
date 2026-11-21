@@ -25,6 +25,7 @@ struct Loans: AsyncParsableCommand {
         subcommands: [
             Serve.self,
             Worker.self,
+            Migrate.self,
             Health.self,
             BuildIndexes.self,
         ],
@@ -34,13 +35,48 @@ struct Loans: AsyncParsableCommand {
 ```
 
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
-- `serve --migrate-database` applies pending migrations as the owner, proved by the migrator's certificate, then serves, in one process only ([migrations](persistence.md#migrations)). Without the flag it never reads the owner's credentials.
-- `build-indexes` builds the indexes XPostgres lists for building concurrently, as the owner over the migrator's certificate, since only a table's owner may index it. It's a short-lived command an operator runs after the deploy that lists a new index, so a build that takes minutes never delays serve's start.
+- `migrate` applies pending migrations as the owner, proved by the migrator's certificate, and exits ([migrations](persistence.md#migrations)). It's a short-lived command, which each deploy runs before serve and the worker start ([a service's CI workflows](delivery.md#a-services-ci-workflows)), so serve and the worker never read the owner's credentials.
+- `build-indexes` builds the indexes XPostgres lists for building concurrently, as the owner over the migrator's certificate, since only a table's owner may index it. It's a short-lived command an operator runs after the deploy that lists a new index, never a step of the deploy, so a build that takes minutes holds up no deploy.
 - A service with workflows adds the group `worker`, whose default subcommand `run` starts the Temporal worker: `loans worker run`. The serve process and the worker are separate processes from one image.
 - An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived command, a subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections, no Observability and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
 - A short-lived command's operands, such as whom it acts on, are its `@Option`s and go into the use case's input; only a value configuration also carries goes through the provider. It reports through its log line and exit status, and prints to standard output only a value the operator must read.
 - Any other short-lived command connects as `<x>_internal`, since no caller is bound, and reads a secret it needs through the `ConfigReader` with `isSecret: true`, never from a flag, which the process list shows.
 - Each command's `run()` is a composition root: the only code that reads configuration, constructs concrete types and runs them. Nothing below it reads configuration, builds a client or starts a task.
+
+`Migrate/Migrate.swift`, a short-lived command:
+
+```swift
+struct Migrate: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "migrate",
+        abstract: "Apply pending database migrations, then exit"
+    )
+
+    func run() async throws {
+        // MARK: - Configuration
+        …  // config, as in Serve
+
+        // MARK: - Logging
+        …  // logger, as in Serve
+
+        // MARK: - Infrastructure
+        let postgresConfig = config.scoped(to: "postgres")
+        let migratorTLSConfig = postgresConfig.scoped(to: "owner.tls")
+        …  // migratorCertificateReloader from migratorTLSConfig, as Serve's certificateReloader
+        let ownerPostgresConfiguration = try PostgresClient.Configuration(
+            config: postgresConfig,
+            role: "owner",
+            certificateReloader: migratorCertificateReloader
+        )
+
+        // MARK: - Composition
+        try await PostgresClient.withClient(configuration: ownerPostgresConfiguration, logger: logger) { client in
+            let migrations = Migrations(client: client, …, logger: logger)
+            try await migrations.apply()
+        }
+    }
+}
+```
 
 ## The composition root
 
@@ -52,9 +88,6 @@ struct Serve: AsyncParsableCommand {
         commandName: "serve",
         abstract: "Serve the loans gRPC services"
     )
-
-    @Flag(help: "Apply pending database migrations before serving")
-    var migrateDatabase = false
 
     func run() async throws {
         // MARK: - Configuration
@@ -99,19 +132,6 @@ struct Serve: AsyncParsableCommand {
         )
 
         let postgresConfig = config.scoped(to: "postgres")
-        if migrateDatabase {
-            let migratorTLSConfig = postgresConfig.scoped(to: "owner.tls")
-            …  // migratorCertificateReloader from migratorTLSConfig, as certificateReloader above
-            let ownerPostgresConfiguration = try PostgresClient.Configuration(
-                config: postgresConfig,
-                role: "owner",
-                certificateReloader: migratorCertificateReloader
-            )
-            try await PostgresClient.withClient(configuration: ownerPostgresConfiguration, logger: logger) { client in
-                let migrations = Migrations(client: client, …, logger: logger)
-                try await migrations.apply()
-            }
-        }
         let servicePostgresConfiguration = try PostgresClient.Configuration(
             config: postgresConfig,
             role: "service",
