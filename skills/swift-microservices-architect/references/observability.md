@@ -26,6 +26,6 @@ Each hop continues the trace its caller started, so one borrow reads as one trac
 
 - `serverHostname` is the server's name from `grpc.server.hostname` for a server's interceptor and the upstream's host for a client's; `networkTransportMethod` is `"tcp"`.
 - The interceptors keep `includeRequestMetadata` and `includeResponseMetadata` off: request metadata holds the bearer token, which never reaches a span ([user tokens](security.md#user-tokens)).
-- The health service's descriptor isn't traced, so the deployment's probes record no spans ([health](composition.md#health)).
+- The deployment's probes record no spans: the health service's descriptor isn't traced, and the gateway's `/health` comes before its middleware ([health](composition.md#health)).
 - A root never replaces the Temporal configurations' `interceptors`, which would drop the SDK's tracing.
 - A gRPC call's duration and status are on its span, so services record no metrics of their own for calls; the gateway's `MetricsMiddleware` covers the public API.
