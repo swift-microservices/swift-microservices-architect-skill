@@ -15,7 +15,7 @@ How the code reads: the bar for readability, error handling, strict concurrency,
 
 ## Reading like the requirement
 
-The bar is the sample code in Apple's WWDC sessions, such as *Meet async/await in Swift*, *Embrace Swift generics*, *Beyond the basics of structured concurrency* and *Migrate your app to Swift 6*: small types named for their role, straight-line async code, early exits, nothing clever.
+The bar is the sample code in Apple's WWDC sessions: small types named for their role, straight-line async code, early exits, nothing clever.
 
 - A use case's `callAsFunction`, a workflow's `run`, an activity and a handler read top to bottom as the requirement they implement: refuse what isn't allowed, do the work, record what happened, return.
 - No private helper methods in use cases, workflows or activities. A step that deserves a name is a policy's or model's method (`policy.dueDate(borrowedAt:)`), a port, another activity or a child workflow; a body too long to read at once is two use cases.
@@ -90,21 +90,6 @@ package import Foundation
 - A file imports it only when it uses a Foundation type, after its other imports.
 - A scoped import takes the same condition: `import struct Foundation.Data` alone links full Foundation, so it's `import struct FoundationEssentials.Data` under `#if canImport(FoundationEssentials)`.
 - `FoundationEssentials` ships with every Swift toolchain on Linux and isn't importable on Darwin, where the condition takes `Foundation`. With `MemberImportVisibility`, code that reaches for full Foundation compiles on a Mac and fails on Linux, so CI's Linux build catches it.
-- Modern Foundation and standard library APIs only:
-
-| Instead of | Use |
-|---|---|
-| `DateFormatter`, `ISO8601DateFormatter` | `Date.ISO8601FormatStyle`: `date.formatted(.iso8601)`, `try Date(string, strategy: .iso8601)` |
-| `NumberFormatter`, localized date formatters | `FormatStyle`s (`.number`, `.currency(code:)`, `Date.FormatStyle`), imported from `FoundationInternationalization` only where text is formatted for people |
-| `NSRegularExpression` | Swift `Regex` |
-| `JSONSerialization` | `Codable` with `JSONEncoder` and `JSONDecoder` |
-| `URLSession` | AsyncHTTPClient |
-| `String(format:)`, `CharacterSet`, `NSString` methods | String interpolation; `Character` and `Unicode.Scalar.Properties` |
-| `TimeInterval` timeouts, `DispatchTime` | `Duration`: `.seconds(30)`, `.milliseconds(500)` |
-| `Date()` | `Date.now` |
-| `URL(fileURLWithPath:)` | `URL(filePath:)` |
-| `DispatchQueue`, `NSLock`, `Thread` | Structured concurrency, actors, `Mutex` |
-
 - A dependency's traits decide whether it links full Foundation; a service declares them so it doesn't ([traits and Foundation](packages.md#traits-and-foundation)).
 
 ## Types and values
