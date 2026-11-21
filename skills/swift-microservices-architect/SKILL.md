@@ -15,7 +15,7 @@ Decides how a Swift backend splits into services and modules, where code lives a
 
 ## Examples
 
-`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Project>` and `<project>` for the project. The examples are Bookshelf, a small lending library:
+`X` stands for a service in a target's name (`LoansCore`) and for what a type is named for (`BorrowBookUseCase`, `LoanService`); `<Project>` and `<project>` for the project. The examples are Bookshelf, a lending library:
 
 | Package | Holds |
 |---|---|
@@ -93,14 +93,14 @@ do {
 - Build, then call: a value a call takes is a named `let`, never a conversion, `try` or `await` in the arguments ([build, then call](references/style.md#build-then-call)).
 - No helper methods in use cases, workflows or activities, and no `Result` juggling, steering flags, `try?`, nested `do` in a `catch`, or force unwraps.
 - Swift 6 mode with `ExistentialAny`, `MemberImportVisibility`, `InternalImportsByDefault`, `NonisolatedNonsendingByDefault` and strict memory safety ([Swift settings](references/packages.md#swift-settings)); `package` access across a service's targets.
-- Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows it.
+- Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows.
 
 ## Troubleshooting
 
 - A component left out of the `ServiceGroup` never runs: an unrun `GRPCClient` or `PostgresClient` never connects, so its calls hang until their deadline.
 - The worker's `gracefulShutdownPeriod` defaults to zero, so every deploy cancels in-flight activities and repeats their effects ([the worker's root](references/composition.md#the-workers-root)).
-- The database owner bypasses row-level security: only `serve --migrate-database` and `build-indexes` connect as it, and the migrating application's health check waits out its migrations ([migrations](references/persistence.md#migrations)).
-- Policies combine with `OR`: on a table with a user's and an organization's, a session acting for the organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
+- The database owner bypasses row-level security: only `serve --migrate-database` and `build-indexes` connect as it; the migrating serve's health check waits out its migrations ([migrations](references/persistence.md#migrations)).
+- Policies combine with `OR`: a session acting for an organization reaches its rows through the caller's own use cases ([organization tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
 - A plain or scoped `import Foundation` in owned code links full Foundation on Linux; use the conditional `FoundationEssentials` import.
@@ -124,11 +124,11 @@ Each is in this skill's `scripts/`, runs from the package's root and exits non-z
 ## Limitations
 
 - A workflow start or signal lost after its transaction commits is recovered only when the client retries the request ([transactions](references/use-cases.md#transactions)).
-- Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, certificate issuance, observability backends, backups, client SDKs and frontends; ask the user rather than invent them.
+- Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, certificate issuance, observability backends, backups, client SDKs and frontends; ask the user, never invent them.
 
 ## References
 
-Read a reference only when the task reaches its row or a checklist item names it.
+Read a reference only when the task reaches its row or a checklist names it.
 
 | Reference | Read when |
 |---|---|
@@ -160,7 +160,7 @@ They cover the code inside the shapes, and this skill's shapes and rules win ove
 
 ## Instructions
 
-Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off as they're done; each `.md` file it names is in `references/`.
+Copy the task's checklist into the response, with **Verify**'s lines in place of a `Verify` item, and check items off when done; each `.md` file it names is in `references/`.
 
 **Plan a backend**
 
@@ -211,7 +211,7 @@ Copy the task's checklist into the response, with **Verify**'s lines in place of
 
 ```
 - [ ] The feature's established approach (style.md#reading-like-the-requirement)
-- [ ] Design the workflow with temporal-developer: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow); without a Swift reference there, read the SDK's documentation
+- [ ] Design the workflow with temporal-developer and the SDK's documentation: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow)
 - [ ] Each person's change is written by its use case, then signalled if the run waits on it, or sent as an update if only the run can decide (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
 - [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)
