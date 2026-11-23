@@ -107,12 +107,13 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
 
    The advisories this file's rules decide stay: a description past the quality check's 200 characters, links between references, which all sit in `SKILL.md`'s References table, the `run_script` call of a harness this skill doesn't ship for, the emoji in the semver labels, whose names the label check matches exactly, and OpenClaw's read cap under 100,000 tokens of context.
 
-3. SkillEvaluator's Tier 2 passes, with no cluster judged `DUPLICATE`: a rule repeated within the skill moves to its one home. It embeds the skill through NVIDIA's API, so it needs a key from [build.nvidia.com](https://build.nvidia.com). To compare the skill against the related skills too, check each one out, copy each skill's own folder into one directory, taking the copy without symlinks, which the tool refuses, build a catalog from it, and pass it with `--catalog`; content the skill shares with one is technique, which stays in the related skill:
+3. SkillEvaluator's Tier 2 passes, with no cluster judged `DUPLICATE`: a rule repeated within the skill moves to its one home. It embeds the skill through NVIDIA's API with `nvidia/nemotron-3.5-embed-1b`, so it needs a key from [build.nvidia.com](https://build.nvidia.com). NVIDIA's content screen refuses some harmless text, such as any `metadata:`, so Tier 2 runs through `.github/scripts/skillevaluator_tier2.py`, which embeds a refused chunk piece by piece and prints each one it approximated. To compare the skill against the related skills too, check each one out, copy each skill's own folder into one directory, taking the copy without symlinks, which the tool refuses, build a catalog from it, and pass it with `--catalog`; content the skill shares with one is technique, which stays in the related skill:
 
    ```
-   export SKILL_EVAL_EMBEDDING_PROVIDER=nv_build NVIDIA_API_KEY=<key>
-   skillevaluator tier2 similarity-check <related skills folder> --type skill --full-body --save-catalog /tmp/related-skills.json
-   skillevaluator tier2 skills/swift-microservices-architect --catalog /tmp/related-skills.json --full-body -o /tmp/skillevaluator
+   export SKILL_EVAL_EMBEDDING_PROVIDER=nv_build SKILL_EVAL_EMBEDDING_MODEL=nvidia/nemotron-3.5-embed-1b NVIDIA_API_KEY=<key>
+   tier2="$(uv tool dir)/skillevaluator/bin/python -I .github/scripts/skillevaluator_tier2.py tier2"
+   $tier2 similarity-check <related skills folder> --type skill --full-body --save-catalog /tmp/related-skills.json
+   $tier2 skills/swift-microservices-architect --catalog /tmp/related-skills.json --full-body -o /tmp/skillevaluator
    ```
 
 4. Review the diff for what no script checks:

@@ -141,7 +141,7 @@ skills/swift-microservices-architect/
     ├── delivery.md             CI/CD for each kind of package
     ├── conventions.md          names, folders, files
     └── related-skills.md       which maintained skill each task loads, and where this skill wins
-.github/                        validation, SkillSpector's reviewed exceptions, the semver label check, releases
+.github/                        validation, SkillSpector's reviewed exceptions, the Tier 2 runner, the semver label check, releases
 CLAUDE.md                       authoring rules for changing the skill
 ```
 
