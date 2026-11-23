@@ -11,7 +11,7 @@ metadata:
 
 ## Purpose
 
-Decides how a Swift backend splits into services and modules, who owns what, and the shapes that hold a service together, from Core's use cases to deployment. A backend built another way keeps its structure and conventions unless the user asks otherwise, and takes only the shapes it lacks.
+Decides how a Swift backend splits into services and modules, who owns what and the shapes that hold a service together. A backend built another way keeps its structure and conventions unless the user asks otherwise, and takes only the shapes it lacks.
 
 ## Examples
 
@@ -116,7 +116,7 @@ do {
 
 ## Available Scripts
 
-Each is in this skill's `scripts/`, runs from the package's root and exits non-zero on any failure:
+Each is in this skill's `scripts/`, runs from the package's root and exits non-zero on failure:
 
 | Script | Purpose | Arguments |
 |---|---|---|
@@ -155,7 +155,7 @@ Read a reference only when the task reaches its row or a checklist names it.
 
 ## Related skills
 
-Maintained skills cover the technique, from a feature's design and a review to the code inside a shape; [related-skills.md](references/related-skills.md) names the one each task loads. Where one differs, this skill's services, mechanisms, shapes, stack and style win.
+[related-skills.md](references/related-skills.md) names the skill for each task's technique. Where one differs, this skill's services, mechanisms, shapes, stack and style win.
 
 ## Instructions
 
@@ -164,7 +164,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Plan a backend**
 
 ```
-- [ ] The requirements, scale and trade-offs with system-design, each open choice weighed with architecture (related-skills.md)
+- [ ] The requirements, scale and trade-offs with system-design, each open choice searched online (style.md#reading-like-the-requirement) and weighed with architecture (related-skills.md)
 - [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
 - [ ] Name each service, its target names clashing with no module in the graph
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, events, short-lived state
@@ -186,7 +186,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Add a service**
 
 ```
-- [ ] The feature's design with system-design and architecture (related-skills.md), then its established approach (style.md#reading-like-the-requirement)
+- [ ] Search for the established approach (style.md#reading-like-the-requirement), then design the feature with system-design and architecture (related-skills.md)
 - [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in
 - [ ] Package <project>-x from packages.md#packageswift-template, with only the targets the plan names
 - [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
@@ -203,7 +203,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Add an operation**
 
 ```
-- [ ] The feature's design with system-design and architecture (related-skills.md), then its established approach (style.md#reading-like-the-requirement)
+- [ ] Search for the established approach (style.md#reading-like-the-requirement), then design the feature with system-design and architecture (related-skills.md)
 - [ ] Contract: the RPC under its audience in XService, or in XInternalService
 - [ ] XCore: the use case's files; its scope lists only what it touches (use-cases.md); an event it records (events.md#the-outbox)
 - [ ] A workflow run it affects, reached from the use case (workflows.md#reaching-a-run-from-a-use-case)
@@ -218,7 +218,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Add a durable process**
 
 ```
-- [ ] The feature's design with system-design and architecture (related-skills.md), then its established approach (style.md#reading-like-the-requirement)
+- [ ] Search for the established approach (style.md#reading-like-the-requirement), then design the feature with system-design and architecture (related-skills.md)
 - [ ] Design the workflow with temporal-developer and the SDK's documentation: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow)
 - [ ] Each person's change: written by its use case, then signalled if the run waits on it, or sent as an update if only the run decides (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
@@ -286,7 +286,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
 - [ ] Workflows checked with temporal-developer, tests with swift-testing-pro, and actors, Mutexes and unchecked concurrency with swift-concurrency-pro
 - [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), package access, naming (conventions.md) and API design with swift-api-design-guidelines-skill
-- [ ] Security, performance and correctness with code-review (related-skills.md)
+- [ ] Security, performance and correctness with code-review (related-skills.md); hand-rolled schemes (style.md#reading-like-the-requirement)
 - [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (shapes), minor (naming, layout, logging), each with a file and line or an empty grep, the rule and the fix; change code only when asked
 - [ ] scripts/swift_ci.sh build and test; report each result, or why it couldn't run
 ```

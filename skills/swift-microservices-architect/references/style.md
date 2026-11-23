@@ -26,10 +26,19 @@ The bar is the sample code in Apple's WWDC sessions: small types named for their
 - `// MARK: -` names the sections of a composition root and the groups inside a type: a service's RPCs by audience, a router builder's tiers, an activity container's steps.
 - Code that a reader would otherwise check twice gets a one-line comment with the reason: a business rule, an ordering constraint, a safety property. A comment never narrates the next line.
 
-A feature is built the established way. Before writing one, look up the standard or documented practice that covers it: an RFC, OWASP's guidance, or the provider's or library's documented approach, such as RFC 9457 for problem details, RFC 8725 for JWTs, OWASP's password storage, the IETF `Idempotency-Key` header, RFC 3339 for dates on the wire and Google's AIPs for a contract's standard methods and fields.
-- Adopt that practice within this skill's rules, and never invent a scheme where a standard exists.
+A feature is built the established way. Before designing one, search online for how it's already solved, in this order:
+1. The standard: an RFC, OWASP's guidance, or the provider's or library's documentation, such as RFC 9457 for problem details, RFC 8725 for JWTs, OWASP's password storage, the IETF `Idempotency-Key` header, RFC 3339 for dates on the wire and Google's AIPs for a contract's standard methods and fields.
+2. Where no standard covers it, how established production systems and the community solve it, such as Stripe's idempotency keys, the transactional outbox or a token bucket for rate limits.
+3. An existing implementation: a maintained Swift package first, else a well-tested one in another language, such as Go, Rust or Java, to port.
+
+Then:
+- Adopt what the search finds within this skill's rules, and never invent a scheme where a standard or a proven implementation exists.
+- A package goes in an adapter target, or in Core only if [Core may link it](packages.md#what-core-may-link), and never replaces a library [the stack](stack.md) names.
+- Ported code lands in the shape it belongs in, a Core value, a use case or an adapter, and leaves its source's architecture behind.
+- Code is copied or ported only under a permissive license, keeping its notice, and the original's tests or test vectors become its tests.
+- The sources go in the plan's Decisions ([the plan](system.md#the-plan)) or, outside a plan, the response, so the user sees what was found.
 - Handle what most production systems meet. A rare edge case gets a sentence to the user, not code.
-- Without web access, tell the user that the approach comes from prior knowledge, unchecked against the current standard.
+- Without web access, tell the user that the approach comes from prior knowledge, unchecked against the current standard and implementations.
 
 ## Build, then call
 

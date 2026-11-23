@@ -74,7 +74,7 @@ A new backend goes from idea to production through the skill's checklists, in th
 
 The plan's Build order lists these steps and ticks each one once its checklist's build, tests and checks pass, so invoking the skill with no task picks up at the next step.
 
-On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. One that adds a feature starts by designing it with Engineering's system design skill and looking up the established standard for it, such as an RFC or OWASP's guidance, and one that changes code ends with a build and a test run repeated until both pass.
+On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. Planning a backend or adding a feature starts by searching online for how it's already solved: the standard, such as an RFC or OWASP's guidance, how production systems handle it, and a Swift package to reuse or a well-tested implementation to port. The agent names its sources, then designs the feature with Engineering's system design skill. One that changes code ends with a build and a test run repeated until both pass.
 
 ## What it covers
 
