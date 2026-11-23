@@ -154,7 +154,7 @@ The plan stays current: each Build order line is ticked once its checklist is do
 |---|---|---|
 
 ## Decisions
-- Each boundary and why it holds; each departure from a default or exception to a rule, with its reason
+- Each boundary and why it holds; each departure from a default or exception to a rule, and each open choice's pick, with its reason
 
 ## Operations
 | Environment | Postgres `max_connections` | Each process's replicas and role pools, and their total | Collector endpoint | Stop timeout | Each topic's partitions and retention |

@@ -7,7 +7,7 @@ Every change to the skill ends with [the checks](#after-every-change), repeated 
 ## What the skill is for
 
 - It decides how a Swift backend splits into services and modules, where code lives and who owns it, and the shapes that hold a service together: Core's models, errors, repositories, ports, use cases and workflows; the events services publish and consume; the Postgres, gRPC, Valkey, Kafka and provider adapters; the gateway; the composition roots; the shared `<project>-core` and `<project>-protos` packages; how each package is tested, released and deployed; and how the code reads and is named.
-- It states shapes and rules. The code inside a shape that isn't architecture (actor design, task group technique, test code, policy SQL, Valkey commands) belongs to the skills under Related skills in `SKILL.md`.
+- It states shapes and rules. The technique that isn't architecture belongs to the skills `references/related-skills.md` lists: a design's requirements, failure modes and trade-offs, an architecture decision record, a review's security and performance pass, a release checklist, an incident, and the code inside a shape (actor design, task group technique, test code, policy SQL, Valkey commands).
 - Out of scope until decided: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery, client SDKs and frontends.
 
 ## Skill best practices
@@ -30,7 +30,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 **Structure**
 
 - The skill folder holds only what agents read and run: `SKILL.md`, `references/`, `scripts/` for deterministic checks, and `agents/openai.yaml`, Codex's display name for the skill. Everything for people, such as `README.md`, this file, `.github/` and the license, stays outside it.
-- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: Purpose, Examples (the example system), the shape, a service's package with its hard rules, who owns what, code style, Troubleshooting (the gotchas), Prerequisites, Available Scripts (a table of `| Script | Purpose | Arguments |`), Limitations, References, Related skills and Instructions (the checklists). Purpose, Examples, Troubleshooting, Prerequisites, Available Scripts, Limitations and Instructions are the headings SkillEvaluator's quality check looks for. The Instructions come last, since an agent copies the checklist for its task into its response.
+- `SKILL.md` holds what every task needs, the most important first, since compaction keeps the start. Its sections are: Purpose, Examples (the example system), the shape, a service's package with its hard rules, who owns what, code style, Troubleshooting (the gotchas), Prerequisites, Available Scripts (a table of `| Script | Purpose | Arguments |`), Limitations, References, Related skills (a pointer to `references/related-skills.md`) and Instructions (the checklists). Purpose, Examples, Troubleshooting, Prerequisites, Available Scripts, Limitations and Instructions are the headings SkillEvaluator's quality check looks for. The Instructions come last, since an agent copies the checklist for its task into its response.
 - Detail lives in `references/`, one topic per file. Every reference is in `SKILL.md`'s References table, saying when to read it, so none is reachable only through another: references stay one level deep.
 - A script in `scripts/` is run, never read: `SKILL.md` gives its command and arguments, and only its output enters the context. It runs on macOS's bash 3.2 and on Linux, takes no interactive input, prints each failure under the rule it breaks, and a change to one is tried on a service that passes and one that fails.
 - A one-off command the skill gives an agent pins a released version, such as `npx skills@1.9.0 add`, as the specification's [guide to scripts](https://agentskills.io/skill-creation/using-scripts) asks; SkillSpector reports an unpinned one as a rug-pull risk.
@@ -44,7 +44,7 @@ These come from Anthropic's [skill authoring best practices](https://platform.cl
 - One home per example, too. Code shown in one reference is linked from the others: the composition root holds the transports, the gateway's root its upstream clients.
 - `SKILL.md`'s Troubleshooting holds the gotchas: mistakes that compile and then fail only at run time or silently, such as a component left out of the `ServiceGroup` or a nondeterministic workflow; a mistake the build catches is stated once, in its shape's reference. An environment fact that stops a build or test from running is a prerequisite.
 - One term per concept, no time-sensitive statements, concrete examples, and one default rather than a menu of options.
-- Related skills lists each skill that covers the code inside a shape, one line each: what it covers, the `name` in that skill's frontmatter, and a link to its source. Prerequisites names the same skills, so an agent asks the user to install a missing one, and `README.md`'s Works well with links the same sources. A related skill is chosen for server-side Swift on Linux, accuracy, the specification and a small `SKILL.md`; a pair on one subject, such as Swift Testing and Swift Concurrency, comes from one author. Where its examples differ from this skill, this skill's shapes and rules win, and the overlap is never restated here.
+- `references/related-skills.md` lists each related skill, one line each: what it covers, the `name` in that skill's frontmatter, and a link to its source; `SKILL.md`'s Related skills is a pointer to it, and a checklist that covers a skill's task names it at the step that loads it. Prerequisites names the same skills and `README.md`'s Works well with links the same sources; `SKILL.md`'s Instructions has the agent ask once, before the first checklist, to install every missing one with the reference's commands. A related skill for code is chosen for server-side Swift on Linux, accuracy, the specification and a small `SKILL.md`; one for design or operations is stack-agnostic and from an established maintainer, such as Anthropic; a pair on one subject, such as Swift Testing and Swift Concurrency, comes from one author. Where one differs from this skill, this skill's services, mechanisms, shapes, stack and style win, and the overlap is never restated here.
 - A checklist is what the agent copies into its response for a task. One that changes code ends in `Verify`, the one build, test and script run those checklists share, repeated until all pass; a review runs the build and the tests and reports the results. `SKILL.md`'s Instructions hold them and call them checklists, so "workflow" means only a Temporal workflow or a CI workflow.
 
 ## What a change must respect
@@ -92,7 +92,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - the frontmatter's keys, `name`, `description`, `license` and `metadata`, against the limits above, with `license` and `metadata.author` matching `plugin.json`'s
    - `SKILL.md`'s lines and estimated tokens, at 4 characters a token over the whole file, as SkillEvaluator estimates them
    - that every reference is in `SKILL.md`'s References table and `README.md`'s layout, with a Contents list past 100 lines
-   - that Prerequisites names, and `README.md`'s Works well with links, exactly the skills Related skills lists
+   - that Prerequisites names, and `README.md`'s Works well with links, exactly the skills `references/related-skills.md` lists, and that Related skills links it
    - every link and anchor
    - that every `npx`, `bunx` or `uvx` command in the skill and `README.md` pins a version
    - that the descriptions and the four versions in `SKILL.md` and the Claude Code and Codex manifests agree, and that the Codex marketplace lists the plugin
@@ -107,12 +107,13 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
 
    The advisories this file's rules decide stay: a description past the quality check's 200 characters, links between references, which all sit in `SKILL.md`'s References table, the `run_script` call of a harness this skill doesn't ship for, the emoji in the semver labels, whose names the label check matches exactly, and OpenClaw's read cap under 100,000 tokens of context.
 
-3. SkillEvaluator's Tier 2 passes, with no cluster judged `DUPLICATE`: a rule repeated within the skill moves to its one home. It embeds the skill through NVIDIA's API, so it needs a key from [build.nvidia.com](https://build.nvidia.com). To compare the skill against the related skills too, check each one out, copy each skill's own folder into one directory, taking the copy without symlinks, which the tool refuses, build a catalog from it, and pass it with `--catalog`; content the skill shares with one is technique, which stays in the related skill:
+3. SkillEvaluator's Tier 2 passes, with no cluster judged `DUPLICATE`: a rule repeated within the skill moves to its one home. It embeds the skill through NVIDIA's API with `nvidia/nemotron-3.5-embed-1b`, so it needs a key from [build.nvidia.com](https://build.nvidia.com). NVIDIA's content screen refuses some harmless text, such as any `metadata:`, so Tier 2 runs through `.github/scripts/skillevaluator_tier2.py`, which embeds a refused chunk piece by piece and prints each one it approximated. To compare the skill against the related skills too, check each one out, copy each skill's own folder into one directory, taking the copy without symlinks, which the tool refuses, build a catalog from it, and pass it with `--catalog`; content the skill shares with one is technique, which stays in the related skill:
 
    ```
-   export SKILL_EVAL_EMBEDDING_PROVIDER=nv_build NVIDIA_API_KEY=<key>
-   skillevaluator tier2 similarity-check <related skills folder> --type skill --full-body --save-catalog /tmp/related-skills.json
-   skillevaluator tier2 skills/swift-microservices-architect --catalog /tmp/related-skills.json --full-body -o /tmp/skillevaluator
+   export SKILL_EVAL_EMBEDDING_PROVIDER=nv_build SKILL_EVAL_EMBEDDING_MODEL=nvidia/nemotron-3.5-embed-1b NVIDIA_API_KEY=<key>
+   tier2="$(uv tool dir)/skillevaluator/bin/python -I .github/scripts/skillevaluator_tier2.py tier2"
+   $tier2 similarity-check <related skills folder> --type skill --full-body --save-catalog /tmp/related-skills.json
+   $tier2 skills/swift-microservices-architect --catalog /tmp/related-skills.json --full-body -o /tmp/skillevaluator
    ```
 
 4. Review the diff for what no script checks:
@@ -123,7 +124,7 @@ A new reference file gets a lowercase topic name, a Contents list once it passes
    - [ ] Examples are Bookshelf's and follow the code style
    - [ ] Terms are the ones this file lists, with no dates, history or old names
    - [ ] README.md still describes what the skill covers
-   - [ ] Related skills, Prerequisites and README.md's Works well with name the same skills
+   - [ ] related-skills.md, Prerequisites and README.md's Works well with name the same skills
    ```
 
 ## Pull requests and releases

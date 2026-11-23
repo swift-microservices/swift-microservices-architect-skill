@@ -74,7 +74,7 @@ A new backend goes from idea to production through the skill's checklists, in th
 
 The plan's Build order lists these steps and ticks each one once its checklist's build, tests and checks pass, so invoking the skill with no task picks up at the next step.
 
-On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. One that adds a feature starts by looking up the established standard for it, such as an RFC or OWASP's guidance, and one that changes code ends with a build and a test run repeated until both pass.
+On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. One that adds a feature starts by designing it with Engineering's system design skill and looking up the established standard for it, such as an RFC or OWASP's guidance, and one that changes code ends with a build and a test run repeated until both pass.
 
 ## What it covers
 
@@ -100,8 +100,9 @@ Not covered: setting up Dokploy and its servers, compose files, networks, the ed
 
 ### Works well with
 
-The skill decides the shapes; these skills cover the code inside them. The agent loads each where a checklist calls for it, such as Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you to install one that's missing:
+The skill decides the architecture and the style; maintained skills cover the technique, from a feature's design to the code inside a shape. The agent loads each where a checklist calls for it, such as Engineering's system design skill before a new feature, Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you once, at the start of a task, to install any that are missing. Where one's advice differs, the skill's services, shapes, stack and style win.
 
+- [Engineering](https://github.com/anthropics/knowledge-work-plugins): a feature's requirements and trade-offs, architecture decision records, code review, release checklists and incident response
 - [Swift Concurrency Pro](https://github.com/twostraws/Swift-Concurrency-Agent-Skill): actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics
 - [Swift Testing Pro](https://github.com/twostraws/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
 - [Temporal Developer](https://github.com/temporalio/skill-temporal-developer): how a workflow is designed and behaves, from signals and updates to versioning
@@ -138,8 +139,9 @@ skills/swift-microservices-architect/
     ├── style.md                how the code reads
     ├── testing.md              test targets and mocks
     ├── delivery.md             CI/CD for each kind of package
-    └── conventions.md          names, folders, files
-.github/                        validation, SkillSpector's reviewed exceptions, the semver label check, releases
+    ├── conventions.md          names, folders, files
+    └── related-skills.md       which maintained skill each task loads, and where this skill wins
+.github/                        validation, SkillSpector's reviewed exceptions, the Tier 2 runner, the semver label check, releases
 CLAUDE.md                       authoring rules for changing the skill
 ```
 
