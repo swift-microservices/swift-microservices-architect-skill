@@ -112,7 +112,7 @@ do {
 
 - A Swift toolchain at the package's `swift-tools-version`; for `XPostgresTests` and `XValkeyTests`, Postgres 18 and Valkey 9 or later, through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
 - Network access for an XCore with workflows: its build fetches Temporal's sdk-core and its tests the test server ([Core's links](references/packages.md#what-core-may-link)).
-- The [related skills](#related-skills) `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`; ask the user once to install a missing one (`npx skills@1.9.0 add <source> --skill <name>`) and carry on.
+- The [related skills](#related-skills) `system-design`, `architecture`, `code-review`, `deploy-checklist`, `incident-response`, `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`; ask the user once to install a missing one (`npx skills@1.9.0 add <source> --skill <name>`) and carry on.
 
 ## Available Scripts
 
@@ -151,16 +151,11 @@ Read a reference only when the task reaches its row or a checklist names it.
 | [testing.md](references/testing.md) | Writing tests or mocks |
 | [delivery.md](references/delivery.md) | CI, releases, deployment, the Containerfile or Dependabot |
 | [conventions.md](references/conventions.md) | Naming anything or placing a file |
+| [related-skills.md](references/related-skills.md) | Work a related skill covers, and where this skill wins over one |
 
 ## Related skills
 
-They cover the code inside the shapes; this skill's rules win over their examples. Load each when its task comes up:
-- A workflow's design: history, signals, updates, waiting, compensation, versioning: `temporal-developer` ([source](https://github.com/temporalio/skill-temporal-developer))
-- A table's policy, grants, indexes, column types, and what a migration locks: `supabase-postgres-best-practices` ([source](https://github.com/supabase/agent-skills))
-- A Valkey command for an operation, its expiry and atomicity: `valkey` ([source](https://github.com/valkey-io/valkey-skills))
-- Test code, with Swift Testing: `swift-testing-pro` ([source](https://github.com/twostraws/Swift-Testing-Agent-Skill))
-- Actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics: `swift-concurrency-pro` ([source](https://github.com/twostraws/Swift-Concurrency-Agent-Skill))
-- Argument labels, method names, documentation comments: `swift-api-design-guidelines-skill` ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
+Maintained skills cover the technique, from a feature's design and a review to the code inside a shape; [related-skills.md](references/related-skills.md) names the one each task loads. Where one differs, this skill's services, mechanisms, shapes, stack and style win.
 
 ## Instructions
 
@@ -169,6 +164,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Plan a backend**
 
 ```
+- [ ] The requirements, scale and trade-offs with system-design, each open choice weighed with architecture (related-skills.md)
 - [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
 - [ ] Name each service, its target names clashing with no module in the graph
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, events, short-lived state
@@ -190,7 +186,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Add a service**
 
 ```
-- [ ] The feature's established approach (style.md#reading-like-the-requirement)
+- [ ] The feature's design with system-design and architecture (related-skills.md), then its established approach (style.md#reading-like-the-requirement)
 - [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in
 - [ ] Package <project>-x from packages.md#packageswift-template, with only the targets the plan names
 - [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
@@ -207,7 +203,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Add an operation**
 
 ```
-- [ ] The feature's established approach (style.md#reading-like-the-requirement)
+- [ ] The feature's design with system-design and architecture (related-skills.md), then its established approach (style.md#reading-like-the-requirement)
 - [ ] Contract: the RPC under its audience in XService, or in XInternalService
 - [ ] XCore: the use case's files; its scope lists only what it touches (use-cases.md); an event it records (events.md#the-outbox)
 - [ ] A workflow run it affects, reached from the use case (workflows.md#reaching-a-run-from-a-use-case)
@@ -222,7 +218,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Add a durable process**
 
 ```
-- [ ] The feature's established approach (style.md#reading-like-the-requirement)
+- [ ] The feature's design with system-design and architecture (related-skills.md), then its established approach (style.md#reading-like-the-requirement)
 - [ ] Design the workflow with temporal-developer and the SDK's documentation: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow)
 - [ ] Each person's change: written by its use case, then signalled if the run waits on it, or sent as an update if only the run decides (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
@@ -260,6 +256,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 - [ ] Each role's pool and timeouts, within Postgres's max_connections (persistence.md#connections-and-timeouts)
 - [ ] Each root: health, observability, secrets from files, the worker's shutdown period (composition.md)
 - [ ] The plan's Operations, answered by the user (system.md#the-plan)
+- [ ] Each release's checks and rollback triggers with deploy-checklist
 - [ ] Verify
 ```
 
@@ -289,6 +286,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
 - [ ] Workflows checked with temporal-developer, tests with swift-testing-pro, and actors, Mutexes and unchecked concurrency with swift-concurrency-pro
 - [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), package access, naming (conventions.md)
+- [ ] Security, performance and correctness with code-review
 - [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (shapes), minor (naming, layout, logging), each with a file and line or an empty grep, the rule and the fix; change code only when asked
 - [ ] scripts/swift_ci.sh build and test; report each result, or why it couldn't run
 ```

@@ -207,10 +207,14 @@ def section(text: str, heading: str) -> str:
 
 
 def check_related_skills(skill_text: str, readme_text: str) -> None:
-    """Checks that Prerequisites and README.md name exactly the skills Related skills lists."""
-    related = re.findall(r"^- .*: `([\w-]+)` \(\[source\]\((https://github\.com/[^)]+)\)\)$", section(skill_text, "Related skills"), re.M)
+    """Checks that Prerequisites and README.md name exactly the skills related-skills.md lists."""
+    related_skills = REFERENCES / "related-skills.md"
+    listing = read(related_skills) if related_skills.exists() else ""
+    related = re.findall(r"^- .*: `([\w-]+)` \(\[source\]\((https://github\.com/[^)]+)\)\)$", listing, re.M)
     if not related:
-        fail("SKILL.md: Related skills lists no skill as `- <what it covers>: `<name>` ([source](<url>))`")
+        fail("references/related-skills.md: lists no skill as `- <what it covers>: `<name>` ([source](<url>))`")
+    if "](references/related-skills.md)" not in section(skill_text, "Related skills"):
+        fail("SKILL.md: Related skills must link references/related-skills.md")
     prerequisites = section(skill_text, "Prerequisites")
     named = set(re.findall(r"`([\w-]+)`", next((line for line in prerequisites.splitlines() if "(#related-skills)" in line), "")))
     names = {name for name, _ in related}
