@@ -1,10 +1,11 @@
 # Security
 
-Who proves what on each hop, mutual TLS with certificate reloading, user tokens and their signing keys, authorization in layers, and secrets.
+Who proves what on each hop, mutual TLS with certificate reloading, user tokens and their key files, authorization in layers, and secrets.
 
 ## Contents
 - The trust model
 - Mutual TLS
+- Postgres
 - User tokens
 - Authorization
 - Secrets
@@ -19,8 +20,8 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens 
 | Edge to the gateway | TLS between proxies, as the deployment chooses; plain HTTP on the gateway's private interface | Nothing more: the gateway trusts its private network for this hop only |
 | Gateway to a service's `XService` | gRPC over mTLS, with the caller's token | Both processes by certificate; the user by the token, verified again by the service |
 | A service or worker to another's `XInternalService` | gRPC over mTLS | Both processes by certificate; the request names the user it acts for |
-| A process to Temporal | mTLS with a certificate pair of its own | Both sides by certificate; the authorizer admits the process to its service's namespace only ([the worker](workflows.md#the-worker)) |
-| A process to Postgres | TLS, required (`.require(…)`), against the environment's authority, with the process's certificate, as one of the service's roles | Both sides by certificate; the server's map admits the process to its roles only ([Postgres](#postgres)) |
+| A process to Temporal | As the plan's answer sets ([the worker](workflows.md#the-worker)) | The process, admitted to its service's namespace only |
+| A process to Postgres | As the plan's answers set ([Postgres](#postgres)) | The process, as one of its service's roles |
 | A process to Valkey | TLS, required, against the environment's authority, as its service's ACL user (`authentication.*`) | The server by certificate; the process by its password, admitted to its service's keys only |
 | A worker to Kafka | TLS, required, against the environment's authority, as its service's Kafka user, by SCRAM-SHA-512 (`kafka.authentication.*`) | The server by certificate; the process by its password, admitted to write its service's topics and read the ones the plan lists for it |
 | Inside the database | Row-level security | The tenant, by the setting bound to the transaction |
@@ -31,14 +32,13 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens 
 
 ## Mutual TLS
 
-Every gRPC connection and every connection to Temporal or Postgres is mutual TLS against a private certificate authority per environment. Valkey and Kafka connections are TLS against that authority, with a password proving the process. Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial and whose common name is its identity (`loans`, `loans-worker`).
+Every gRPC connection is mutual TLS against a private certificate authority per environment. Valkey and Kafka connections are TLS against that authority, with a password proving the process. Temporal and Postgres connect as the plan's answers set ([the worker](workflows.md#the-worker), [Postgres](#postgres)). Each process has a certificate and key, mounted read-only at configured paths, whose DNS names cover the hosts its clients dial and include its identity (`loans`, `loans-worker`).
 
 `<Project>Transport` holds the readers every executable uses:
 
 ```swift
 public import Configuration
 public import GRPCNIOTransportHTTP2
-public import Logging
 public import NIOCertificateReloading
 
 extension HTTP2ServerTransport.Posix.TransportSecurity {
@@ -61,36 +61,34 @@ extension TimedCertificateReloader.Configuration {
     /// ## Configuration keys
     /// - `certificatePath`, `privateKeyPath` (string, required): the PEM pair.
     /// - `refreshIntervalSeconds` (int, default 60): how often the files are read.
-    public init(config: ConfigReader, logger: Logger) throws {
-        …  // the PEM sources and the interval; `onCertificateLoadFailed` logs a warning
+    public init(config: ConfigReader) throws {
+        …  // the PEM sources and the interval
     }
 }
 ```
 
 - The server requires a client certificate signed by the trust roots and doesn't match it against a hostname; the client verifies the server's chain and hostname in full. The client's reader, on `HTTP2ClientTransport.Posix.TransportSecurity`, differs in one line: `$0.serverCertificateVerification = .fullVerification`.
-- `TimedCertificateReloader` from swift-nio-extras is the `CertificateReloader` that `.mTLS(certificateReloader:)` takes. `makeReloaderValidatingSources(configuration:)` loads the pair before any transport is built, so missing, malformed or mismatched files fail startup.
-- The reloader runs in the `ServiceGroup`, re-reading the files every interval. New handshakes use the new pair, and servers bound connection age so every connection handshakes again ([transports](grpc.md#transports)); a failed reload keeps the last good pair and logs a warning.
-- One reloader per certificate pair: the process's pair under `tls` for gRPC and Postgres, a separate pair under `temporal.tls` for Temporal, whose trust is independent of the services', and the migrator's under `postgres.owner.tls`.
+- `TimedCertificateReloader` from swift-nio-extras is the `CertificateReloader` that `.mTLS(certificateReloader:)` takes. The root sets the configuration's `logger` and its `onCertificateLoadFailed`, which logs a warning ([configuration](composition.md#configuration)). `makeReloaderValidatingSources(configuration:)` loads the pair before any transport is built, so missing, malformed or mismatched files fail startup.
+- The reloader runs in the `ServiceGroup` as it is ([lifecycle](composition.md#lifecycle)), re-reading the files every interval. New handshakes use the new pair, and servers bound connection age so every connection handshakes again ([transports](grpc.md#transports)); a failed reload keeps the last good pair and logs a warning.
+- One reloader per certificate pair: the process's pair under `tls` for gRPC, and any pair the plan's answers give Temporal or Postgres under that connection's scope (`temporal.tls`).
 - Issuing and renewing certificates is the deployment's job; the process only reads files. A new trust root joins every trust bundle beside the old one, with a restart of each process, before any pair it signs is mounted, and the old root leaves once no mounted pair chains to it.
-- A local run uses the same mTLS, with a development authority and pairs whose common names are the production identities (`loans`, `loans-worker`, `loans-migrator`). No process has a plaintext or no-verification mode, so nothing that only works locally ships.
+- A local run uses the same mTLS, with a development authority and pairs whose DNS names hold the production identities (`loans`, `loans-worker`). No process has a plaintext or no-verification mode, so nothing that only works locally ships.
 - Internal RPCs take business input and enforce the resource's rules, never trusting the caller to have checked.
 
-An internal RPC admits only the processes its service lists as callers. `<Project>Transport`'s `InternalCallerInterceptor`, applied to each `XInternalService` descriptor ([interceptors](grpc.md#interceptors)), reads the common name of the peer's certificate and refuses any identity not in `grpc.server.internalCallers` with `permissionDenied`:
+An internal RPC admits only the processes the plan lists as its callers. `<Project>Transport`'s `InternalCallerInterceptor` holds each listed RPC's callers and is the first interceptor on every service of every server ([interceptors](grpc.md#interceptors)):
 
 ```swift
-public import Configuration
 public import GRPCCore
 import GRPCNIOTransportHTTP2
+public import Logging
 import X509
 
-/// Admits to an internal service only the processes whose certificates name a listed caller.
-///
-/// ## Configuration keys
-/// - `internalCallers` (string array, required): the common names of the processes that may call.
+/// Admits to each listed RPC only the processes whose certificates name one of its callers.
 public struct InternalCallerInterceptor: ServerInterceptor {
-    private let callers: Set<String>
+    private let callers: [MethodDescriptor: Set<String>]
+    private let logger: Logger
 
-    public init(config: ConfigReader) throws {
+    public init(callers: [MethodDescriptor: Set<String>], logger: Logger) {
         …
     }
 
@@ -103,38 +101,26 @@ public struct InternalCallerInterceptor: ServerInterceptor {
                 _ context: ServerContext
             ) async throws -> StreamingServerResponse<Output>
     ) async throws -> StreamingServerResponse<Output> {
-        …  // the common name of `HTTP2ServerTransport.Posix.Context`'s `peerCertificate`, or `permissionDenied`
+        …  // the DNS names of `HTTP2ServerTransport.Posix.Context`'s `peerCertificate`, or `permissionDenied`
     }
 }
 ```
 
-- Catalog lists `loans` and `loans-worker`, the identities of the processes that call `BookInternalService`, as the plan's contracts name its callers ([the plan](system.md#the-plan)).
+- A listed RPC admits a peer whose certificate's DNS subject alternative names include one of its callers, compared case-insensitively, and refuses any other, or a call with no certificate, with `permissionDenied`. The common name is never read. An RPC the map doesn't list passes.
+- The executable's reader in `Configuration/` builds the map from the internal contract's descriptors, a string array per RPC under `grpc.server.internalCallers`, named for the RPC (`grpc.server.internalCallers.getBook`), whose defaults are the plan's callers: Catalog's `GetBook` lists `loans` and `loans-worker` ([the plan](system.md#the-plan)).
 - The gateway is never a caller: it faces the internet, and an internal RPC takes the user it acts for in its input, past tokens and row-level security.
 
-### Postgres
+## Postgres
 
-A process proves its database role with its certificate, the pair its gRPC connections present, and Postgres maps the certificate's common name to the roles that identity may use:
+How each role logs in, the TLS mode, and the rest of a service's Postgres setup are questions the plan puts to the user, with no default and no recommendation ([the plan](system.md#the-plan)). The skill assumes none of them:
 
-```
-# pg_hba.conf
-hostssl  bookshelf_loans  all  all  cert  map=bookshelf_loans
-
-# pg_ident.conf
-# MAPNAME         SYSTEM-USERNAME  PG-USERNAME
-bookshelf_loans   loans            loans_service
-bookshelf_loans   loans            loans_internal
-bookshelf_loans   loans-worker     loans_worker
-bookshelf_loans   loans-migrator   loans_owner
-```
-
-- The deployment provides these lines; the service names the identities and roles in them ([naming](conventions.md#naming)).
-- The migrator is an identity of its own, whose pair only the `migrate` and `build-indexes` commands mount, never serve or the worker, so no process that serves requests or runs activities can connect as the owner.
-- `PostgresClient.Configuration(config:role:certificateReloader:)` presents the reloader's pair over required TLS. Serve and the worker pass their `tls` reloader, so each new connection presents a renewed pair; `migrate` and `build-indexes` pass a reloader of the migrator's pair, which their short-lived client uses and which is never run.
-- Where a managed Postgres takes no client certificates, each role proves itself with a SCRAM-SHA-256 password from the secret store instead: `PostgresClient.Configuration(config:role:)` reads it as a secret, and migrations set it ([migrations](persistence.md#migrations)).
+- `<Project>Persistence`'s reader, `PostgresClient.Configuration(config:role:)`, takes what the answer needs, such as a certificate reloader or a password's file, and every role's client is built through it ([connections and timeouts](persistence.md#connections-and-timeouts)).
+- Only `migrate` and `build-indexes` log in as the owner, so no process that serves requests or runs activities holds the owner's credentials.
+- The deployment provides the server's side of the answer; the service names the database and its roles ([naming](conventions.md#naming)).
 
 ## User tokens
 
-One issuer signs every access token. Identity alone holds the private keys, which it generates, rotates and signs with ([signing keys](#signing-keys)); every process, Identity included, verifies with `JWTAuthenticator<UserIdentity>` against the public keys Identity publishes.
+One issuer signs every access token: Identity, with the Ed25519 private key in the file at `jwt.privateKeyPath`. Every process, Identity included, verifies with `JWTAuthenticator<UserIdentity>` against the public keys in the file at `jwt.publicKeyPath` ([signing keys](#signing-keys)).
 
 The token's payload is `<project>-core`'s `UserIdentity`:
 
@@ -182,7 +168,7 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 
 - The token carries identity only: `sub`, `role`, `iss`, `iat`, `exp`, `aud` where an audience is used, and `org` where callers act for an organization ([organization tenants](persistence.md#organization-tenants)). It carries no permissions, entitlements, business state or personal data; a use case reads those from the service that owns them.
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
-- Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes `JWTCredentialIssuer` ([signing keys](#signing-keys)).
+- Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes the `JWTIssuer` it builds from the private key ([signing keys](#signing-keys)).
 - An access token lives 15 minutes, `SessionPolicy.accessTokenLifetime`, a policy value Identity reads from configuration: a revoked session or a changed role reaches every service within that time, since no service asks Identity about a token it can verify.
 - A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh and sign-out RPCs, which the gateway routes in the no-caller tier ([request contexts](gateway.md#request-contexts-and-tiers)). Sign-out ends the one session that refresh token belongs to.
 - Each refresh replaces the refresh token: in one transaction, the use case moves the presented token from active to used with a conditional write, and stores its successor in the same session. A used token presented again was copied, by whoever holds either copy, so the use case ends the whole session and refuses; the holder of the real one signs in again.
@@ -213,71 +199,38 @@ extension Logger.MetadataProvider {
 
 ### Signing keys
 
-Identity signs access tokens with Ed25519 keys it generates and rotates itself, and every process that verifies tokens keeps the public keys Identity publishes in memory. Two rules make a rotation safe: a key is in every verifier's set before it signs, and stays there until every token it signed has expired.
-
-Each key moves through three statuses, in order, as a row of Identity's untenanted `signing_keys` table:
-
-| Status | Published | Signs |
-|---|---|---|
-| `next` | Yes | No |
-| `current` | Yes | Yes, the only key that does |
-| `retired` | Until its last token has expired, then the row is deleted | No |
-
-- A row holds the `kid`, the RFC 7638 thumbprint of the public key; the Ed25519 public key; the private key, sealed with `AES.GCM` from `Crypto` under the key-encryption key and authenticating the `kid`, so a sealed key copied to another row fails to open; the status; and the dates it was created, promoted and retired. A partial unique index on `status` keeps one key `next` and one `current`.
-- The key-encryption key is a secret, `jwt.keyEncryptionKey`, 32 random bytes in base64, which Identity's serve and worker read. A platform with a KMS or HSM keeps private keys there instead; this stack has none, so Identity seals them in its own database.
-- Only `identity_worker`, which runs the rotation, writes the table; `identity_service` reads it.
-
-The rotation is `RotateSigningKeysUseCase`, the system use case that the one activity of `RotateSigningKeysWorkflow` runs, which Identity's schedule starts daily ([recurring work](workflows.md#recurring-work)). It generates and seals keys with `Crypto` ([what Core may link](packages.md#what-core-may-link)), holding the key-encryption key as a `SymmetricKey` from the worker's root. In one transaction, under `lockSigningKeys()`, an advisory lock, since the first run finds no row to lock ([transactions](use-cases.md#transactions)), it:
-
-1. Creates a `current` key when there is none, as in a new environment: no other key can sign, and verifiers take it at their next refresh.
-2. Promotes `next` to `current`, and `current` to `retired`, once the current key has signed for `SigningKeyPolicy.rotationInterval` (30 days) and the next has been published for longer than `SigningKeyPolicy.refreshInterval`.
-3. Creates a `next` key when there is none, so the next rotation's key is published a whole interval before it signs.
-4. Deletes each `retired` key once `SessionPolicy.accessTokenLifetime` plus `SigningKeyPolicy.refreshInterval` has passed since its retirement, since an Identity replica signs with the old key until its own next refresh.
-
-Each write is conditional on what the transaction read under the lock, so a repeated run changes nothing. `SigningKeyPolicy.refreshInterval` (5 minutes) is every refresher's `jwt.refreshIntervalSeconds`, and no process sets a longer one.
-
-`ListSigningKeys` publishes the set: every key's `kid` and public key, unpaged, since there are at most three. It's one use case that `IdentityService` holds in its anyone group, since public keys aren't secret, and `IdentityInternalService` holds as well, as Catalog's `GetBook` is ([a use case](use-cases.md#a-use-case)); it runs on Identity's tenant database, which sees the untenanted table whole. Every service's serve process calls the internal one, so Identity's `grpc.server.internalCallers` lists each serve process (`loans`, `catalog`) beside its other callers (`loans-worker`); the gateway calls the public one and serves the set at `/.well-known/jwks.json` ([controllers](gateway.md#controllers)).
-
-Every process keeps the `JWTKeyCollection` its `JWTAuthenticator` shares in step with the set through `<Project>Transport`'s refresher:
+The keys are static files, a key pair per environment, which the deployment mounts like a certificate: only Identity's serve process mounts the private key, and every process that verifies tokens mounts the public key file. `<Project>Authentication` builds both sides from them, in `JWT+EdDSA.swift`:
 
 ```swift
-public import Configuration
+public import AuthenticationJWT
 public import JWTKit
-public import Logging
-public import ServiceLifecycle
 
-/// Keeps a key collection in step with the signing keys Identity publishes.
-///
-/// ## Configuration keys
-/// - `refreshIntervalSeconds` (int, default 300): how often the set is fetched.
-public struct SigningKeyRefresher: Service {
-    public init(
-        config: ConfigReader,
-        keys: JWTKeyCollection,
-        logger: Logger,
-        fetch: @escaping @Sendable () async throws -> JWKS,
-        onFirstRefresh: @escaping @Sendable () -> Void
-    ) {
+extension JWTIssuer {
+    /// Signs with an Ed25519 private key, naming its `kid` in each token's header.
+    public init(privateKey: EdDSA.PrivateKey) async {
         …
     }
+}
 
-    /// Fetches the set at once, then every interval, until graceful shutdown.
-    public func run() async throws {
+extension JWTAuthenticator {
+    /// Verifies against Ed25519 public keys, each found by the `kid` a token names.
+    public init(publicKeys: [EdDSA.PublicKey]) async {
         …
     }
 }
 ```
 
-- `<project>-core` doesn't depend on `<project>-protos`, so the executable passes the fetch: a service's fetch calls `IdentityInternalService` through its Identity client, the gateway's calls `IdentityService`, and Identity's calls its own `ListSigningKeysUseCase` ([the composition root](composition.md#the-composition-root)). Each converts the answer with `JWKS(_:)` ([folders](conventions.md#folders)), one RFC 7517 key per row: `kty` `OKP`, `crv` `Ed25519`, `alg` `EdDSA`, `use` `sig`, the `kid`, and the public key in base64url as `x`.
-- A refresh adds the fetched keys, then removes the rest with `removeAll(except:)`, so no key a live token names is missing mid-refresh. That call also clears the collection's default key, which would otherwise go on verifying a deleted key's tokens; a token that names no `kid`, or a deleted one, fails as `unauthenticated`.
-- The first fetch runs as the group starts. A failed first fetch ends the process, as a missing certificate fails startup; until then the process isn't serving ([health](composition.md#health)).
-- After that, a failed fetch keeps the last good set and logs a warning, as a failed certificate reload does: Identity's outage stops no process verifying, and only delays which keys it learns.
+- A key's `kid` is its RFC 7638 thumbprint, so the issuer and every verifier derive it from the key itself. A token that names no `kid`, or one no verifier's file holds, fails as `unauthenticated`.
+- The file at `jwt.publicKeyPath` holds one PEM public key, or two during a rotation; `<Project>Transport`'s reader, `JWTAuthenticator(config:)`, loads every key in it. Identity's executable reads `jwt.privateKeyPath` in its own `Configuration/` ([secrets](#secrets)).
+- A process reads its key files once, at startup: a changed key reaches it with its next deploy.
 
-swift-authentication-jwt's `JWTIssuer` signs with its collection's default key and writes no `kid`, so Identity signs with `JWTCredentialIssuer`, its own `CredentialIssuer<UserIdentity, String>` in the provider target `IdentityJWT`:
+A key changes by this runbook, in this order, so no verifier meets a token it can't check:
 
-- Identity's fetch hands the keys to the issuer before converting them, so one refresh serves both: the issuer opens the current key with the key-encryption key and keeps it with its `kid`.
-- `issue(for:)` signs with `JWTKeyCollection.sign(_:kid:)`, which writes that `kid` in the token's header, where every verifier looks the key up.
-- The RPC's conversion takes each key's `kid` and public key only, so no sealed key leaves Identity.
+1. Add the new public key to every verifier's file beside the old one, and deploy every process that verifies tokens.
+2. Point Identity's `jwt.privateKeyPath` at the new private key, and deploy Identity: its tokens now name the new `kid`.
+3. Once one access-token lifetime (`SessionPolicy.accessTokenLifetime`) has passed, remove the old public key from every file, and deploy again.
+
+`/.well-known/jwks.json` is served only when something outside the system verifies tokens, by the gateway from its own public key file, with no RPC ([controllers](gateway.md#controllers)).
 
 ## Authorization
 
@@ -296,8 +249,8 @@ Each layer refuses what it can see; the use case decides.
 
 ## Secrets
 
-- Configuration reads passwords, API keys, webhook secrets and the key-encryption key with `isSecret: true`, so access reporting redacts them; certificates and their keys are files at configured paths, never in an image or a repository.
-- A secret value reaches the process as a file in `/run/secrets` named for its key, which `DirectoryFilesProvider` reads ([configuration](composition.md#configuration)), never as an environment variable: `docker inspect` and `/proc/<pid>/environ` show those to anyone who can read the container's configuration.
+- A secret, such as a password, an API key, a webhook's signing secret or a private key, reaches the process as a file the deployment mounts, never in an image, a repository or an environment variable: `docker inspect` and `/proc/<pid>/environ` show those to anyone who can read the container's configuration.
+- Its configuration key is the file's path, named for the secret with `Path` (`jwt.privateKeyPath`, `resend.webhookSecretPath`, `valkey.authentication.passwordPath`), and the reader that needs the secret loads the file ([configuration](composition.md#configuration)). The value never reaches a log line.
 - Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres and Valkey store their SHA-256 digest (`Crypto`), never the secret, Valkey with its expiry.
 - Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), off the cooperative pool ([concurrency](style.md#concurrency)). The cost is a policy value, `PasswordPolicy.bcryptCost` (12), raised as hardware gets faster.
 - A password longer than 72 bytes of UTF-8 is refused as `invalidPassword` (`PasswordPolicy.maximumByteCount`): bcrypt ignores every byte after the 72nd, so two passwords that share their first 72 bytes would both sign in. The limit counts bytes, not characters.
@@ -318,7 +271,7 @@ A request that proves a secret someone could guess, signing in with a password o
 A provider's webhook arrives with no token: its signature over the body is its proof. Loans receives Resend's delivery events for its overdue notices this way.
 
 - Its RPC is in `XService`'s anyone group ([contracts](grpc.md#contracts-in-the-protos-package)). The gateway forwards the body unparsed with the headers the provider signs with ([controllers](gateway.md#controllers)), since the signature covers the exact bytes.
-- The use case verifies before anything else, through a port its provider target implements (`NoticeEventVerifier`, `ResendNoticeEventVerifier`), with the signing secret read as a secret. A signature or timestamp the verifier refuses is the use case's `signatureRejected` ([status codes](grpc.md#status-codes)); checking the timestamp keeps a captured event from being replayed.
+- The use case verifies before anything else, through a port its provider target implements (`NoticeEventVerifier`, `ResendNoticeEventVerifier`), with the signing secret loaded from its file ([secrets](#secrets)). A signature or timestamp the verifier refuses is the use case's `signatureRejected` ([status codes](grpc.md#status-codes)); checking the timestamp keeps a captured event from being replayed.
 - It runs on the internal database: no caller is bound, so a tenant policy would hide every row ([database roles](persistence.md#database-roles)).
 - Providers retry, so an event acts once: the transaction that acts also records the provider's event id under a unique key. A repeat that finds it changes nothing in the database, then starts the event's workflow, if it has one, as the first delivery did: the deterministic id joins a run that exists and starts one whose start was lost after the first commit.
 - It answers once the event is recorded. Work that takes longer, or calls out, is a workflow the use case starts ([workflows a webhook starts](workflows.md#starting-a-workflow-from-a-use-case)).

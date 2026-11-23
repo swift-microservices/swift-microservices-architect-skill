@@ -20,7 +20,7 @@ Each hop continues the trace its caller started, so one borrow reads as one trac
 |---|---|
 | The gateway's routes | Hummingbird's `TracingMiddleware`, after CORS on the router, starts the request's span; `MetricsMiddleware` beside it records each route's requests, errors and duration ([the gateway's root](composition.md#the-gateways-root)) |
 | A gRPC call out | `ClientOTelTracingInterceptor`, first in every `GRPCClient`'s pipeline, the gateway's and every service's and worker's, writes the trace into the call's metadata |
-| A gRPC call in | `ServerOTelTracingInterceptor`, first in the server's pipeline, on every `XService` and `XInternalService` descriptor, continues it before authentication, so a refused call is traced too |
+| A gRPC call in | `ServerOTelTracingInterceptor`, first in the server's pipeline after `InternalCallerInterceptor`, on every `XService` and `XInternalService` descriptor, continues it before the token is checked, so a call refused for its token is traced too |
 | Temporal | `TemporalClient.Configuration(configReader:)` and `TemporalWorker.Configuration(configReader:)` install the SDK's tracing interceptors, which carry the trace from a use case's start or signal through the workflow's headers into each activity and its port calls |
 
 - `serverHostname` is the server's name from `grpc.server.hostname` for a server's interceptor and the upstream's host for a client's; `networkTransportMethod` is `"tcp"`.

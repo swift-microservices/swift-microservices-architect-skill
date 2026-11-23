@@ -16,7 +16,7 @@ Small libraries that give every service the same shape for identity, request-sco
 |---|---|---|---|
 | [swift-operation-context](https://github.com/swift-microservices/swift-operation-context) | `OperationContext` | `OperationContext`, a task-local container of typed values for one operation (`OperationContext.current`, `withContext(_:operation:)`), keyed by `OperationContextKey` | XGRPC, `<Project>Authentication`, `<Project>Persistence` |
 | [swift-authentication](https://github.com/swift-microservices/swift-authentication) | `Authentication` | `Authenticator<Credential, Identity>`, `CredentialIssuer<Identity, Credential>`, `Principal<Identity, Credential>` (the proved identity and the credential that proved it), `PrincipalKey` | XGRPC, `<Project>Authentication`, the gateway, a Core that issues credentials |
-| [swift-authentication-jwt](https://github.com/swift-microservices/swift-authentication-jwt) | `AuthenticationJWT` | `JWTAuthenticator<Payload>`, which verifies against a `JWTKeyCollection` | Executables |
+| [swift-authentication-jwt](https://github.com/swift-microservices/swift-authentication-jwt) | `AuthenticationJWT` | `JWTIssuer<Payload>`, which signs, and `JWTAuthenticator<Payload>`, which verifies, over a `JWTKeyCollection` | `<Project>Authentication`, `<Project>Transport`, executables |
 | [swift-authentication-grpc](https://github.com/swift-microservices/swift-authentication-grpc) | `AuthenticationGRPC` | `BearerAuthenticationInterceptor` (binds the principal a bearer token proves), `BearerPropagationInterceptor` (presents it on outgoing calls), `Metadata.bearer` | Executables |
 | [swift-authentication-hummingbird](https://github.com/swift-microservices/swift-authentication-hummingbird) | `AuthenticationHummingbird` | `BearerAuthenticationMiddleware<Context>`, which sets the context's identity and binds the principal in `OperationContext` | The gateway |
 | [swift-persistence](https://github.com/swift-microservices/swift-persistence) | `Persistence` | `Database<Scope>` and `withTransaction(_:)`: the transaction boundary and the scope of repositories a unit of work may touch | XCore, `<Project>Testing` |
@@ -43,15 +43,14 @@ Small libraries that give every service the same shape for identity, request-sco
 | postgres-nio | `PostgresNIO` | `PostgresClient` pools, prepared statements, row decoding | XPostgres, executables |
 | [postgres-migrations](https://github.com/hummingbird-project/postgres-migrations) | `PostgresMigrations` | `DatabaseMigration`, `DatabaseMigrations` | XPostgres, executables |
 | [swift-configuration](https://github.com/apple/swift-configuration) | `Configuration` | `ConfigReader`, providers, scoped readers, secrets | Executables, `<Project>Transport`, `<Project>Persistence` |
-| [swift-system](https://github.com/apple/swift-system) | `SystemPackage` | `FilePath`, the secrets directory `DirectoryFilesProvider` reads | Executables |
 | [swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle) | `ServiceLifecycle`, `UnixSignals` | `Service`, `ServiceGroup`, graceful shutdown on signals | Executables, `<Project>Transport` |
 | [swift-argument-parser](https://github.com/apple/swift-argument-parser) | `ArgumentParser` | The executable's commands | Executables |
-| [swift-certificates](https://github.com/apple/swift-certificates) | `X509` | Reading the common name of a peer's certificate | `<Project>Transport` |
+| [swift-certificates](https://github.com/apple/swift-certificates) | `X509` | Reading the DNS names of a peer's certificate | `<Project>Transport` |
 | [swift-nio-extras](https://github.com/apple/swift-nio-extras) | `NIOCertificateReloading` | `CertificateReloader`, `TimedCertificateReloader` | Executables, `<Project>Transport`, `<Project>Persistence` |
 | [swift-log](https://github.com/apple/swift-log) | `Logging` | `Logger`, `LoggingSystem`, metadata providers | Every target that logs |
 | [swift-async-algorithms](https://github.com/apple/swift-async-algorithms) | `AsyncAlgorithms` | Collecting a row sequence into an array | XPostgres |
-| [swift-crypto](https://github.com/apple/swift-crypto) | `Crypto` | Digests of secrets; Ed25519 signing keys, their thumbprints and their sealing with AES-GCM | A Core that hashes secrets or makes signing keys, `IdentityJWT` |
-| jwt-kit | `JWTKit` | `JWTPayload`, claims, EdDSA keys, `JWTKeyCollection`, `JWKS` | `<Project>Authentication`, `<Project>Transport`, `IdentityJWT`, executables |
+| [swift-crypto](https://github.com/apple/swift-crypto) | `Crypto` | Digests of secrets | A Core that hashes secrets |
+| jwt-kit | `JWTKit` | `JWTPayload`, claims, EdDSA keys, `JWTKeyCollection` | `<Project>Authentication`, `<Project>Transport` |
 | [async-http-client](https://github.com/swift-server/async-http-client) | `AsyncHTTPClient` | `HTTPClient` for an HTTP API that has no SDK | A provider target over such an API, executables |
 
 Hummingbird is the only HTTP framework, and AsyncHTTPClient the only HTTP client when an adapter calls an HTTP API that has no SDK.

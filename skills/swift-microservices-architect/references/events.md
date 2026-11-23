@@ -155,7 +155,7 @@ package struct LoanEventHandler: EventHandler {
 
         let input = try RecordBookBorrowUseCaseInput(event)
 
-        do throws(RecordBookBorrowUseCaseError) {
+        do {
             try await recordBookBorrowUseCase(input: input)
         } catch {
             switch error {
@@ -198,8 +198,8 @@ let loanEventRelay = OutboxRelay(logger: logger) {
 }
 
 // MARK: - Lifecycle
-// observability, certificateReloader, temporalCertificateReloader, workerPostgresClient,
-// identityGRPCClient, catalogGRPCClient, loanEventProducer, loanEventRelay, worker
+// observability, certificateReloader, workerPostgresClient, identityGRPCClient, catalogGRPCClient,
+// loanEventProducer, loanEventRelay, worker
 ```
 
 Catalog's builds a consumer for the same topic:
