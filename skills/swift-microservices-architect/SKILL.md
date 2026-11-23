@@ -112,7 +112,7 @@ do {
 
 - A Swift toolchain at the package's `swift-tools-version`; for `XPostgresTests` and `XValkeyTests`, Postgres 18 and Valkey 9 or later, through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
 - Network access for an XCore with workflows: its build fetches Temporal's sdk-core and its tests the test server ([Core's links](references/packages.md#what-core-may-link)).
-- The [related skills](#related-skills) `system-design`, `architecture`, `code-review`, `deploy-checklist`, `incident-response`, `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`; ask the user once to install a missing one (`npx skills@1.9.0 add <source> --skill <name>`) and carry on.
+- The [related skills](#related-skills) `system-design`, `architecture`, `code-review`, `deploy-checklist`, `incident-response`, `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`.
 
 ## Available Scripts
 
@@ -159,7 +159,7 @@ Maintained skills cover the technique, from a feature's design and a review to t
 
 ## Instructions
 
-Copy the task's checklist into the response, **Verify**'s lines replacing a `Verify` item, and tick items when done; its `.md` files are in `references/`. A new backend runs **Plan a backend**, then each Build order line's checklist (system.md#the-plan); with no task, propose the next unticked line.
+Copy the task's checklist into the response, **Verify**'s lines replacing a `Verify` item, and tick items when done; its `.md` files are in `references/`. Before the first checklist, ask once for the missing related skills (related-skills.md#installing-them). A new backend runs **Plan a backend**, then each Build order line's checklist (system.md#the-plan); with no task, propose the next unticked line.
 
 **Plan a backend**
 

@@ -100,7 +100,7 @@ Not covered: setting up Dokploy and its servers, compose files, networks, the ed
 
 ### Works well with
 
-The skill decides the architecture and the style; maintained skills cover the technique, from a feature's design to the code inside a shape. The agent loads each where a checklist calls for it, such as Engineering's system design skill before a new feature, Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you to install one that's missing. Where one's advice differs, the skill's services, shapes, stack and style win.
+The skill decides the architecture and the style; maintained skills cover the technique, from a feature's design to the code inside a shape. The agent loads each where a checklist calls for it, such as Engineering's system design skill before a new feature, Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you once, at the start of a task, to install any that are missing. Where one's advice differs, the skill's services, shapes, stack and style win.
 
 - [Engineering](https://github.com/anthropics/knowledge-work-plugins): a feature's requirements and trade-offs, architecture decision records, code review, release checklists and incident response
 - [Swift Concurrency Pro](https://github.com/twostraws/Swift-Concurrency-Agent-Skill): actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics

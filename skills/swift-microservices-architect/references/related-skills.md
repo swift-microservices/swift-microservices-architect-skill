@@ -12,8 +12,6 @@ Design and operations, whatever the stack:
 - A release's checks and rollback triggers: `deploy-checklist` ([source](https://github.com/anthropics/knowledge-work-plugins))
 - A production incident's triage, status updates and postmortem: `incident-response` ([source](https://github.com/anthropics/knowledge-work-plugins))
 
-These five also come as the Engineering plugin, whose skills carry the `engineering:` prefix, such as `engineering:system-design`.
-
 The code inside a shape:
 
 - A workflow's design: history, signals, updates, waiting, compensation, versioning: `temporal-developer` ([source](https://github.com/temporalio/skill-temporal-developer))
@@ -22,6 +20,22 @@ The code inside a shape:
 - Test code, with Swift Testing: `swift-testing-pro` ([source](https://github.com/twostraws/Swift-Testing-Agent-Skill))
 - Actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics: `swift-concurrency-pro` ([source](https://github.com/twostraws/Swift-Concurrency-Agent-Skill))
 - Argument labels, method names, documentation comments: `swift-api-design-guidelines-skill` ([source](https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill))
+
+## Installing them
+
+Before the first checklist, the skill list in the session is compared with these eleven names. A skill from the Engineering plugin is present under its `engineering:` prefix, such as `engineering:system-design`. The user is asked once, in one message, to install every missing skill with its source's command, and the task carries on whatever the answer:
+
+```
+npx skills@1.9.0 add https://github.com/anthropics/knowledge-work-plugins --skill system-design architecture code-review deploy-checklist incident-response
+npx skills@1.9.0 add https://github.com/temporalio/skill-temporal-developer --skill temporal-developer
+npx skills@1.9.0 add https://github.com/supabase/agent-skills --skill supabase-postgres-best-practices
+npx skills@1.9.0 add https://github.com/valkey-io/valkey-skills --skill valkey
+npx skills@1.9.0 add https://github.com/twostraws/Swift-Testing-Agent-Skill --skill swift-testing-pro
+npx skills@1.9.0 add https://github.com/twostraws/Swift-Concurrency-Agent-Skill --skill swift-concurrency-pro
+npx skills@1.9.0 add https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill --skill swift-api-design-guidelines-skill
+```
+
+A command lists only the missing skills from its source.
 
 ## Where this skill wins
 
