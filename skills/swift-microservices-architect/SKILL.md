@@ -256,7 +256,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 - [ ] Each role's pool and timeouts, within Postgres's max_connections (persistence.md#connections-and-timeouts)
 - [ ] Each root: health, observability, secrets from files, the worker's shutdown period (composition.md)
 - [ ] The plan's Operations, answered by the user (system.md#the-plan)
-- [ ] Each release's checks and rollback triggers with deploy-checklist
+- [ ] Each release's checks and rollback triggers with deploy-checklist (related-skills.md)
 - [ ] Verify
 ```
 
@@ -285,8 +285,8 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 - [ ] Each adapter only converts and delegates; every error case is mapped
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
 - [ ] Workflows checked with temporal-developer, tests with swift-testing-pro, and actors, Mutexes and unchecked concurrency with swift-concurrency-pro
-- [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), package access, naming (conventions.md)
-- [ ] Security, performance and correctness with code-review
+- [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), package access, naming (conventions.md) and API design with swift-api-design-guidelines-skill
+- [ ] Security, performance and correctness with code-review (related-skills.md)
 - [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (shapes), minor (naming, layout, logging), each with a file and line or an empty grep, the rule and the fix; change code only when asked
 - [ ] scripts/swift_ci.sh build and test; report each result, or why it couldn't run
 ```

@@ -1,6 +1,6 @@
 # Related skills
 
-This skill states the architecture: the services and who owns what, the mechanism between processes, the shapes, the stack and the style. The technique inside them belongs to maintained skills, each loaded when its task comes up; a checklist names each one again at its step.
+This skill states the architecture: the services and who owns what, the mechanism between processes, the shapes, the stack and the style. The technique inside them belongs to maintained skills, each loaded when its task comes up; a checklist that covers the task names the skill at that step.
 
 ## Which skill a task loads
 
