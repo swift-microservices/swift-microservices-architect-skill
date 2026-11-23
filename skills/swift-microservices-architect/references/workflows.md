@@ -227,7 +227,7 @@ package struct LoanActivities {
     /// and one returned stays returned.
     @Activity
     package func markOverdue(input: MarkOverdueInput) async throws -> MarkOverdueOutput {
-        do throws(MarkLoanOverdueUseCaseError) {
+        do {
             let markLoanOverdueInput = MarkLoanOverdueUseCaseInput(loanID: input.loanID)
             let loan = try await markLoanOverdueUseCase(input: markLoanOverdueInput)
             switch loan.status {
@@ -272,9 +272,8 @@ package struct LoanActivities {
             throw ApplicationError(message: "Catalog has no such book.", type: "BookNotFound", isNonRetryable: true)
         }
 
-        let notice = OverdueNotice(memberName: member.name, email: member.email, bookTitle: book.title)
         let idempotencyKey = "loans-overdue-notice-\(input.loanID.uuidString.lowercased())"
-        try await noticeSender.send(notice, idempotencyKey: idempotencyKey)
+        try await noticeSender.sendOverdueNotice(member: member, book: book, idempotencyKey: idempotencyKey)
     }
 }
 ```
@@ -328,12 +327,12 @@ Work on a calendar, such as deleting rows whose retention has ended, is a workfl
 - A service declares its schedules once, in `XCore/Workflows/XSchedules.swift`: each one's id, calendar, workflow and input, with `overlap: .skip`, so a run that outlasts its interval isn't joined by a second.
 - `worker run` applies them before its `ServiceGroup` starts ([the worker's root](composition.md#the-workers-root)): inside `TemporalClient.connect(transport:configuration:_:)`, it creates each schedule by its id, and on `ScheduleAlreadyRunningError` updates it to the declared one, so every replica converges on the same schedules.
 - A table whose rows stop mattering has a retention period, a policy value, and a scheduled workflow whose activity runs a system use case that deletes the expired rows in batches by id: the webhook event ids Loans keeps against redelivery (`PurgeNoticeEventsWorkflow`), and Identity's ended sessions and their refresh tokens.
-- A schedule whose first run a new environment needs at once is created with `ScheduleOptions(triggerImmediately: true)`, which acts on creation only: `identity-rotate-signing-keys`, in `IdentitySchedules.swift`, starts `RotateSigningKeysWorkflow` daily, whose one activity runs `RotateSigningKeysUseCase`, and a new environment has no key to sign with until its first run ([signing keys](security.md#signing-keys)).
 
 ## The worker
 
 `x worker run` builds the worker in [its own root](composition.md#the-workers-root):
 - It connects to Postgres as the worker role ([database roles](persistence.md#database-roles)).
 - Each service has one task queue, named for it (`loans`), under the SDK's key `temporal.worker.taskqueue`, which the serve process also reads for its starts.
-- Each service has its own namespace, named like its package (`bookshelf-loans`), so its runs, schedules and retention are its own. No service reaches another's runs: what another service must do, it asks through that service's contract. The Temporal server's authorizer, which the deployment configures, admits each certificate identity (`loans`, `loans-worker`) to its service's namespace only; without one, every process the Temporal authority signs reaches every namespace, which the plan puts to the user as a question.
+- Each service has its own namespace, named like its package (`bookshelf-loans`), so its runs, schedules and retention are its own. No service reaches another's runs: what another service must do, it asks through that service's contract.
+- How each process connects to Temporal, such as Temporal Cloud with an API key over TLS, or a self-hosted server with mTLS, is a question the plan puts to the user, with no default; the roots build the connection the answer names. Whatever the answer, each process reaches its service's namespace only, and a setup that would let it reach another's goes to the user as a question too.
 - The SDK's readers take the namespace under `temporal.client.namespace` for starts and `temporal.worker.namespace` for polling, which the defaults set together. They also require `temporal.client.instrumentation.serverhostname` and `temporal.worker.client.instrumentation.serverhostname` (the Temporal host), `temporal.worker.buildid` (the image's commit) and `temporal.worker.client.identity`, which the deployment sets.

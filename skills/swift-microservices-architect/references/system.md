@@ -22,7 +22,7 @@ The organizations callers act for, and who belongs to each, are the token issuer
 Draw a boundary by data and change:
 - **One service** when one kind of change touches both parts, or one transaction must cover both. Borrowing checks a member's active loans and records the new one atomically, so both are Loans.
 - **Separate services** when each part has its own data, its own rules and its own reason to change: the catalog changes with how books are described, loans with lending policy.
-- **Separate models** when a noun means something different on each side. To Catalog a book is a description with copies; to Loans it's an id and a title for a notice, modeled as `Book` in LoansCore's `Ports/`.
+- **Separate models** when a noun means something different on each side. To Catalog a book is a description with copies; to Loans it's an id and a title for a notice, modeled as `Book` in LoansCore's `Catalog/`.
 
 Then check what the split costs. Across a boundary cross only ids and the few fields the consumer needs, through internal RPCs; a step that must also happen on the other side runs as a workflow. Keep the parts in one service when splitting them would need a shared table, a distributed transaction, or a call to the other side on every request.
 
@@ -34,7 +34,7 @@ Avoid:
 Moving an area into its own service takes these steps, in order:
 1. Release its contract.
 2. Give it its own package, database, roles and executable.
-3. Give the remaining use cases a `Ports/` model and a gRPC client in place of its repository.
+3. Give the remaining use cases a model in a folder named for the new service, a port and a gRPC client in place of its repository.
 
 A step that was atomic across the two becomes a workflow. Moving or dropping data, or deleting a migration, is never inferred: finish the non-destructive work and ask the user.
 
@@ -51,7 +51,7 @@ Each service publishes one proto package, `<project>.<x>.v1`, with one `XService
 | Proto service | Called by | Admitted by |
 |---|---|---|
 | `XService` | People, through the gateway | Per RPC: anyone, the caller's own (the token names the user), a role, or administrators |
-| `XInternalService` | Other services and workers | The peer's mTLS certificate alone; requests name the user they act on |
+| `XInternalService` | Other services and workers | The peer's mTLS certificate alone, its DNS names against each RPC's callers; requests name the user they act on |
 
 - Inside `XService`, RPCs are grouped by audience. Anyone's RPCs carry their own proof when they need one (a password, a refresh token, a webhook signature). The caller's own RPCs name no user: the service takes the account from the token. Administrators' RPCs name the users they act on.
 - A service with no process calling in has no internal service. An RPC that would answer anyone's question about someone else (an account by email) is internal only.
@@ -85,14 +85,11 @@ A person's data lives in every service that keeps rows about them, so erasing it
 
 ## Data placement
 
-A service's data is its own wherever it lives: only the service reads and writes it, and every other process reaches it through the service's contract. Where the data lives and how a process reaches it are choices, each with a default; a plan that departs from one records the choice and its reason under Decisions ([the plan](#the-plan)).
+A service's data is its own: only the service reads and writes it, and every other process reaches it through the service's contract.
 
-| Choice | Default | Other options, and when |
-|---|---|---|
-| Where a service's data lives | One Postgres server per environment, with a database per service that stores data (`bookshelf_loans`) | Its own server, for throughput, isolation or compliance, which changes configuration, not code. No database, for a service that stores nothing. Valkey alone, for a service whose state is all short-lived |
-| The roles a process connects as | The owner for migrations, then a role per audience, `<x>_service`, `<x>_internal` and `<x>_worker`, each with its own policy and none with `BYPASSRLS` ([database roles](persistence.md#database-roles)) | One role, in a service with no tenant table. `<x>_internal` and `<x>_worker` as one role, in a small system |
-| How a process proves its role | Its client certificate from the environment's authority, the one its gRPC connections present, mapped to the roles its identity may use; no role has a password ([Postgres](security.md#postgres)) | SCRAM-SHA-256 passwords from the secret store, read as secrets, for a managed Postgres that takes no client certificates |
-
+- A service that stores data has its own Postgres instance, holding its database (`bookshelf_loans`). A service that stores nothing has none, and one whose state is all short-lived has Valkey alone.
+- Its processes connect as the owner for migrations, then a role per audience, `<x>_service`, `<x>_internal` and `<x>_worker`, each with its own policy and none with `BYPASSRLS` ([database roles](persistence.md#database-roles)). A service with no tenant table has one role; a plan that joins `<x>_internal` and `<x>_worker` records it under Decisions ([the plan](#the-plan)).
+- How the roles log in, the TLS mode and the rest of the instance's setup are the user's answers ([Postgres](security.md#postgres)).
 - A table whose rows belong to a user, or to an organization its callers act for, is a tenant table under [row-level security](persistence.md#row-level-security).
 - Short-lived values with an expiry live in [Valkey](persistence.md#valkey).
 
@@ -104,9 +101,9 @@ Besides the swift-microservices libraries ([stack](stack.md)), every service and
 
 | Product | Holds |
 |---|---|
-| `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user` |
-| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:certificateReloader:)` for a role proved by the process's certificate, and `(config:role:)` for the password fallback |
-| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`; `InternalCallerInterceptor`, `SigningKeyRefresher` |
+| `<Project>Authentication` | `UserIdentity` (the token's claims), `UserRole`, `OperationContext.user`, `Logger.MetadataProvider.user`, `JWTIssuer(privateKey:)` and `JWTAuthenticator(publicKeys:)` |
+| `<Project>Persistence` | `PostgresSettings.user(_:)`, `UserSettingsInterceptor`, `PostgresClient.Configuration(config:role:)`, shaped by the plan's answer on how roles log in |
+| `<Project>Transport` | The configuration readers every executable shares: mTLS transport security, the certificate reloader's configuration, HTTP/2 transport tuning, `ServiceConfig`, the token authenticator; `InternalCallerInterceptor` |
 | `<Project>Events` | The Kafka readers, `OutboxRelay`, `EventHandler`, `EventRejection` and `EventConsumer`, for a service with [events](events.md) |
 | `<Project>Testing` | The mocks every service would write alike: `MockDatabase<Scope>`, `MockAuthenticator` ([testing](testing.md)) |
 
@@ -137,8 +134,8 @@ The plan stays current: each Build order line is ticked once its checklist is do
 ### <project>-<x>
 | Target | Holds |
 |---|---|
-- Commands: `serve`, `health`, `worker run`, `migrate`, `build-indexes`
-- Data: where it lives, the database roles and the use cases each runs, and how each process proves its roles
+- Commands: `serve`, `worker run`, `migrate`, `build-indexes`
+- Data: its Postgres instance, the database roles and the use cases each runs
 - Calls out to: other services' internal RPCs, providers, Temporal, Valkey, Kafka
 
 ## Shared packages
@@ -154,18 +151,20 @@ The plan stays current: each Build order line is ticked once its checklist is do
 |---|---|---|
 
 ## Decisions
-- Each boundary and why it holds; each departure from a default or exception to a rule, and each open choice's pick, with its reason
+- Each boundary and why it holds; each departure from a default or exception to a rule, and each open choice's pick, with its reason and the sources the search found ([reading like the requirement](style.md#reading-like-the-requirement))
 
 ## Operations
-| Environment | Postgres `max_connections` | Each process's replicas and role pools, and their total | Collector endpoint | Stop timeout | Each topic's partitions and retention |
-|---|---|---|---|---|---|
+| Environment | Each service's Postgres instance: its `max_connections`, each process's replicas and role pools, and their total | Collector endpoint | Stop timeout | Each topic's partitions and retention |
+|---|---|---|---|---|
 
 | Tier, or a route set apart | Availability over 30 days | Latency at the 99th percentile |
 |---|---|---|
 
 | Alert | Source | Fires when | Runbook |
 |---|---|---|---|
-- Runbooks, as numbered steps: a bad deploy, a stuck or nondeterministic workflow, certificate renewal
+- Runbooks, as numbered steps: a bad deploy, a stuck or nondeterministic workflow, certificate renewal, a signing key's rotation
+- Each service's Postgres instance: how its roles log in, its TLS mode and the rest of its setup: the user's answers ([Postgres](security.md#postgres))
+- How each process connects to Temporal: the user's answer ([the worker](workflows.md#the-worker))
 - Backups and point-in-time recovery of Postgres and Temporal's store, each service's Temporal namespace and its retention, and whether Temporal's authorizer confines each identity to its namespace: the user's answers
 - Each environment's certificate authority, a developer's machine included, and how a developer runs Postgres, Valkey and Temporal: the user's answers
 
@@ -188,6 +187,7 @@ Operations' targets and thresholds are the user's answers; what they measure, th
 - A stuck workflow: rising schedule-to-start latency means its task queue's worker isn't polling; otherwise its pending activity's last failure names the dependency it waits on, and the activity's retries resume it once that recovers.
 - A nondeterministic workflow: roll back to the image before the change, so the runs that started before it replay and resume; the runs the bad image started then fail on replay and are reset, as `temporal-developer` describes. The change returns behind a patch, with a failed run's history among the replays `XCoreTests` runs ([changing a workflow](workflows.md#changing-a-workflow)).
 - Certificate renewal, which the deployment performs in the order [mutual TLS](security.md#mutual-tls) gives: a renewed pair at the mount paths needs no deploy.
+- A signing key's rotation, in [its runbook's](security.md#signing-keys) three steps.
 
 Review the plan against the hard rules in `SKILL.md`, and put its questions to the user, before writing code.
 

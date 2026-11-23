@@ -45,9 +45,9 @@ Each module has a test target, except `<Project>Testing`, `<project>-protos`' ta
 
 | Test target | Proves |
 |---|---|
-| `<Project>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip; refusal of an expired token and of a `sub` that isn't a UUID; the `.user` metadata provider |
+| `<Project>AuthenticationTests` | The token's exact claims; the issue-and-verify round trip through `JWTIssuer(privateKey:)` and `JWTAuthenticator(publicKeys:)`, with the key's `kid` in the header; refusal of an expired token, of a `sub` that isn't a UUID and of a key the authenticator doesn't hold; the `.user` metadata provider |
 | `<Project>PersistenceTests` | Both branches of `UserSettingsInterceptor`: a bound user's setting, and nothing when none is bound |
-| `<Project>TransportTests` | `InternalCallerInterceptor` admits a listed common name and refuses an unlisted one and a call with no certificate |
+| `<Project>TransportTests` | `InternalCallerInterceptor` admits a listed RPC's caller by a DNS name in any case, refuses another caller, a certificate that names the caller only as its common name, and a call with no certificate, and passes an RPC it doesn't list |
 | `<Project>EventsTests` | `EventConsumer` stores an offset only once its handler returns or rejects, retries any other error, and skips a value that doesn't decode; the readers' settings. Over librdkafka's in-process mock cluster, which `@_spi(Internal) import Kafka` reaches in tests |
 
 `<Project>Testing` has no test target: the tests that use it prove the mocks, and every service's startup proves `<Project>Transport`'s readers.

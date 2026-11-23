@@ -29,14 +29,13 @@ bookshelf-gateway/Sources/
 │   ├── openapi.yaml, openapi-generator-config.yaml
 │   ├── BookshelfAPI.swift          the router builder
 │   ├── Contexts/                   IdentityRequestContext.swift, AdministratorRequestContext.swift
-│   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift, ResendWebhookController.swift,
-│   │                               SigningKeyController.swift
+│   ├── Controllers/                AccountController.swift, BookController.swift, LoanController.swift, ResendWebhookController.swift
 │   ├── Middlewares/                ErrorMiddleware/: ErrorMiddleware.swift, Problem.swift, HTTPResponse.Status+RPCError.swift
 │   └── Schemas/                    Requests/, Responses/, Shared/: Type+RPC.swift conversions
 └── Gateway/
     ├── Gateway.swift               the @main command
     ├── Configuration/              InMemoryProvider+ApplicationDefaults.swift
-    └── Serve/                      Serve.swift, JWKS+Protobuf.swift
+    └── Serve/                      Serve.swift
 ```
 
 ## OpenAPI types
@@ -102,7 +101,7 @@ Each group of routes runs in the context that states what it guarantees:
 
 | Tier | Context | Guarantees |
 |---|---|---|
-| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, sign-out, public reads, signed webhooks, the JWK Set |
+| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, sign-out, public reads, signed webhooks, the JWK Set where one is served |
 | A caller | `IdentityRequestContext`, behind `BearerAuthenticationMiddleware` and `IsAuthenticatedMiddleware` | `identity` is set |
 | Administrators | `AdministratorRequestContext`, converted at the verb | A non-optional administrator `identity` |
 
@@ -140,7 +139,7 @@ package struct AdministratorRequestContext: ChildRequestContext {
 ```
 
 - A child context's throwing initializer is the check: a handler that takes `AdministratorRequestContext` never re-tests the role.
-- The administrator check happens at the verb, not behind an `/admin` path prefix, so a resource's path is shared by its audiences. `/admin/…` is only for an administrator's view of a collection that callers also list (`/admin/loans`).
+- The administrator check happens at the verb, in the context, never by a path prefix.
 - Only administrators have a context of their own. A route for another role, such as a librarian's, is in the caller tier, and the use case behind it refuses the wrong role as `403` ([authorization](use-cases.md#authorization)): a context per role would copy the domain's rules into the gateway.
 - A route whose bearer token isn't an access token, such as the refresh token a refresh, sign-out or change of organization presents, stays in the no-caller tier: `BearerAuthenticationMiddleware` refuses any bearer token it can't verify. Sign-in, with Basic credentials or a body, is in the no-caller tier too, since there is no caller yet.
 
@@ -186,7 +185,7 @@ package struct BookshelfAPI: Sendable {
 }
 ```
 
-The router builder takes its clients and the authenticator in its initializer; the executable builds them, which keeps the whole surface buildable over stub clients. Its `addWellKnownRoutes(to:)` registers the routes that live at the origin's root, as RFC 8615 places well-known resources, on the router's `.well-known` group beside `v1`.
+The router builder takes its clients and the authenticator in its initializer; the executable builds them, which keeps the whole surface buildable over stub clients.
 
 ## Controllers
 
@@ -252,11 +251,11 @@ package struct LoanController: Sendable {
 - A read of a resource that people edit answers its `etag` as the `ETag` header too, and an update reads it from `If-Match` with `requireIfMatch()`, beside `requireIdempotencyKey()`, which answers `400` without it ([transactions](use-cases.md#transactions)).
 - A query value that is present and malformed answers `400`, like a malformed body; only an absent one takes the service's default.
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
-- An action on a resource that isn't a create, read, update or delete is `POST :id/<verb>` (`:id/return`), as the RPC names it.
+- A route's path and method come from the feature's research ([reading like the requirement](style.md#reading-like-the-requirement)).
 - Status codes follow the method: `201` with `EditedResponse` for a create, `202` for a route that only asks for work to happen later and has nothing yet to return, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, a `DELETE` included, `200` otherwise.
 - Hummingbird keys a path capture by one name per segment, so every route on one path shares its capture name (`:id`).
 
-A provider's webhooks get a controller of their own, in the no-caller tier at `webhooks/<provider>`, that forwards each event unparsed:
+A provider's webhooks get a controller of their own, in the no-caller tier, that forwards each event unparsed:
 
 ```swift
 /// Resend's delivery events, forwarded to Loans as Resend signed them.
@@ -282,11 +281,10 @@ package struct ResendWebhookController: Sendable {
 - The conversion copies the bytes and the provider's signature headers unchanged, refusing a request missing one as `400`; the service verifies them ([webhooks](security.md#webhooks)).
 - A body over the limit answers `413` through `ErrorMiddleware`.
 
-`SigningKeyController`, also in the no-caller tier, serves Identity's public keys at `GET /.well-known/jwks.json`:
+Only when something outside the system verifies tokens does the gateway serve the public keys, at `GET /.well-known/jwks.json`, where RFC 8615 places well-known resources ([signing keys](security.md#signing-keys)):
 
-- Its handler calls `IdentityService`'s `ListSigningKeys` and answers `JWKSetResponse`, an RFC 7517 JWK Set with the keys the refreshers build ([signing keys](security.md#signing-keys)).
-- It answers with `Cache-Control: public, max-age=300`, the refresh interval, so a verifier outside the system that caches the set holds it no longer than a process does.
-- `openapi.yaml` documents the path with a path-level `servers` entry at the origin, since it's outside `/v1`.
+- `SigningKeyController`, in the no-caller tier, holds the keys the gateway's own `jwt.publicKeyPath` file holds, and answers them as `JWKSetResponse`, an RFC 7517 JWK Set: per key, `kty` `OKP`, `crv` `Ed25519`, `alg` `EdDSA`, `use` `sig`, the `kid` and the key as `x`. It calls no service.
+- `BookshelfAPI`'s `addWellKnownRoutes(to:)` registers it on the router's `.well-known` group beside `v1`, and `openapi.yaml` documents the path with a path-level `servers` entry at the origin, since it's outside `/v1`.
 
 ## Conversions
 
@@ -405,7 +403,7 @@ package struct Problem: HTTPResponseError {
 
 `/v1` changes only in ways a client built against it ignores: a new route, an optional request field or query parameter, a new response field. Any other change breaks clients, such as a field or route removed or renamed, a type changed, an input newly required or a status given a new meaning, and never lands in place:
 
-- A breaking change to a route is that route again under `/v2`, beside `/v1`'s; the routes it leaves alone stay at `/v1` only. `openapi.yaml` documents it with a path-level `servers` entry ending in `/v2`, as the JWK Set's path has one at the origin, and names a schema whose shape changed with a `V2` suffix (`LoanResponseV2`), so both versions' types generate side by side.
+- A breaking change to a route is that route again under `/v2`, beside `/v1`'s; the routes it leaves alone stay at `/v1` only. `openapi.yaml` documents it with a path-level `servers` entry ending in `/v2`, and names a schema whose shape changed with a `V2` suffix (`LoanResponseV2`), so both versions' types generate side by side.
 - `BookshelfAPI`'s `addV2Routes(to:)` registers it on the router's `v2` group, in its tier. Its handler sits beside `/v1`'s in the resource's controller, and both call the same RPC unless the contract changed too ([contracts](grpc.md#contracts-in-the-protos-package)).
 - From the deploy that ships `/v2`, `/v1`'s route is `deprecated: true` in `openapi.yaml`, and `DeprecationMiddleware`, on the group the controller registers it in, adds three headers to its responses, which CORS exposes ([the edge](#the-edge)):
   - `Deprecation` (RFC 9745): when the route was deprecated, as a structured-field date, `@` and the Unix time in seconds

@@ -130,7 +130,7 @@ report "One top-level type per file" "$(
 )"
 
 # A ConfigReader read names its key first; a root reads only its own keys, such as a host, a
-# port, its server's name, the task queue, a topic's name and the worker's shutdown period, and a reader
+# port, its server's name, the task queue, a topic's name, a role's user and the worker's shutdown period, and a reader
 # (Configuration/, Type+ConfigReader.swift) reads the rest. A call that wraps its arguments
 # puts forKey: at the start of the next line.
 configuration_reads='
@@ -150,7 +150,7 @@ FNR == 1 { opened = 0 }
         if (key ~ /^"[^"]*"$/) {
             key = substr(key, 2, length(key) - 2)
             if (key ~ /^(logLevel|host|hostname|port|db|topics\.[A-Za-z]+|worker\.(taskqueue|gracefulShutdownPeriodSeconds))$/) continue
-            if (key ~ /(^|\.)(user|password)$/) continue
+            if (key ~ /(^|\.)user$/) continue
         }
         print FILENAME ":" FNR ": " argument
     }
@@ -174,10 +174,6 @@ report "Absence is an optional or a nullable column, never \"\", -1, a distant d
     lines '\?\? *(""|-1([^0-9]|$))|\.distant(Past|Future)|DEFAULT '"''"
 )"
 
-report "A create's insert is plain, with no ON CONFLICT; a retry is found by its key first" "$(
-    lines '[Oo][Nn] +[Cc][Oo][Nn][Ff][Ll][Ii][Cc][Tt]' -path 'Sources/*Postgres/*' -name 'Create*Statement.swift'
-)"
-
 report "A policy is a predicate on the tenant and reads no role" "$(
     lines "current_setting\\('[^']*role" -path 'Sources/*Postgres/*'
 )"
@@ -185,7 +181,7 @@ report "A policy is a predicate on the tenant and reads no role" "$(
 # A repository method in Core with two parameters or more, none of them a command and none
 # a page size, printed as one line.
 repository_methods='
-# A read is named for what it returns: loan(userID:idempotencyKey:) -> Loan?, activeLoans(userID:) -> [Loan].
+# A read is named for what it returns: book(id:) -> Book?, activeLoans(userID:) -> [Loan].
 function is_read(    name, returned) {
     if (declaration !~ /->/) return 0
     name = declaration

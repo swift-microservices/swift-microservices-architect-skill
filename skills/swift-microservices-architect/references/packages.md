@@ -40,7 +40,7 @@ Core links a library that saves every service re-declaring a concept, when the l
 - doesn't pull full Foundation into the target;
 - is stable enough for its types to appear in use case signatures.
 
-`Persistence`, `<Project>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token or making a signing key qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Valkey`, `Kafka`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
+`Persistence`, `<Project>Authentication`, `Logging`, `Authentication` for issuing credentials (Identity's `CredentialIssuer`), and `Crypto` for hashing a token qualify. `PostgresNIO`, `GRPCCore`, `Hummingbird`, `Valkey`, `Kafka`, `AsyncHTTPClient`, a provider's SDK, generated contracts and `Configuration` don't: Core declares a port, and an adapter target implements it.
 
 `Temporal` is the one deliberate exception to these criteria: Core commits to it, as it does to the standard library. A workflow is the application's orchestration, and Temporal's determinism rules and macros make a wrapper cost more than it saves. It stays in its own corner of Core, file by file, since a module's types are visible only in files that import it:
 - `import Temporal` appears only in `XCore/Workflows/**` and in the use cases that start, signal, query or update a workflow, in `XUseCase.swift` alone of their five files.
@@ -89,7 +89,6 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.17.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.35.2"),
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.36.0", traits: []),
-        .package(url: "https://github.com/apple/swift-system.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-temporal-sdk.git", from: "1.5.0"),
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
         .package(url: "https://github.com/grpc/grpc-swift-extras.git", from: "2.2.2"),
@@ -97,7 +96,6 @@ let package = Package(
         .package(url: "https://github.com/hummingbird-project/postgres-migrations.git", from: "1.2.0"),
         .package(url: "https://github.com/swift-otel/swift-otel.git", from: "1.6.1", traits: ["OTLPGRPC"]),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.13.0"),
-        .package(url: "https://github.com/vapor/jwt-kit.git", from: "5.9.1"),
         .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.33.2"),
     ],
     targets: [
@@ -158,7 +156,6 @@ let package = Package(
                 .product(name: "GRPCOTelTracingInterceptors", package: "grpc-swift-extras"),
                 .product(name: "GRPCServiceLifecycle", package: "grpc-swift-extras"),
                 .product(name: "IdentityProtos", package: "bookshelf-protos"),
-                .product(name: "JWTKit", package: "jwt-kit"),
                 .product(name: "LoansProtos", package: "bookshelf-protos"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCertificateReloading", package: "swift-nio-extras"),
@@ -167,7 +164,6 @@ let package = Package(
                 .product(name: "PostgresMigrations", package: "postgres-migrations"),
                 .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
-                .product(name: "SystemPackage", package: "swift-system"),
                 .product(name: "Temporal", package: "swift-temporal-sdk"),
                 .product(name: "UnixSignals", package: "swift-service-lifecycle"),
             ],
@@ -214,16 +210,19 @@ bookshelf-loans/
 └── Sources/
     ├── LoansCore/
     │   ├── Loans/
-    │   │   ├── Loan.swift, LoanStatus.swift, LoanPolicy.swift, LoanEvent.swift, LoanEventKind.swift
-    │   │   ├── Repository/         LoanRepository.swift, LoanEventRepository.swift, Commands/CreateLoanCommand.swift
+    │   │   ├── Loan.swift, LoanStatus.swift, LoanPolicy.swift, LoanEvent.swift, LoanEventKind.swift, NoticeEvent.swift
+    │   │   ├── Repository/         LoanRepository.swift, LoanRepositoryError.swift, LoanEventRepository.swift,
+    │   │   │                       LoanEventRepositoryError.swift, Commands/CreateLoanCommand.swift
     │   │   └── UseCases/           BorrowBook/, ReturnBook/, ListLoans/, ListAllLoans/, MarkLoanOverdue/, ReceiveNoticeEvent/,
     │   │                           PublishLoanEvents/
     │   ├── Workflows/
     │   │   └── LoanWorkflow/       LoanWorkflow.swift, LoanActivities.swift, ActivityOptions+Loans.swift
+    │   ├── Catalog/                Book.swift
+    │   ├── Identity/               Member.swift
     │   ├── Paging/                 Page.swift, KeyedPage.swift
-    │   └── Ports/                  Book.swift, CatalogClient.swift, CatalogClientError.swift,
-    │                               Member.swift, IdentityClient.swift, OverdueNotice.swift, NoticeSender.swift,
-    │                               NoticeEvent.swift, NoticeEventVerifier.swift, LoanEventPublisher.swift
+    │   └── Ports/                  CatalogClient.swift, CatalogClientError.swift, IdentityClient.swift, IdentityClientError.swift,
+    │                               NoticeSender.swift, NoticeEventVerifier.swift, LoanEventPublisher.swift,
+    │                               LoanEventPublisherError.swift
     ├── LoansPostgres/
     │   ├── Scopes/                 PostgresLoansScope.swift, PostgresLoansInternalScope.swift, PostgresLoansWorkerScope.swift
     │   ├── Repositories/Loans/     PostgresLoanRepository.swift
@@ -240,10 +239,9 @@ bookshelf-loans/
         ├── Loans.swift             the @main command
         ├── Configuration/          InMemoryProvider+ApplicationDefaults.swift, LoanPolicy+ConfigReader.swift
         ├── Database/               Migrations.swift
-        ├── Serve/                  Serve.swift, JWKS+Protobuf.swift
+        ├── Serve/                  Serve.swift
         ├── Migrate/                Migrate.swift
         ├── BuildIndexes/           BuildIndexes.swift
-        ├── Health/                 Health.swift
         └── Worker/                 Worker.swift, Run.swift
 ```
 
@@ -255,7 +253,7 @@ Where each file goes: [folders](conventions.md#folders).
 bookshelf-core/
 ├── Package.swift
 └── Sources/
-    ├── BookshelfAuthentication/    UserIdentity.swift, UserRole.swift, OperationContext+User.swift
+    ├── BookshelfAuthentication/    UserIdentity.swift, UserRole.swift, OperationContext+User.swift, JWT+EdDSA.swift
     ├── BookshelfPersistence/       PostgresSettings+User.swift, UserSettingsInterceptor.swift,
     │                               PostgresClient.Configuration+ConfigReader.swift
     ├── BookshelfTransport/         TimedCertificateReloader.Configuration+ConfigReader.swift,
@@ -263,15 +261,15 @@ bookshelf-core/
     │                               HTTP2ClientTransport.Posix.TransportSecurity+ConfigReader.swift,
     │                               HTTP2ServerTransport.Posix.Config+ConfigReader.swift,
     │                               HTTP2ClientTransport.Posix.Config+ConfigReader.swift,
-    │                               ServiceConfig+ConfigReader.swift, InternalCallerInterceptor.swift,
-    │                               SigningKeyRefresher.swift
+    │                               ServiceConfig+ConfigReader.swift, JWTAuthenticator+ConfigReader.swift,
+    │                               InternalCallerInterceptor.swift
     ├── BookshelfEvents/            KafkaProducerConfig+ConfigReader.swift, KafkaConsumerConfig+ConfigReader.swift,
     │                               OutboxRelay.swift, EventHandler.swift, EventRejection.swift, EventConsumer.swift
     └── BookshelfTesting/           MockDatabase.swift, MockAuthenticator.swift
 ```
 
 - One product per target, each its own dependency set: a Core target that links `BookshelfAuthentication` acquires no transport, driver or configuration module.
-- `BookshelfAuthentication` depends on swift-authentication, jwt-kit, swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, swift-configuration and swift-nio-extras for the certificate reloader; executables link it, and `XPostgresTests` for the settings it binds. `BookshelfTransport` adds grpc-swift-2 for `ServiceConfig` and the interceptor, grpc-swift-nio-transport, swift-certificates for the peer's common name, swift-nio-extras, swift-configuration, and jwt-kit and swift-service-lifecycle for `SigningKeyRefresher` ([signing keys](security.md#signing-keys)). `BookshelfEvents` depends on swift-kafka-client, swift-protobuf for the handlers' events, swift-configuration, swift-service-lifecycle and swift-log; only the services with [events](events.md) link it, so no other service builds librdkafka.
+- `BookshelfAuthentication` depends on swift-authentication, swift-authentication-jwt and jwt-kit for the issuer's and authenticator's initializers ([signing keys](security.md#signing-keys)), swift-log and swift-operation-context. `BookshelfPersistence` adds swift-persistence-postgres, postgres-nio, swift-nio-ssl for the TLS configuration, grpc-swift-2 for the interceptor, and swift-configuration; executables link it, and `XPostgresTests` for the settings it binds. `BookshelfTransport` adds grpc-swift-2 for `ServiceConfig` and the interceptor, grpc-swift-nio-transport, swift-certificates for the peer's DNS names, swift-nio-extras, swift-configuration, and swift-authentication-jwt for the authenticator's reader. `BookshelfEvents` depends on swift-kafka-client, swift-protobuf for the handlers' events, swift-configuration, swift-service-lifecycle and swift-log; only the services with [events](events.md) link it, so no other service builds librdkafka.
 - Its API is `public`, with `public import` for every module whose types it exposes.
 - It releases with semantic versions; services depend on a release of it, never a branch or `.package(path:)`. A change to it, or to `<project>-protos`, is released and tagged first; each service and the gateway then raise their requirement. Before the shared packages have a remote, each is a local repository with its releases tagged, and a dependent names it by its `file://` URL and the same `from:`, which resolves as a release does; the URL becomes the remote's in one change once it exists.
 
@@ -342,6 +340,8 @@ SPM checks that a target can reach what it imports, but not what a declaration s
 - Only the executable builds a Temporal client or worker.
 - An activity container stores only use case and port protocols and a `Logger`.
 - Activities call system use cases only, so nothing in `Workflows/` names a caller.
+- `Ports/` declares only protocols and their error enums.
+- Every repository protocol in Core has its `XRepositoryError` in a file beside it.
 - Adapters import no sibling adapter, and only XGRPC imports the service's contract.
 - Generated contract types stay in XGRPC, the gateway's `GatewayHTTP` and the executable.
 - The gateway names no `XInternalService`.
@@ -359,8 +359,7 @@ It also lists each use of unchecked concurrency for review, without failing: eve
 - A use case's `logger.error` line reads `<Activity> failed: unknown error` ([logging](use-cases.md#logging)).
 - One top-level type per file ([files](conventions.md#files)).
 - No sentinel stands for absence: `?? ""`, `?? -1`, `.distantPast`, `.distantFuture` or a column's `DEFAULT ''` ([types and values](style.md#types-and-values)).
-- No `ON CONFLICT` in a `Create…Statement` ([repositories and statements](persistence.md#repositories-and-statements)).
 - No policy reads a role from `current_setting` ([row-level security](persistence.md#row-level-security)).
-- Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, a topic's name (`topics.loanEvents`), and a role's `user` and `password` ([configuration](composition.md#configuration)).
+- Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, a topic's name (`topics.loanEvents`), and a role's `user` ([configuration](composition.md#configuration)).
 
 It also lists for review, without failing: each Core repository method with two parameters or more that isn't named for what it returns and takes no command or page size, since a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)); and each test file named for no type in `Sources/` ([test targets](testing.md#test-targets)).

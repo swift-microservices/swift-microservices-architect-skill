@@ -14,7 +14,7 @@ XCore is the service: what it knows (domain models), what it decides (use cases)
 - Authorization
 - Logging
 
-Its folders, an area per resource, `Workflows/` and `Ports/`, are in [the folder layout](packages.md#folder-layout).
+Its folders, an area per resource, a folder per service whose data it knows, `Workflows/` and `Ports/`, are in [the folder layout](packages.md#folder-layout).
 
 ## Domain models
 
@@ -44,13 +44,13 @@ package enum LoanStatus: String, Equatable, Sendable {
 - Its values follow [types and values](style.md#types-and-values); a string only where the domain has free text. A validated value, such as an `EmailAddress`, travels as itself through models, commands and ports, never as the `String` it was made from. A field earns such a type once two use cases validate it: the input carries the raw value, and each use case makes the type in a `guard`, throwing its case (`invalidEmail`).
 - A rule more than one use case applies lives on a model or a policy, never in a use case for another to copy: `LoanPolicy.dueDate(borrowedAt:)`, a failable `EmailAddress(_:)` that normalizes and validates.
 - A value operators change is a policy value (`LoanPolicy`, with `maximumActiveLoans` and `loanPeriod`), passed to the use cases that apply it and read from configuration by the executable ([configuration](composition.md#configuration)). A limit the domain fixes, such as an email address's 254 characters, is a static on its model (`EmailAddress.maximumLength`).
-- What the service knows about another service's data is its own model, in `Ports/`, beside the port that returns it: Loans' `Book` holds an id and a title, not Catalog's whole book.
+- What the service knows about another service's data is its own model, in an XCore folder named for the service that owns the data: Loans' `Catalog/Book.swift` holds an id and a title, not Catalog's whole book.
 
 ## Errors
 
 | Error | Thrown by | Cases |
 |---|---|---|
-| `XRepositoryError` | A repository adapter | Reasons the store reports that a use case acts on: `duplicateEmail` |
+| `XRepositoryError` | A repository adapter | Reasons the store reports that a use case acts on: `alreadyBorrowed`, `idempotencyConflict` |
 | `<Service>ClientError` and other port errors | A port adapter | Reasons the remote side reports that a use case acts on: `unavailable` |
 | `XUseCaseError` | The use case | Every outcome its caller handles differently, then `unknown` |
 
@@ -69,8 +69,8 @@ package enum BorrowBookUseCaseError: Error, Equatable {
 - Each error is an enum, `Error, Equatable`, with no associated values unless the caller acts on them, and without messages: a transport writes the message its caller reads ([status codes](grpc.md#status-codes)). Its file holds only the enum; what a state means for a caller, such as whether a loan is past its due date, is a method on the model (`loan.isPastDue(at:)`).
 - A case names an outcome in the domain's terms (`bookNotFound`, `loanLimitReached`), never the failure that caused it (`queryFailed`).
 - `unknown` is the use case's last case: everything it can't name, logged where it's thrown.
-- What an adapter can't report in Core's terms, such as an insert that returned no row, is an internal error of its own target, which reaches the use case's final `catch` ([repositories and statements](persistence.md#repositories-and-statements)).
-- A repository or port adapter raises only reasons it can detect, such as a constraint or a status code, and lets every other error propagate unchanged. A cache's read is the one exception ([Valkey](persistence.md#valkey)).
+- Every `XRepository` has its `XRepositoryError` beside it, in Core, even before it has a case. Its adapter throws only those cases: a constraint's violation mapped by the constraint's name, or no row back from a write where that means a conflict ([repositories and statements](persistence.md#repositories-and-statements)). A driver's error and a decoding error propagate unchanged, to the use case's final `catch`; no adapter target declares an error of its own.
+- A port adapter likewise raises only its port error's cases, such as a status code it maps, and lets every other error propagate unchanged. A cache's read is the one exception ([Valkey](persistence.md#valkey)).
 
 ## Repositories and commands
 
@@ -79,7 +79,6 @@ package protocol LoanRepository: Sendable {
     func lockLoans(userID: UUID) async throws
     func create(_ command: CreateLoanCommand) async throws -> Loan
     func loan(id: UUID) async throws -> Loan?
-    func loan(userID: UUID, idempotencyKey: String) async throws -> Loan?
     func activeLoans(userID: UUID) async throws -> [Loan]
     func loans(userID: UUID, page: Int, pageSize: Int) async throws -> Page<Loan>
     func loans(startingAfter: UUID?, pageSize: Int) async throws -> KeyedPage<Loan>
@@ -96,6 +95,11 @@ package struct CreateLoanCommand: Sendable {
     package init(userID: UUID, bookID: UUID, dueDate: Date, idempotencyKey: String) {
         …
     }
+}
+
+package enum LoanRepositoryError: Error, Equatable {
+    case alreadyBorrowed
+    case idempotencyConflict
 }
 ```
 
@@ -152,7 +156,8 @@ package enum CatalogClientError: Error, Equatable {
 
 Ports and their implementations are named as [naming](conventions.md#naming) gives them.
 
-- A port returns Core models in the consumer's words.
+- `Ports/` holds the port protocols and their error enums, and nothing else. The models a port returns live in the folder of the service that owns their data (`Catalog/Book.swift`), or in an area when they're the service's own.
+- A port takes named parameters or values Core already has, never an input type made for it: `sendOverdueNotice(member:book:idempotencyKey:)`. It returns Core models in the consumer's words.
 - A port isn't in a scope: it isn't part of the transaction, so the use case holds it directly.
 
 ## A use case
@@ -244,29 +249,10 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
             }
 
             let loan = try await database.withTransaction { scope in
-                // One borrow per member at a time, so a retry in flight and the limit see each other's loans.
+                // One borrow per member at a time, so concurrent borrows count each other's loans.
                 try await scope.loanRepository.lockLoans(userID: subject.userID)
 
-                // A retry returns the loan its first attempt created, before the limit counts it.
-                let existingLoan = try await scope.loanRepository.loan(
-                    userID: subject.userID,
-                    idempotencyKey: input.idempotencyKey
-                )
-                if let existingLoan {
-                    guard existingLoan.bookID == book.id else {
-                        logger.warning("Borrowing refused: idempotency key reused for another book")
-                        throw BorrowBookUseCaseError.idempotencyConflict
-                    }
-
-                    return existingLoan
-                }
-
-                let activeLoans = try await scope.loanRepository.activeLoans(userID: subject.userID)
-                guard activeLoans.count < policy.maximumActiveLoans else {
-                    logger.warning("Borrowing refused: loan limit reached")
-                    throw BorrowBookUseCaseError.loanLimitReached
-                }
-
+                // A retry gets back the loan its first attempt created.
                 let borrowDate = Date.now
                 let dueDate = policy.dueDate(borrowedAt: borrowDate)
                 let command = CreateLoanCommand(
@@ -275,7 +261,16 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                     dueDate: dueDate,
                     idempotencyKey: input.idempotencyKey
                 )
-                return try await scope.loanRepository.create(command)
+                let borrowedLoan = try await scope.loanRepository.create(command)
+
+                // The limit counts the loan just made, so a retry's loan, within the limit when made, passes again.
+                let activeLoans = try await scope.loanRepository.activeLoans(userID: subject.userID)
+                guard activeLoans.count <= policy.maximumActiveLoans else {
+                    logger.warning("Borrowing refused: loan limit reached")
+                    throw BorrowBookUseCaseError.loanLimitReached
+                }
+
+                return borrowedLoan
             }
 
             let workflowID = LoanWorkflow.id(loanID: loan.id)
@@ -309,6 +304,9 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
         } catch LoanRepositoryError.alreadyBorrowed {
             logger.warning("Borrowing refused: the member already has this book")
             throw .alreadyBorrowed
+        } catch LoanRepositoryError.idempotencyConflict {
+            logger.warning("Borrowing refused: idempotency key reused for another book")
+            throw .idempotencyConflict
         } catch CatalogClientError.unavailable {
             logger.warning("Borrowing failed: the catalog is unavailable")
             throw .catalogUnavailable
@@ -328,7 +326,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
 }
 ```
 
-The body reads in the order the requirement states it: refuse what needs no data, look up, decide, write, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; `catch is CancellationError { throw .unknown }`; and a final `catch` that logs an error and throws `.unknown`. They and the rest of the body follow [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
+The body reads in the order the requirement states it: refuse what needs no data, look up, write and decide in one transaction, start what follows, return. The catches come in this order: `catch let error as XUseCaseError { throw error }` when the `do` throws the use case's own cases; one `catch` per case of a repository's or port's error that the caller acts on (`catch CatalogClientError.unavailable`), logged and mapped to the use case's case; `catch is CancellationError { throw .unknown }`; and a final `catch` that logs an error and throws `.unknown`. They and the rest of the body follow [errors](style.md#errors), [build, then call](style.md#build-then-call) and [logging](#logging). The start follows [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case).
 
 ## System use cases
 
@@ -356,11 +354,11 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 
 - A transaction holds a pooled connection until it ends, so it contains only database work. Remote calls go before it (the catalog lookup) or after it commits (the workflow start).
 - A decision that must be atomic with its write happens inside the closure (the loan limit) and throws the use case's case; `PostgresDatabase` rolls back and rethrows the same error.
-- A rule over a count, such as the loan limit, first locks what it counts (`lockLoans(userID:)`), since `SELECT … FOR UPDATE` locks only rows that already exist; the lock ends with the transaction. A rule a constraint can state, such as a unique index, is that constraint, mapped to a case.
+- A rule over a count, such as the loan limit, first locks what it counts (`lockLoans(userID:)`), since `SELECT … FOR UPDATE` locks only rows that already exist; the lock ends with the transaction. A rule a constraint can state, such as a unique index, is that constraint, mapped to a case, and takes no lock.
 - A state change is the repository's conditional write ([state transitions](persistence.md#repositories-and-statements)). A use case for a person maps its `nil` to its case (`alreadyReturned`), reading the row in the same transaction first when a missing row answers differently (`loanNotFound`). A system use case, which an activity may run twice, maps it to the row as it stands, read in the same transaction, so a repeat reports the state the first run reached: `MarkLoanOverdue` returns the loan, overdue, returned or not yet due, and throws `loanNotFound` only when there's no loan.
 - An edit a person makes to what they read, such as an administrator's change to a book in Catalog's `UpdateBook`, is checked against the version they read, so two edits never silently overwrite each other. The row carries `version`, the read returns it as the resource's `etag`, the update's input carries it, and the repository's conditional write names it: `UPDATE books SET …, version = version + 1 WHERE id = $1 AND version = $2`. No row back is `bookNotFound` when a read in the same transaction finds none, and `versionConflict` otherwise.
-- An idempotent create with no count to guard follows the same order: lock the owner its key is unique with, or the key itself when it has no owner, look the key up, then insert. A unique constraint a concurrent request can still trip is mapped to its case, never left to `unknown`.
-- Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, and the use case looks the key up before any rule counts rows, so a retry after a lost start finds its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
+- An idempotent create is the repository's one statement, which inserts the row or returns the one its key's first request made ([repositories and statements](persistence.md#repositories-and-statements)); the use case looks nothing up first. A rule over a count checks after the create, counting the row it returned.
+- Work started after the commit is idempotent end to end. The row is keyed by the request's idempotency key and the workflow's id by the row, so a retry after a lost start gets back its loan and starts the same workflow ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 - That retry is the only recovery: a start or signal lost after the commit, such as when the process stops or Temporal is down, stays lost unless the client retries the request with the same key ([transports](grpc.md#transports)). A plan whose runs must exist without a client's retry puts that to the user as a question.
 - The scope and its repositories never outlive the closure: nothing escapes it, and no task outlives it.
 

@@ -18,15 +18,15 @@
 | Package kind | Public library, system library or service; CI workflow files and jobs as [delivery](delivery.md#ci-workflows) names them | `bookshelf-core` is a system library |
 | Service image | `ghcr.io/<owner>/<project>-<x>` | `ghcr.io/bookshelf/bookshelf-loans` |
 | Service targets | `XCore`, `XPostgres`, `XGRPC`, `XValkey`, `XKafka`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansGRPC`, `LoansKafka`, `LoansResend`, `LoansCoreTests` |
-| Executable product and command | `x`; subcommands `serve`, `worker run`, `migrate`, `health`, `build-indexes` | `loans migrate` |
+| Executable product and command | `x`; subcommands `serve`, `worker run`, `migrate`, `build-indexes` | `loans migrate` |
 | `<project>-core` products | `<Project>Authentication`, `<Project>Persistence`, `<Project>Transport`, `<Project>Events`, `<Project>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |
 | Contract target, proto package and file | `XProtos`; `<project>.<x>.v1`; `<project>/<x>/v1/<x>.proto` | `LoansProtos`, `bookshelf.loans.v1` |
 | Proto services | `<Resource>Service` and `<Resource>InternalService`; the service's name when its RPCs aren't about one resource | `LoanService`, `BookInternalService`, `IdentityService` |
 | RPCs | The standard methods' verbs (`Get`, `List`, `Create`, `Update`, `Delete`, `BatchGet` for several by id), or a domain verb and noun; an administrators' list of everyone's is `ListAll…`; an internal read keyed differently from the public one of its name says its key (`Get…ByID`) | `GetBook`, `ListLoans`, `ListAllLoans`, `BorrowBook` |
 | Paging | Requests carry `page_size` and `page`, or `page_token`; responses `page_info` (`page`, `page_size`, `total_count`, `total_pages`) or `next_page_token`. Core has `Page<Item>` and `KeyedPage<Item>` (`nextCursor`) and reads `page:pageSize:` or `startingAfter:pageSize:`. A client-chosen order is `order_by`, a field and an optional ` desc`. Over HTTP the same names in camelCase | `loans(userID:page:pageSize:)`, `loans(startingAfter:pageSize:)`, `LoansByUserIDStatement`, `CountLoansByUserIDStatement` |
-| Webhooks | An anyone RPC `Receive<Event>`; the route `webhooks/<provider>`; `<Provider>WebhookController`; the port `<Event>Verifier` | `ReceiveNoticeEvent`, `ResendWebhookController`, `NoticeEventVerifier` |
+| Webhooks | An anyone RPC `Receive<Event>`; `<Provider>WebhookController`; the port `<Event>Verifier` | `ReceiveNoticeEvent`, `ResendWebhookController`, `NoticeEventVerifier` |
 | Domain model | A plain noun in the service's language, clashing with no type every file sees ([naming a service](system.md#naming-a-service)); never `DTO`, `Row`, `Entity`, `Response` or `Detail` | `Loan`, `LoanStatus` |
-| Another service's data, as this service knows it | A noun in this service's words, in `Ports/` | `Book`, `Member` |
+| Another service's data, as this service knows it | A noun in this service's words, in a folder named for the owning service | `Catalog/Book.swift`, `Identity/Member.swift` |
 | Tunable rules | `<Resource>Policy` | `LoanPolicy` |
 | Use case | `<Operation>UseCase`, its RPC's verb and noun; with `…UseCaseProtocol`, `…UseCaseInput`, `…UseCaseError`, `…UseCaseScope` | `BorrowBookUseCase`, `BorrowBookUseCaseError` |
 | System use case | Its step's verb and noun + `UseCase`; the same effect for administrators `…ByAdministratorUseCase` | `MarkLoanOverdueUseCase`, `MarkLoanOverdueByAdministratorUseCase` |
@@ -36,7 +36,7 @@
 | Write command | The write's verb and noun + `Command` | `CreateLoanCommand` |
 | Errors | `<Resource>RepositoryError`, `<Service>ClientError`, `<Operation>UseCaseError`; cases name outcomes | `CatalogClientError.unavailable`, `.bookNotFound` |
 | Port to another service | `<Service>Client`; implementation `GRPC<Service>Client` | `CatalogClient`, `GRPCCatalogClient` |
-| Port to a provider | A role noun; implementation the provider's name + the role | `NoticeSender`, `ResendNoticeSender`; `PasswordHasher`, `BcryptPasswordHasher`; `CredentialIssuer`, `JWTCredentialIssuer` |
+| Port to a provider | A role noun; implementation the provider's name + the role | `NoticeSender`, `ResendNoticeSender`; `PasswordHasher`, `BcryptPasswordHasher` |
 | Workflow, activity container | `<Process>Workflow`, `<Process>Activities`; a container an activity several workflows share is named for its step, `<Step>Activities`; activities are verbs, inputs `<Activity>Input` | `LoanWorkflow`, `LoanActivities.markOverdue(input:)`, `MarkOverdueInput` |
 | A use case's Temporal properties | `temporalClient`, `taskQueue` | `private let temporalClient: TemporalClient` |
 | Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `currentState(input:)` |
@@ -52,13 +52,13 @@
 | Statement | What it does + `Statement` | `CreateLoanStatement`, `ActiveLoansByUserIDStatement` |
 | Migration | What it changes; the ordered list `<Service>Migrations` | `CreateLoansTable`, `CreateLoansRLSPolicy`, `CreateServiceRole` |
 | Database, roles, policies | `<project>_<x>`; `<x>_owner`, `<x>_service`, `<x>_internal`, `<x>_worker`; `tenant_isolation`, `organization_isolation`, `everyone_read`, `<role>_all` | `bookshelf_loans`, `loans_service`, `internal_all` |
-| Process identity, a certificate's common name | `<x>` for serve, `<x>-worker`, `<x>-migrator` | `loans-migrator` |
+| Process identity, a DNS name in its certificate's subject alternative names | `<x>` for serve, `<x>-worker` | `loans-worker` |
 | Columns | The snake_case of the Swift property; a stored date is a noun, never `…At` | `creation_date` for `creationDate`, `due_date`; not `created_at` |
 | Indexes unique while active | `<table>_active_<columns>_key` | `loans_active_user_id_book_id_key` |
 | Tenant settings | `app.caller_user_id`; `app.caller_organization_id` for an organization tenant | |
 | gRPC service types | The proto service's name | `LoanService`, `BookInternalService` |
 | Gateway | Targets `GatewayHTTP`, `Gateway`; router builder `<Project>API`; `<Resource>Controller` per resource; `IdentityRequestContext`, `AdministratorRequestContext` | `BookshelfAPI`, `LoanController` |
-| Configuration keys | Dotted scopes with lowerCamelCase leaves; a duration names its unit | `grpc.server.port`, `postgres.service.user`, `tls.refreshIntervalSeconds` |
+| Configuration keys | Dotted scopes with lowerCamelCase leaves; a duration names its unit, and a file's path ends in `Path` | `grpc.server.port`, `postgres.service.user`, `tls.refreshIntervalSeconds`, `jwt.publicKeyPath` |
 | Logger label | `<project>-<x>`, `<project>-<x>-worker` | `bookshelf-loans-worker` |
 | Log metadata keys | lowerCamelCase | `loanID`, `userID`, `error` |
 | Valkey keys, ACL user | `<x>:<purpose>:<id>`; `<x>` | `identity:reset-code:<user id>`; `identity` |
@@ -69,12 +69,12 @@
 
 | Target | Folders |
 |---|---|
-| XCore | A folder per area (`Loans/`) with its models and policy, `Repository/` with its `<Resource>Query` types, `Repository/Commands/`, `UseCases/<Name>/`; `Workflows/<WorkflowName>/` with the workflow, its activity container and `ActivityOptions+X.swift`, and a shared container, a payload type two workflows share, and `XSchedules.swift` directly in `Workflows/`; `Ports/` for what the service needs from other systems, with the models they return; `Paging/` for the page types |
-| XPostgres | `Scopes/`, `Repositories/<Area>/` and `Repositories/PostgresRepositoryError.swift`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/` for the area's own tables and policies, `Migrations/Role/`, `Migrations/XMigrations.swift` for their order and `Migrations/XIndexes.swift` for the indexes built concurrently |
+| XCore | A folder per area (`Loans/`) with its models and policy, `Repository/` with each repository's `XRepositoryError` and its `<Resource>Query` types, `Repository/Commands/`, `UseCases/<Name>/`; `Workflows/<WorkflowName>/` with the workflow, its activity container and `ActivityOptions+X.swift`, and a shared container, a payload type two workflows share, and `XSchedules.swift` directly in `Workflows/`; a folder per service whose data it knows, named for that service (`Catalog/`), with the models of that data; `Ports/` for the protocols of what the service needs from other systems and their error enums only; `Paging/` for the page types |
+| XPostgres | `Scopes/`, `Repositories/<Area>/`, `Statements/<Area>/` with `Type+PostgresRow.swift`, `Extensions/`, `Migrations/<Area>/` for the area's own tables and policies, `Migrations/Role/`, `Migrations/XMigrations.swift` for their order and `Migrations/XIndexes.swift` for the indexes built concurrently |
 | XGRPC | A folder per proto service's resource (`Loans/`) with `XService`, `XInternalService` and `Protobuf/`; a `Protobuf/` at the target's root for what several of them convert (`PageSize.swift`, `PageInfo+Protobuf.swift`); `Clients/` with `Clients/Protobuf/` |
 | XValkey, X<Provider> | Flat, one file per type |
 | XKafka | Flat, one file per handler or publisher, with `Protobuf/` for the events' conversions |
-| X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift` and the signing key set's conversion, `Serve/JWKS+Protobuf.swift` (Identity's `JWKS+SigningKey.swift`), `Worker/Worker.swift`, `Worker/Run.swift`, `<Command>/<Command>.swift` for a short-lived command |
+| X (executable) | `X.swift` (`@main`), `Configuration/`, `Database/Migrations.swift`, `Serve/Serve.swift`, `Worker/Worker.swift`, `Worker/Run.swift`, `<Command>/<Command>.swift` for a short-lived command |
 | Test target | `Mocks/`, `Support/` for a harness or fixtures several suites share, then a file per tested type, never one per group of them: `BorrowBookUseCaseTests.swift` |
 | GatewayHTTP | `openapi.yaml`, `openapi-generator-config.yaml`, `<Project>API.swift`, `Contexts/`, `Controllers/`, `Middlewares/`, `Schemas/Requests/`, `Schemas/Responses/`, `Schemas/Shared/` |
 

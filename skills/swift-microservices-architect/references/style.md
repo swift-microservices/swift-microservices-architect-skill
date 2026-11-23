@@ -26,19 +26,21 @@ The bar is the sample code in Apple's WWDC sessions: small types named for their
 - `// MARK: -` names the sections of a composition root and the groups inside a type: a service's RPCs by audience, a router builder's tiers, an activity container's steps.
 - Code that a reader would otherwise check twice gets a one-line comment with the reason: a business rule, an ordering constraint, a safety property. A comment never narrates the next line.
 
-A feature is built the established way. Before designing one, search online for how it's already solved, in this order:
+A feature is built the established way. Before designing any feature, the agent searches online for how it's already solved, in this order; the search is never skipped:
 1. The standard: an RFC, OWASP's guidance, or the provider's or library's documentation, such as RFC 9457 for problem details, RFC 8725 for JWTs, OWASP's password storage, the IETF `Idempotency-Key` header, RFC 3339 for dates on the wire and Google's AIPs for a contract's standard methods and fields.
 2. Where no standard covers it, how established production systems and the community solve it, such as Stripe's idempotency keys, the transactional outbox or a token bucket for rate limits.
 3. An existing implementation: a maintained Swift package first, else a well-tested one in another language, such as Go, Rust or Java, to port.
 
 Then:
 - Adopt what the search finds within this skill's rules, and never invent a scheme where a standard or a proven implementation exists.
+- A well-known feature, such as authentication's registration, email verification, password reset, sessions and refresh tokens, is adopted or ported, never built from scratch.
+- A gateway route's path and method come from the same search, as the standard or the established APIs it found shape them.
 - A package goes in an adapter target, or in Core only if [Core may link it](packages.md#what-core-may-link), and never replaces a library [the stack](stack.md) names.
 - Ported code lands in the shape it belongs in, a Core value, a use case or an adapter, and leaves its source's architecture behind.
 - Code is copied or ported only under a permissive license, keeping its notice, and the original's tests or test vectors become its tests.
 - The sources go in the plan's Decisions ([the plan](system.md#the-plan)) or, outside a plan, the response, so the user sees what was found.
 - Handle what most production systems meet. A rare edge case gets a sentence to the user, not code.
-- Without web access, tell the user that the approach comes from prior knowledge, unchecked against the current standard and implementations.
+- Without web access, the design stops, and the user is asked to enable it or to supply the sources.
 
 ## Build, then call
 
@@ -57,7 +59,7 @@ let rows = try await connection.execute(statement, logger: logger)
 
 - A use case declares its error with typed throws: `async throws(BorrowBookUseCaseError) -> Loan`. Repositories, ports, clients and handlers use untyped `throws`: a driver throws errors the domain doesn't name, and a repository's `XRepositoryError` carries the few it does.
 - A use case maps the errors of its repositories and ports with `do` and one `catch` per case: `catch CatalogClientError.unavailable { throw .catalogUnavailable }`. The order and the final `catch` are in [the body of a use case](use-cases.md#the-body-of-a-use-case).
-- An adapter that calls a use case, a handler, an activity or an event handler, maps the use case's typed error with `do throws(XUseCaseError)` and one `catch` that switches over every case, with no `default`, so a case added to the error fails its build ([a handler](grpc.md#a-handler)).
+- An adapter that calls a use case, a handler, an activity or an event handler, maps the use case's typed error with one `do` and one `catch` whose `switch error` covers every case, with no `default`, so a case added to the error fails its build ([a handler](grpc.md#a-handler)). Swift 6.4 infers the `do`'s thrown type from the use case's call; spelling it, `do throws(XUseCaseError)`, is allowed and never required.
 - In a use case, a handler and an activity, the `do` holds the whole path, from the first step of the work through its `return`. Only refusals come before it: requiring the caller, converting the request, checking input that needs no data.
 - There, each `catch` ends its own path, by throwing or by returning what its case means (`nil` for `notFound`). Nothing is declared before the `do` for a `catch` to fill in, and no code follows the `do`.
 - A `do` nests in one place: around a workflow's start, when its `catch` returns what the path built ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
@@ -81,7 +83,7 @@ Every package builds with [the Swift settings](packages.md#swift-settings). The 
 - Inside a service's package, what another target uses is `package`, the rest internal or `private`. `public` is for libraries other packages link: `<project>-core`, `<project>-protos`.
 - A `package` struct spells its `package init`.
 - Imports are internal by default. A file imports a module `package` when the module's types appear in its `package` declarations, `public` when in `public` ones, and plainly otherwise.
-- A file imports every module whose members it uses, since `MemberImportVisibility` hides members of modules it doesn't import: `SwiftProtobuf` for a message's `.with { … }`, `Persistence` or `PersistencePostgres` for `withTransaction`, `<Project>Authentication` for a `UserRole`'s `rawValue`, `SystemPackage` for the `FilePath` literal `DirectoryFilesProvider` takes, the Foundation block for `uuidString`.
+- A file imports every module whose members it uses, since `MemberImportVisibility` hides members of modules it doesn't import: `SwiftProtobuf` for a message's `.with { … }`, `Persistence` or `PersistencePostgres` for `withTransaction`, `<Project>Authentication` for a `UserRole`'s `rawValue`, the Foundation block for `uuidString`.
 - Access levels go on members, never on an extension.
 
 ## Foundation

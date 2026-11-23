@@ -1,8 +1,8 @@
 # Related skills
 
-This skill states the architecture: the services and who owns what, the mechanism between processes, the shapes, the stack and the style. The technique inside them belongs to maintained skills, each loaded when its task comes up; a checklist that covers the task names the skill at that step.
+This skill states the architecture: the services and who owns what, the mechanism between processes, the shapes, the stack and the style. The technique inside them belongs to maintained skills, each invoked when its task comes up; a checklist that covers the task names the skill at that step.
 
-## Which skill a task loads
+## Which skill a task invokes
 
 Design and operations, whatever the stack:
 
@@ -23,7 +23,7 @@ The code inside a shape:
 
 ## Installing them
 
-Before the first checklist, the skill list in the session is compared with these eleven names. A skill from the Engineering plugin is present under its `engineering:` prefix, such as `engineering:system-design`. The user is asked once, in one message, to install every missing skill with its source's command, and the task carries on whatever the answer:
+Every one of these eleven skills is installed before any checklist starts. The skill list in the session is compared with their names; a skill from the Engineering plugin is present under its `engineering:` prefix, such as `engineering:system-design`. When any is missing, the user is asked, in one message, to install each with its source's command, and the task stops until every one is installed:
 
 ```
 npx skills@1.9.0 add https://github.com/anthropics/knowledge-work-plugins --skill system-design architecture code-review deploy-checklist incident-response
@@ -35,7 +35,9 @@ npx skills@1.9.0 add https://github.com/twostraws/Swift-Concurrency-Agent-Skill 
 npx skills@1.9.0 add https://github.com/Erikote04/Swift-API-Design-Guidelines-Agent-Skill --skill swift-api-design-guidelines-skill
 ```
 
-A command lists only the missing skills from its source.
+- A command lists only the missing skills from its source.
+- A checklist line that names a skill invokes it with the Skill tool at that line, or, in a harness without one, reads its `SKILL.md` there. The agent never works from what it already knows of the skill's subject in its place.
+- `Verify` checks that each skill the task's checklist names was invoked.
 
 ## Where this skill wins
 

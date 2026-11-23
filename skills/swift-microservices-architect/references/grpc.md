@@ -178,7 +178,7 @@ package func borrowBook(
     let subject = try requireUser()
     let input = try BorrowBookUseCaseInput(request)
 
-    do throws(BorrowBookUseCaseError) {
+    do {
         let loan = try await borrowBookUseCase(subject: subject, input: input)
         return Bookshelf_Loans_V1_Loan(loan)
     } catch {
@@ -204,7 +204,7 @@ package func borrowBook(
 
 1. Require a caller for the caller's own and administrators' RPCs (`requireUser()`); anyone's require nothing.
 2. Convert the request before the `do`: a malformed request is refused as `invalidArgument` by the conversion.
-3. The `do` declares the use case's error, `do throws(BorrowBookUseCaseError)`, and holds the use case call and the response's conversion, which doesn't throw. Its one `catch` switches over the error, a `case` per case in the order the enum declares them.
+3. One `do` holds the use case call and the response's conversion, which doesn't throw, so the `do` throws the use case's error alone. Its one `catch` switches over that error, a `case` per case in the order the enum declares them ([errors](style.md#errors)).
 4. No `default` ([errors](style.md#errors)), and no logging: the use case logged what happened.
 
 ## An internal service
@@ -226,7 +226,7 @@ package struct BookInternalService: Bookshelf_Catalog_V1_BookInternalService.Sim
     ) async throws -> Bookshelf_Catalog_V1_Book {
         let input = try GetBookUseCaseInput(request)
 
-        do throws(GetBookUseCaseError) {
+        do {
             let book = try await getBookUseCase(input: input)
             return Bookshelf_Catalog_V1_Book(book)
         } catch {
@@ -241,7 +241,7 @@ package struct BookInternalService: Bookshelf_Catalog_V1_BookInternalService.Sim
 }
 ```
 
-- A handler requires no caller; `InternalCallerInterceptor` admits the caller on its descriptor, where no bearer or settings interceptor runs ([interceptors](#interceptors)).
+- A handler requires no caller; `InternalCallerInterceptor` admits the plan's callers of each RPC, and no bearer or settings interceptor runs on its descriptor ([interceptors](#interceptors)).
 - Its use cases take no `subject:`. One that acts for a user takes the user's id in its input, as Identity's `GetMember` takes `user_id` ([authorization](use-cases.md#authorization)).
 - The server registers it beside `XService`: `services: [bookService, bookInternalService, healthService]`.
 
@@ -331,11 +331,11 @@ A refusal that turns on who the caller is, such as approving a request the calle
 
 ## Interceptors
 
-`ServerOTelTracingInterceptor` comes first on every `XService` and `XInternalService` descriptor, and `ClientOTelTracingInterceptor` first in every client ([observability](observability.md#a-trace-across-processes)). The others apply to the person-facing descriptors only, as [the composition root](composition.md#the-composition-root) wires them:
+`InternalCallerInterceptor` comes first on every server, applied to every service (`.all`), so it refuses an unlisted caller of an internal RPC before anything runs ([mutual TLS](security.md#mutual-tls)). `ServerOTelTracingInterceptor` follows on every `XService` and `XInternalService` descriptor, and `ClientOTelTracingInterceptor` comes first in every client ([observability](observability.md#a-trace-across-processes)). The others apply to the person-facing descriptors only, as [the composition root](composition.md#the-composition-root) wires them:
 
 - `BearerAuthenticationInterceptor` proves a bearer token if there is one and binds the principal; an invalid token ends the call as `unauthenticated` before the handler runs, and a missing one continues unbound.
 - `UserSettingsInterceptor` follows it in a service with tenant tables ([binding the tenant](persistence.md#binding-the-tenant)).
-- `XInternalService` descriptors carry neither. `InternalCallerInterceptor` admits their callers by certificate ([mutual TLS](security.md#mutual-tls)): `.apply(internalCallers, to: .services([Bookshelf_Catalog_V1_BookInternalService.descriptor]))`, built from the server's scoped configuration with `try InternalCallerInterceptor(config: serverConfig)`.
+- `XInternalService` descriptors carry neither: `InternalCallerInterceptor` admitted their callers.
 - Clients a service uses to reach other services' internal RPCs carry only the tracing interceptor. Forwarding the caller's token with `BearerPropagationInterceptor` is the gateway's ([upstream clients](gateway.md#upstream-clients)).
 
 ## Clients for Core's ports

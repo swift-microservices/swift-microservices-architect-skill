@@ -63,6 +63,18 @@ report "Activities call system use cases only, so nothing in Workflows/ names a 
     grep -rnE 'subject:|UserIdentity' "$core/Workflows" 2>/dev/null
 )"
 
+report "Ports/ declares only protocols and their error enums" "$(
+    grep -rnE '^((public|package|internal|private|fileprivate|final|indirect) +)*(struct|class|actor|enum) +[A-Z]' "$core/Ports" 2>/dev/null |
+        grep -vE 'enum +[A-Za-z0-9_]+Error *:'
+)"
+
+report "Every repository protocol in Core has its XRepositoryError beside it" "$(
+    grep -rlE '^((public|package) +)?protocol +[A-Za-z0-9_]+Repository *:' "$core" 2>/dev/null | while read -r file; do
+        name=$(sed -nE 's/^((public|package) +)?protocol +([A-Za-z0-9_]+Repository) *:.*/\3/p' "$file" | head -n 1)
+        [ -f "$(dirname "$file")/${name}Error.swift" ] || echo "$file: no ${name}Error.swift beside it"
+    done
+)"
+
 # The package's own modules: its targets and its contract. A project product whose name
 # starts with the service's, such as BookshelfAuthentication beside a service named Book, is neither.
 own_modules="$(ls Sources | tr '\n' '|')${service}Protos"

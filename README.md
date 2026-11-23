@@ -12,7 +12,7 @@ Ask for a plan, a new service, an endpoint, a background process or a review, an
 - **A service per capability.** Each service owns its data and the rules over it. No service reads another's database; data crosses only through gRPC contracts.
 - **Boundaries the compiler enforces.** A service is one Swift package. Its Core target holds the models, use cases and Temporal workflows and imports no driver or transport; adapters for Postgres, gRPC and Valkey sit around it; one executable wires them together. Each target declares what it imports, so most crossings fail the build, and the skill's boundary and style scripts catch the rest.
 - **Code that reads like the requirement.** Use cases read top to bottom, the way Apple's sample code does: typed throws, one `catch` per outcome, no helper methods.
-- **Security on every hop.** Mutual TLS on gRPC, Temporal and Postgres, TLS to Valkey, the caller's token verified again by every service, and row-level security under every tenant query.
+- **Security on every hop.** Mutual TLS on gRPC, TLS to Valkey and Kafka, Postgres and Temporal connected as you decide in the plan, the caller's token verified again by every service, and row-level security under every tenant query.
 - **Durable work on Temporal, facts on Kafka.** Anything that waits, retries or spans services is a workflow in Core, written directly against the Temporal SDK, never a fire-and-forget task. A fact other services react to on their own is an event, recorded in the transaction that makes the change and published to Kafka from an outbox.
 - **Modern Swift.** Swift 6 language mode with strict concurrency, structured concurrency only, `package` access, and owned code importing `FoundationEssentials`, so a service drops full Foundation once its dependencies do.
 
@@ -74,7 +74,7 @@ A new backend goes from idea to production through the skill's checklists, in th
 
 The plan's Build order lists these steps and ticks each one once its checklist's build, tests and checks pass, so invoking the skill with no task picks up at the next step.
 
-On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. Planning a backend or adding a feature starts by searching online for how it's already solved: the standard, such as an RFC or OWASP's guidance, how production systems handle it, and a Swift package to reuse or a well-tested implementation to port. The agent names its sources, then designs the feature with Engineering's system design skill. One that changes code ends with a build and a test run repeated until both pass.
+On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. Planning a backend or adding a feature always starts by searching online for how it's already solved: the standard, such as an RFC or OWASP's guidance, how production systems handle it, and a Swift package to reuse or a well-tested implementation to port. The agent names its sources, then designs the feature with Engineering's system design skill. One that changes code ends with a build and a test run repeated until both pass.
 
 ## What it covers
 
@@ -83,13 +83,13 @@ On a backend that already runs, the agent follows the checklist for the task: ad
 | System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan with its objectives, alerts, runbooks and build order |
 | Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
-| Persistence | Postgres roles proved by certificates, row-level security for user and organization tenants, statements, paging, migrations, Valkey |
+| Persistence | A Postgres instance per service, its roles, row-level security for user and organization tenants, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details, versions and the retirement of routes |
 | Workflows | Temporal workflows and activities in Core, how use cases start and reach them, determinism, activity options, the worker |
 | Events | When a fact is an event rather than a workflow or a call, contracts on Kafka, the transactional outbox and its relay, consumers that tolerate redelivery |
 | Composition | Commands, configuration, logging, and graceful shutdown |
-| Security | mTLS with certificate reloading, certificate logins to Postgres, JWTs and the rotation of their signing keys, secrets, webhook signatures |
+| Security | mTLS with certificate reloading, internal callers admitted per RPC, JWTs signed with Ed25519 key files and their rotation, secrets as files, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
 | Delivery | GitHub Actions CI, semantic-version releases, images on GitHub Container Registry, deploys through Dokploy |
 | Style | How the code reads, and how everything is named |
@@ -100,7 +100,7 @@ Not covered: setting up Dokploy and its servers, compose files, networks, the ed
 
 ### Works well with
 
-The skill decides the architecture and the style; maintained skills cover the technique, from a feature's design to the code inside a shape. The agent loads each where a checklist calls for it, such as Engineering's system design skill before a new feature, Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you once, at the start of a task, to install any that are missing. Where one's advice differs, the skill's services, shapes, stack and style win.
+The skill decides the architecture and the style; maintained skills cover the technique, from a feature's design to the code inside a shape. The agent invokes each where a checklist calls for it, such as Engineering's system design skill before a new feature, Temporal's skill before designing a workflow and the testing skill before writing tests, and stops at the start of a task until you install any that are missing. Where one's advice differs, the skill's services, shapes, stack and style win.
 
 - [Engineering](https://github.com/anthropics/knowledge-work-plugins): a feature's requirements and trade-offs, architecture decision records, code review, release checklists and incident response
 - [Swift Concurrency Pro](https://github.com/twostraws/Swift-Concurrency-Agent-Skill): actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics
@@ -140,7 +140,7 @@ skills/swift-microservices-architect/
     ├── testing.md              test targets and mocks
     ├── delivery.md             CI/CD for each kind of package
     ├── conventions.md          names, folders, files
-    └── related-skills.md       which maintained skill each task loads, and where this skill wins
+    └── related-skills.md       which maintained skill each task invokes, and where this skill wins
 .github/                        validation, SkillSpector's reviewed exceptions, the Tier 2 runner, the semver label check, releases
 CLAUDE.md                       authoring rules for changing the skill
 ```

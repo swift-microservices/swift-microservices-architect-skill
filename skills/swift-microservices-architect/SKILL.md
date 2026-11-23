@@ -32,7 +32,7 @@ Decides how a Swift backend splits into services and modules, who owns what and 
 Clients ── HTTPS ──► edge (TLS ends) ── HTTP ──► Gateway (Hummingbird, OpenAPI)
 Gateway ── gRPC, mTLS, the caller's JWT ──► each service's XService
 Service, worker ── gRPC, mTLS ──► another service's XInternalService
-Service, worker ── mTLS ──► Temporal    Service, worker ──► its own data, wherever it lives
+Service, worker ──► Temporal, and its own Postgres, as the plan's answers set
 Worker ── TLS ──► Kafka
 ```
 
@@ -62,11 +62,11 @@ A service has only the targets it needs, each importing only what [its row](refe
 | Concern | Owner |
 |---|---|
 | Business rules, authorization decisions, what an error means | The use case, in XCore; adapters only convert and delegate |
-| What a service knows about another's data | A model beside the port that returns it, in XCore's `Ports/` |
+| What a service knows about another's data | A model in an XCore folder named for the owning service (`LoansCore/Catalog/`), never in `Ports/` |
 | Protobuf ↔ domain, HTTP ↔ protobuf | `Protobuf/` in XGRPC and XKafka; the gateway's `Schemas/` |
 | Messages between processes; the public API | `<project>-protos`; the gateway's `openapi.yaml` |
 | Who the caller is | The token, verified by the gateway and again by each service |
-| Which processes may call an internal RPC | The plan's callers, admitted by certificate through `InternalCallerInterceptor`; never the gateway |
+| Which processes may call an internal RPC | The plan's callers per RPC, admitted by their certificates' DNS names through `InternalCallerInterceptor`; never the gateway |
 | Tenant isolation | Row-level security; `<Project>Persistence` binds the caller per transaction, and each audience's use cases run as [its database role](references/persistence.md#database-roles) |
 | Durable, delayed or multi-service work | A Temporal workflow in XCore's `Workflows/` |
 | Facts other services react to | An [event](references/events.md) |
@@ -106,7 +106,7 @@ do {
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
 - An event published after its commit, not from the outbox, is lost if the process stops first ([outbox](references/events.md#the-outbox)).
-- A signing key changed outside `RotateSigningKeysUseCase` fails live tokens: a key signs only once every verifier holds it, and outlives its tokens ([signing keys](references/security.md#signing-keys)).
+- A token whose `kid` a verifier's key file lacks fails there as `unauthenticated`; keys change by [a runbook](references/security.md#signing-keys).
 
 ## Prerequisites
 
@@ -146,7 +146,7 @@ Read a reference only when the task reaches its row or a checklist names it.
 | [events.md](references/events.md) | An event, or choosing one over a workflow |
 | [composition.md](references/composition.md) | A command, composition root, configuration, logging, health or the ServiceGroup |
 | [observability.md](references/observability.md) | Telemetry, or a request's trace across processes |
-| [security.md](references/security.md) | mTLS, database logins, tokens and signing keys, secrets, attempt limits or webhooks |
+| [security.md](references/security.md) | mTLS, Postgres logins, tokens and their key files, secrets, attempt limits or webhooks |
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |
 | [delivery.md](references/delivery.md) | CI, releases, deployment, the Containerfile or Dependabot |
@@ -155,29 +155,29 @@ Read a reference only when the task reaches its row or a checklist names it.
 
 ## Related skills
 
-[related-skills.md](references/related-skills.md) names the skill for each task's technique. Where one differs, this skill's services, mechanisms, shapes, stack and style win.
+[related-skills.md](references/related-skills.md) names the skill for each task's technique, and where this skill wins over one.
 
 ## Instructions
 
-Copy the task's checklist into the response, **Verify**'s lines replacing a `Verify` item, and tick items when done; its `.md` files are in `references/`. Before the first checklist, ask once for the missing related skills (related-skills.md#installing-them). A new backend runs **Plan a backend**, then each Build order line's checklist (system.md#the-plan); with no task, propose the next unticked line.
+Copy the task's checklist into the response, **Verify**'s lines replacing a `Verify` item, and tick items when done; its `.md` files are in `references/`. Every related skill is installed before the first checklist starts, and a line naming one invokes it with the Skill tool there (related-skills.md#installing-them). A new backend runs **Plan a backend**, then each Build order line's checklist (system.md#the-plan); with no task, propose the next unticked line.
 
 **Plan a backend**
 
 ```
-- [ ] The requirements, scale and trade-offs with system-design, each open choice searched online (style.md#reading-like-the-requirement) and weighed with architecture (related-skills.md)
+- [ ] Requirements, scale and trade-offs with system-design; each open choice searched online (style.md#reading-like-the-requirement), weighed with architecture
 - [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
 - [ ] Name each service, its target names clashing with no module in the graph
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, events, short-lived state
-- [ ] Load temporal-developer before shaping the plan's workflows
-- [ ] Per service: its targets and commands; whether it stores data, where, its roles and how processes prove them (system.md#data-placement)
+- [ ] Invoke temporal-developer before shaping the plan's workflows
+- [ ] Per service: its targets and commands; its own Postgres and roles, if it stores data (system.md#data-placement)
 - [ ] <project>-core's products, <project>-protos' contracts, the gateway's routes by tier
-- [ ] Write the plan from system.md#the-plan; check it against the hard rules and put its questions to the user before any code
+- [ ] Write the plan from system.md#the-plan; check it against the hard rules and put its questions, Postgres's and Temporal's setup among them, to the user before any code
 ```
 
 **Start a project**
 
 ```
-- [ ] The plan's answers on certificate authorities and local runs
+- [ ] The plan's answers on certificate authorities, Postgres, Temporal and local runs
 - [ ] <project>-core: the plan's products, tested with swift-testing-pro (packages.md#the-projects-core-package)
 - [ ] <project>-protos: a target per contract (packages.md#the-contracts-package)
 - [ ] Set up CI/CD for each and tag its first release; scripts/check_style.sh and swift-format lint
@@ -186,14 +186,14 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Add a service**
 
 ```
-- [ ] Search for the established approach (style.md#reading-like-the-requirement), then design the feature with system-design and architecture (related-skills.md)
+- [ ] Search online (style.md#reading-like-the-requirement), then design with system-design and architecture
 - [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in
 - [ ] Package <project>-x from packages.md#packageswift-template, with only the targets the plan names
 - [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
 - [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md), the SQL with supabase-postgres-best-practices
 - [ ] XGRPC: proto services over the use cases, conversions, clients for ports (grpc.md)
 - [ ] XCore's Workflows/, XValkey, XKafka, X<Provider> as the plan needs; a workflow designed with temporal-developer, a Valkey command chosen with valkey
-- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' lists, Migrate, Serve with its health service, Health, BuildIndexes, and Run with a worker (composition.md)
+- [ ] X: commands, InMemoryProvider defaults, Migrations over XPostgres' lists, Migrate, Serve with grpc.health.v1, BuildIndexes, and Run with a worker (composition.md)
 - [ ] Gateway, once built: routes for the public RPCs (gateway.md)
 - [ ] A test target per module testing.md lists, over mocks, a file per tested type, with swift-testing-pro
 - [ ] Set up CI/CD as a service
@@ -203,7 +203,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Add an operation**
 
 ```
-- [ ] Search for the established approach (style.md#reading-like-the-requirement), then design the feature with system-design and architecture (related-skills.md)
+- [ ] Search online (style.md#reading-like-the-requirement), then design with system-design and architecture
 - [ ] Contract: the RPC under its audience in XService, or in XInternalService
 - [ ] XCore: the use case's files; its scope lists only what it touches (use-cases.md); an event it records (events.md#the-outbox)
 - [ ] A workflow run it affects, reached from the use case (workflows.md#reaching-a-run-from-a-use-case)
@@ -218,9 +218,9 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 **Add a durable process**
 
 ```
-- [ ] Search for the established approach (style.md#reading-like-the-requirement), then design the feature with system-design and architecture (related-skills.md)
-- [ ] Design the workflow with temporal-developer and the SDK's documentation: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow)
-- [ ] Each person's change: written by its use case, then signalled if the run waits on it, or sent as an update if only the run decides (workflows.md#reaching-a-run-from-a-use-case)
+- [ ] Search online (style.md#reading-like-the-requirement), then design with system-design and architecture
+- [ ] Design the workflow with temporal-developer: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow)
+- [ ] Each person's change: its use case writes it, then signals the run, or sends an update if only the run decides (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
 - [ ] XCore/Workflows/<WorkflowName>/: the workflow, its activity container over use case and port protocols, named ActivityOptions (workflows.md)
 - [ ] The use case that starts it, holding TemporalClient and the task queue, after its transaction commits, by a deterministic id
@@ -254,7 +254,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 
 ```
 - [ ] Each role's pool and timeouts, within Postgres's max_connections (persistence.md#connections-and-timeouts)
-- [ ] Each root: health, observability, secrets from files, the worker's shutdown period (composition.md)
+- [ ] Each root: grpc.health.v1, observability, secrets from files, the worker's shutdown period (composition.md)
 - [ ] The plan's Operations, answered by the user (system.md#the-plan)
 - [ ] Each release's checks and rollback triggers with deploy-checklist (related-skills.md)
 - [ ] Verify
@@ -265,6 +265,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 ```
 - [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests); report any suite that can't run
 - [ ] scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries), and swift-format lint
+- [ ] Each skill the task's checklist names was invoked with the Skill tool
 - [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency-pro, never silenced
 ```
 
