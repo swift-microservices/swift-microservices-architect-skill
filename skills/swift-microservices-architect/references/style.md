@@ -1,6 +1,6 @@
 # Swift style
 
-How the code reads: the bar for readability, error handling, strict concurrency, access control and imports, Foundation, types, documentation and formatting.
+How the code reads: the bar for readability, error handling, strict concurrency, access control and imports, Foundation, types, documentation, formatting and warnings from dependencies.
 
 ## Contents
 - Reading like the requirement
@@ -12,6 +12,7 @@ How the code reads: the bar for readability, error handling, strict concurrency,
 - Types and values
 - Documentation comments
 - Formatting
+- Warnings from dependencies
 
 ## Reading like the requirement
 
@@ -126,3 +127,8 @@ package import Foundation
 - swift-format with the repository's `.swift-format`; `swift-format lint --strict --recursive Sources Package.swift` passes.
 - `.swift-format` sets four-space indentation and 120-column lines; a line break before each argument of a call or declaration that wraps, respecting existing line breaks; trailing commas in multi-element collections; and `indentConditionalCompilationBlocks: false`, so the `FoundationEssentials` block stays flush left.
 - It sets no `rules`, so the default rules, ordered imports among them, stay on: a `rules` map turns off every rule it doesn't name.
+
+## Warnings from dependencies
+
+- A warning in code the project can't change, such as one inside a third-party macro's expansion, is a departure in the plan's Decisions ([the plan](system.md#the-plan)) naming the dependency, its version and the warning, and it leaves in the change that raises the dependency to a release without it.
+- No target turns off warnings or warnings-as-errors to hide one, in `Package.swift`, a flag or CI.

@@ -266,7 +266,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 - [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests); report any suite that can't run
 - [ ] scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries), and swift-format lint
 - [ ] Each skill the task's checklist names was invoked with the Skill tool
-- [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency-pro, never silenced
+- [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency-pro, never silenced; a warning in a dependency's code is a departure (style.md#warnings-from-dependencies)
 ```
 
 **Set up CI/CD**

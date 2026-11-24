@@ -35,6 +35,7 @@ Each repository's `.github/workflows/` holds these, each file's `name:` in paren
 
 - Each `uses:` is pinned to the full commit of `swift-microservices/ci`'s latest release, with the release in a comment: `@<commit>  # <release>`, looked up with `git ls-remote --tags <url>`. Dependabot moves the pin.
 - `main` changes only through pull requests: a ruleset requires the CI workflow's jobs, and a library's label check.
+- `gh pr merge --auto` waits only for the checks the base branch requires, and merges at once on a base that requires none. It's used only once `gh api repos/<owner>/<repo>/rules/branches/main` lists a `required_status_checks` rule; otherwise `gh pr checks --watch` waits for the pull request's CI to pass, and the merge follows.
 - `ci.yml` cancels a superseded run on pull requests only, since a run on `main` ships its commit.
 - Soundness checks every file's license header against `.license_header_template`, which holds the compact SPDX header with `@@` for the comment marker and `YEARS` for the year. `.licenseignore` lists `LICENSE` and `Package.swift`, whose tools-version line must come first.
 - A library's pull request carries exactly one label: `⚠️ semver/major`, `🆕 semver/minor`, `🔨 semver/patch` or `semver/none`. Below 1.0, a breaking change is minor and an addition patch; a doc-comment fix is patch; a change to the README, tests or CI is none.
