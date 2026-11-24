@@ -245,7 +245,7 @@ bookshelf-loans/
         └── Worker/                 Worker.swift, Run.swift
 ```
 
-Where each file goes: [folders](conventions.md#folders).
+Where each file goes, a type two areas share included: [folders](conventions.md#folders).
 
 ## The project's core package
 
