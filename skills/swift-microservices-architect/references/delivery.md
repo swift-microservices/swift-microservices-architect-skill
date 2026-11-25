@@ -127,7 +127,6 @@ jobs:
     uses: swift-microservices/ci/.github/workflows/service.yml@<commit>  # <release>
     with:
       executable_product: loans
-      image_repository: ghcr.io/bookshelf/bookshelf-loans
       linux_host_archs: '["aarch64"]'
       postgres_image: postgres:<major>-alpine
       foundation_linking_check_excluded_products: '["loans"]'
@@ -144,17 +143,16 @@ jobs:
       id-token: write
       attestations: write
     uses: swift-microservices/ci/.github/workflows/attest_image.yml@<commit>  # <release>
-    with:
-      image_repository: ghcr.io/bookshelf/bookshelf-loans
 ```
 
-- `image_repository` is the service's image in the plan's registry ([naming](conventions.md#naming)).
+- `service.yml`, `attest_image.yml` and the platform's deploy default `image_repository` to the service's image on GHCR, `ghcr.io/<owner>/<repository>` lowercased ([naming](conventions.md#naming)), and `cleanup_images.yml` defaults `package_name` to its package, the repository's name, so Loans' CI workflows pass neither.
+- `service.yml` labels the image from the repository with the OCI keys GHCR shows: `org.opencontainers.image.source`, which links the package to the repository from its first push so the package inherits the repository's access, `.description`, `.licenses` and `.revision`, the commit. The package page shows the repository's description and license, and the Containerfile sets no labels.
 - Every image build keeps the image's SBOM as a workflow artifact. A pull request's build fails on a critical vulnerability that has a fixed version, which a base image update or a dependency bump resolves; the publish on `main` reports one without failing, so a deploy or a hotfix never waits on a vulnerability disclosed after its pull request passed.
 - `attest_image.yml` signs each published image's build provenance, and each of its architectures' SBOMs, and pushes them beside the image, where they last as long as the image, so the deployment can verify an image with `gh attestation verify oci://<image> --owner <owner>`. GitHub stores attestations for a private repository only on Enterprise Cloud, so a service on another plan leaves out the `attest` job.
 - The gateway's `ci.yml` has no `postgres_image` and one process per environment, since it has no worker or database, and excludes `gateway` while its generated OpenAPI code links full Foundation.
 - The gateway's `ci.yml` also passes `openapi_breakage_check_path: Sources/GatewayHTTP/openapi.yaml`, so oasdiff fails a pull request whose `openapi.yaml` breaks a client of the base's, such as a route removed or an input newly required ([versions](gateway.md#versions)). Removing a route the base marks `deprecated: true` passes, as its sunset's pull request does. `oasdiff breaking main:Sources/GatewayHTTP/openapi.yaml Sources/GatewayHTTP/openapi.yaml --fail-on ERR` runs the same check locally.
 - `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls the platform's deploy for production with that `commit`. It deploys only a commit that staging ran, and may skip the commits between ([migrations](persistence.md#migrations)).
-- `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package on GHCR, keeping its 30 newest commits' images, each with its platform images and attestations. A registry other than GHCR keeps as many through its own retention rules. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).
+- `cleanup_images.yml` calls `cleanup_images.yml`, which keeps the 30 newest commits' images of the image's package on GHCR, each with its platform images and attestations. A registry other than GHCR keeps as many through its own retention rules. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).
 
 ## The deployment contract
 
