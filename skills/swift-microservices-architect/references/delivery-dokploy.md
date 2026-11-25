@@ -26,7 +26,6 @@ Loans' `ci.yml` adds this job after `ci`:
     uses: swift-microservices/ci/.github/workflows/deploy_dokploy.yml@<commit>  # <release>
     with:
       environment: staging
-      image_repository: ghcr.io/bookshelf/bookshelf-loans
       application_ids: '["<loans migrate>", "<loans serve>", "<loans worker>"]'
       run_to_completion_application_ids: '["<loans migrate>"]'
     secrets:
@@ -34,5 +33,5 @@ Loans' `ci.yml` adds this job after `ci`:
       DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
 ```
 
-- `deploy.yml`'s job has the same `permissions` and calls `deploy_dokploy.yml` with `environment: production`, its `commit`, the `image_repository`, the production `application_ids` and `run_to_completion_application_ids`, and the Dokploy secrets.
+- `deploy.yml`'s job has the same `permissions` and calls `deploy_dokploy.yml` with `environment: production`, its `commit`, the production `application_ids` and `run_to_completion_application_ids`, and the Dokploy secrets.
 - Secrets: `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy the service's applications and read their containers, which the deploy reads to wait for the new image.
