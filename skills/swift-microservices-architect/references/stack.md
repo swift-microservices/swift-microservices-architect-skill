@@ -5,6 +5,7 @@ The libraries the architecture is built on, what each provides, which targets li
 ## Contents
 - The swift-microservices libraries
 - The server stack
+- Managed services
 - Full Foundation
 - Choosing versions
 
@@ -54,6 +55,19 @@ Small libraries that give every service the same shape for identity, request-sco
 | [async-http-client](https://github.com/swift-server/async-http-client) | `AsyncHTTPClient` | `HTTPClient` for an HTTP API that has no SDK | A provider target over such an API, executables |
 
 Hummingbird is the only HTTP framework, and AsyncHTTPClient the only HTTP client when an adapter calls an HTTP API that has no SDK.
+
+## Managed services
+
+A managed service that speaks the same protocol keeps the stack: the same clients, shapes and trust model. Only how processes connect and authenticate changes, which the plan's answers already set ([the plan](system.md#the-plan)):
+
+| Stack | Managed services that keep it |
+|---|---|
+| Postgres | Amazon RDS and Aurora PostgreSQL, Google Cloud SQL, Azure Database for PostgreSQL |
+| Valkey | Amazon ElastiCache for Valkey, with a user per service whose access string holds its key pattern |
+| Kafka | Amazon MSK provisioned clusters with SASL/SCRAM, Redpanda |
+| Temporal | Temporal Cloud |
+
+A managed service that can't meet [the trust model](security.md#the-trust-model), such as a Kafka without SCRAM-SHA-512, is a question for the user, never a reason to weaken the model.
 
 ## Full Foundation
 

@@ -264,7 +264,7 @@ struct Serve: AsyncParsableCommand {
 
 swift-configuration reads every value through one `ConfigReader`, built first in each root, except the OpenTelemetry variables swift-otel reads itself ([observability](observability.md#the-bootstrap)):
 
-- Providers in order: `EnvironmentVariablesProvider()`, then `InMemoryProvider.applicationDefaults`. A value a command also takes as an option goes into an `InMemoryProvider` of the parsed options at the front. A secret is a file whose path is a key ([secrets](security.md#secrets)).
+- Providers in order: `EnvironmentVariablesProvider()`, then `InMemoryProvider.applicationDefaults`. A value a command also takes as an option goes into an `InMemoryProvider` of the parsed options at the front. A secret is a file whose path is a key, unless [secrets](security.md#secrets) allows an environment variable.
 - `Configuration/InMemoryProvider+ApplicationDefaults.swift` holds the deployment's layout, which environment variables override key by key:
 
 ```swift

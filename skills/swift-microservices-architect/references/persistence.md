@@ -65,7 +65,7 @@ package struct PostgresLoansScope:
 
 Every role's `PostgresClient` is built from `<Project>Persistence`'s reader, `PostgresClient.Configuration(config:role:)`, which logs in as the plan's answer sets ([Postgres](security.md#postgres)) and bounds its pool and its sessions from configuration ([configuration](composition.md#configuration)):
 
-- The pool opens at most `<role>.maximumConnections`. The plan sizes the pools against the service's own instance: the maximums of its role clients, times each process's replicas, add up to less than the instance's `max_connections`, with room left for migrations and administration.
+- The pool opens at most `<role>.maximumConnections`. The plan sizes the pools against the instance the service's database is on: the maximums of the role clients of every service there, times each process's replicas, add up to less than the instance's `max_connections`, with room left for migrations and administration.
 - A role that serves requests or runs activities starts each connection with `statement_timeout` and `idle_in_transaction_session_timeout`, sent as startup parameters. A slow statement fails before the caller's deadline instead of holding its connection, and a transaction a stalled process left open ends and releases its locks.
 - The owner starts its connection with `lock_timeout` and no statement timeout: a migration waits at most that long for a table's lock, rather than queueing every query behind it, and then runs as long as it needs. A migration refused by the timeout fails `migrate`, and with it the deploy, before serve and the worker start; deploying again retries it.
 

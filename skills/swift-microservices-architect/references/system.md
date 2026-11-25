@@ -88,6 +88,7 @@ A person's data lives in every service that keeps rows about them, so erasing it
 A service's data is its own: only the service reads and writes it, and every other process reaches it through the service's contract.
 
 - A service that stores data has its own Postgres instance, holding its database (`bookshelf_loans`). A service that stores nothing has none, and one whose state is all short-lived has Valkey alone.
+- A plan may instead put every service's database on one instance per environment, recorded under Decisions. Databases, roles and policies stay as they are, since each role's name carries its service's name ([naming](conventions.md#naming)); each database admits only its own roles ([Postgres](security.md#postgres)), and Operations sizes every service's pools against that one instance.
 - Its processes connect as the owner for migrations, then a role per audience, `<x>_service`, `<x>_internal` and `<x>_worker`, each with its own policy and none with `BYPASSRLS` ([database roles](persistence.md#database-roles)). A service with no tenant table has one role; a plan that joins `<x>_internal` and `<x>_worker` records it under Decisions ([the plan](#the-plan)).
 - How the roles log in, the TLS mode and the rest of the instance's setup are the user's answers ([Postgres](security.md#postgres)).
 - A table whose rows belong to a user, or to an organization its callers act for, is a tenant table under [row-level security](persistence.md#row-level-security).
@@ -167,6 +168,7 @@ The plan stays current: each Build order line is ticked once its checklist is do
 - How each process connects to Temporal: the user's answer ([the worker](workflows.md#the-worker))
 - Backups and point-in-time recovery of Postgres and Temporal's store, each service's Temporal namespace and its retention, and whether Temporal's authorizer confines each identity to its namespace: the user's answers
 - Each environment's certificate authority, a developer's machine included, and how a developer runs Postgres, Valkey and Temporal: the user's answers
+- The platform each environment deploys to, its servers' CPU architectures, the image registry and the CI host: the user's answers, with no default ([delivery](delivery.md))
 
 ## Build order
 1. [ ] <project>-core and <project>-protos: Start a project
@@ -193,4 +195,4 @@ Review the plan against the hard rules in `SKILL.md`, and put its questions to t
 
 ## Out of scope
 
-Decided separately, outside this skill: setting up Dokploy and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery of Postgres and Temporal's store, client SDKs and frontends. How each package is tested, released and deployed is [delivery](delivery.md). The architecture leaves room for each: an executable runs wherever its configuration points, and certificates and keys are files at configured paths.
+Decided separately, outside this skill: setting up the platform and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery of Postgres and Temporal's store, client SDKs and frontends. How each package is tested, released and deployed is [delivery](delivery.md). The architecture leaves room for each: an executable runs wherever its configuration points, and certificates and keys are files at configured paths.

@@ -13,4 +13,4 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: swift-microservices/ci/.github/workflows/pull_request_label.yml@cbf337bd0589d1dd72a12039eba45959b105d15c  # 1.0.0
+    uses: swift-microservices/ci/.github/workflows/pull_request_label.yml@329a8f7efdaea7e88b5151651df64bad05d6df1c  # 1.6.0
