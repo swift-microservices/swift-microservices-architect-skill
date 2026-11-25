@@ -7,7 +7,7 @@
 
 ## Naming
 
-`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); this table spells out what a type is named for, as `<Operation>`, `<Resource>` or `<Process>`, and the other references shorten each to `X` before the type's suffix: `XUseCase` is `<Operation>UseCase` (`BorrowBookUseCase`), `XRepository` `<Resource>Repository` (`LoanRepository`), `XService` `<Resource>Service` (`LoanService`); `<Project>` and `<project>` are the project's (`Bookshelf`, `bookshelf`), and `<owner>` is the GitHub account that owns its repositories. Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/), with an initialism in one case (`userID`, `ActiveLoansByUserIDStatement`, `baseURL`, `XGRPC`).
+`X` is a service's name in UpperCamelCase (`Loans`), `x` its lowercase form (`loans`); this table spells out what a type is named for, as `<Operation>`, `<Resource>` or `<Process>`, and the other references shorten each to `X` before the type's suffix: `XUseCase` is `<Operation>UseCase` (`BorrowBookUseCase`), `XRepository` `<Resource>Repository` (`LoanRepository`), `XService` `<Resource>Service` (`LoanService`); `<Project>` and `<project>` are the project's (`Bookshelf`, `bookshelf`), `<owner>` is the GitHub account that owns its repositories, and `<registry>` is the host of the plan's image registry (`ghcr.io`). Names follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/), with an initialism in one case (`userID`, `ActiveLoansByUserIDStatement`, `baseURL`, `XGRPC`).
 
 | Kind | Name | Example |
 |---|---|---|
@@ -16,7 +16,7 @@
 | Shared packages | `<project>-core`, `<project>-protos` | `bookshelf-core` |
 | The plan's repository | `<project>-plan`, the plan its `README.md` | `bookshelf-plan` |
 | Package kind | Public library, system library or service; CI workflow files and jobs as [delivery](delivery.md#ci-workflows) names them | `bookshelf-core` is a system library |
-| Service image | `ghcr.io/<owner>/<project>-<x>` | `ghcr.io/bookshelf/bookshelf-loans` |
+| Service image | `<registry>/<owner>/<project>-<x>` | `ghcr.io/bookshelf/bookshelf-loans` |
 | Service targets | `XCore`, `XPostgres`, `XGRPC`, `XValkey`, `XKafka`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansGRPC`, `LoansKafka`, `LoansResend`, `LoansCoreTests` |
 | Executable product and command | `x`; subcommands `serve`, `worker run`, `migrate`, `build-indexes` | `loans migrate` |
 | `<project>-core` products | `<Project>Authentication`, `<Project>Persistence`, `<Project>Transport`, `<Project>Events`, `<Project>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |

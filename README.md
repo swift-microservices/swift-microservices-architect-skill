@@ -83,7 +83,7 @@ On a backend that already runs, the agent follows the checklist for the task: ad
 | System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan with its objectives, alerts, runbooks and build order |
 | Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
-| Persistence | A Postgres instance per service, its roles, row-level security for user and organization tenants, statements, paging, migrations, Valkey |
+| Persistence | A Postgres instance per service, or a database each on a shared one, its roles, row-level security for user and organization tenants, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details, versions and the retirement of routes |
 | Workflows | Temporal workflows and activities in Core, how use cases start and reach them, determinism, activity options, the worker |
@@ -91,16 +91,16 @@ On a backend that already runs, the agent follows the checklist for the task: ad
 | Composition | Commands, configuration, logging, and graceful shutdown |
 | Security | mTLS with certificate reloading, internal callers admitted per RPC, JWTs signed with Ed25519 key files and their rotation, secrets as files, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
-| Delivery | GitHub Actions CI, semantic-version releases, images on GitHub Container Registry, deploys through Dokploy |
+| Delivery | GitHub Actions CI, semantic-version releases, images in the plan's registry, a deployment contract every platform meets, and deploys to Dokploy |
 | Style | How the code reads, and how everything is named |
 
 It builds on [Hummingbird](https://github.com/hummingbird-project/hummingbird), [gRPC Swift 2](https://github.com/grpc/grpc-swift-2), the [Temporal Swift SDK](https://github.com/apple/swift-temporal-sdk), [PostgresNIO](https://github.com/vapor/postgres-nio), [valkey-swift](https://github.com/valkey-io/valkey-swift), [Swift Kafka Client](https://github.com/swift-server/swift-kafka-client), [Swift Configuration](https://github.com/apple/swift-configuration), [Swift Service Lifecycle](https://github.com/swift-server/swift-service-lifecycle) and the [swift-microservices](https://github.com/swift-microservices) libraries.
 
-Not covered: setting up Dokploy and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, backups, client SDKs and frontends.
+Not covered: setting up the deployment platform and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, backups, client SDKs and frontends.
 
 ### Works well with
 
-The skill decides the architecture and the style; maintained skills cover the technique, from a feature's design to the code inside a shape. The agent invokes each where a checklist calls for it, such as Engineering's system design skill before a new feature, Temporal's skill before designing a workflow and the testing skill before writing tests, and stops at the start of a task until you install any that are missing. Where one's advice differs, the skill's services, shapes, stack and style win.
+The skill decides the architecture and the style; maintained skills cover the technique, from a feature's design to the code inside a shape. The agent invokes each where a checklist calls for it, such as Engineering's system design skill before a new feature, Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you to install one that's missing when a step needs it, carrying on without it if you decline. Where one's advice differs, the skill's services, shapes, stack and style win.
 
 - [Engineering](https://github.com/anthropics/knowledge-work-plugins): a feature's requirements and trade-offs, architecture decision records, code review, release checklists and incident response
 - [Swift Concurrency Pro](https://github.com/twostraws/Swift-Concurrency-Agent-Skill): actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics
@@ -138,7 +138,8 @@ skills/swift-microservices-architect/
     ├── security.md             mTLS, tokens and signing keys, authorization, secrets, webhooks
     ├── style.md                how the code reads
     ├── testing.md              test targets and mocks
-    ├── delivery.md             CI/CD for each kind of package
+    ├── delivery.md             CI/CD for each kind of package, and the deployment contract
+    ├── delivery-dokploy.md     deploying services to Dokploy
     ├── conventions.md          names, folders, files
     └── related-skills.md       which maintained skill each task invokes, and where this skill wins
 .github/                        validation, SkillSpector's reviewed exceptions, the Tier 2 runner, the semver label check, releases

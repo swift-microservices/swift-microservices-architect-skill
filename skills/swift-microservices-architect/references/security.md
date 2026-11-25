@@ -117,6 +117,7 @@ How each role logs in, the TLS mode, and the rest of a service's Postgres setup 
 - `<Project>Persistence`'s reader, `PostgresClient.Configuration(config:role:)`, takes what the answer needs, such as a certificate reloader or a password's file, and every role's client is built through it ([connections and timeouts](persistence.md#connections-and-timeouts)).
 - Only `migrate` and `build-indexes` log in as the owner, so no process that serves requests or runs activities holds the owner's credentials.
 - The deployment provides the server's side of the answer; the service names the database and its roles ([naming](conventions.md#naming)).
+- On an instance several services share ([data placement](system.md#data-placement)), a role migration revokes `CONNECT` on the service's database from `PUBLIC` and grants it to the service's own roles: Postgres lets every role connect to a new database, so another service's leaked login would otherwise reach it.
 
 ## User tokens
 
@@ -249,8 +250,9 @@ Each layer refuses what it can see; the use case decides.
 
 ## Secrets
 
-- A secret, such as a password, an API key, a webhook's signing secret or a private key, reaches the process as a file the deployment mounts, never in an image, a repository or an environment variable: `docker inspect` and `/proc/<pid>/environ` show those to anyone who can read the container's configuration.
-- Its configuration key is the file's path, named for the secret with `Path` (`jwt.privateKeyPath`, `resend.webhookSecretPath`, `valkey.authentication.passwordPath`), and the reader that needs the secret loads the file ([configuration](composition.md#configuration)). The value never reaches a log line.
+- A secret, such as a password, an API key, a webhook's signing secret or a private key, reaches the process as a file the deployment mounts, never in an image or a repository.
+- An environment variable holds a secret only on a platform that can deliver it no other way, recorded under the plan's Decisions with the exposure it accepts: `docker inspect` and `/proc/<pid>/environ` show it to anyone who can read the container's configuration.
+- Its configuration key is the file's path, named for the secret with `Path` (`jwt.privateKeyPath`, `resend.webhookSecretPath`, `valkey.authentication.passwordPath`), and the reader that needs the secret loads the file ([configuration](composition.md#configuration)). A secret from an environment variable takes the key without `Path` (`jwt.privateKey`), read as a secret. The value never reaches a log line.
 - Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres and Valkey store their SHA-256 digest (`Crypto`), never the secret, Valkey with its expiry.
 - Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), off the cooperative pool ([concurrency](style.md#concurrency)). The cost is a policy value, `PasswordPolicy.bcryptCost` (12), raised as hardware gets faster.
 - A password longer than 72 bytes of UTF-8 is refused as `invalidPassword` (`PasswordPolicy.maximumByteCount`): bcrypt ignores every byte after the 72nd, so two passwords that share their first 72 bytes would both sign in. The limit counts bytes, not characters.

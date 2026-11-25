@@ -1,6 +1,16 @@
 # Delivery
 
-How each package is tested, released and deployed. A repository's CI workflows call only `swift-microservices/ci`, whose CI pipelines, `library.yml` and `service.yml`, build on swiftlang's and Apple's CI workflows. A repository declares its inputs and secrets and nothing else, so a change every repository needs, such as a flag or a check, lands once in `swift-microservices/ci`. [Its README](https://github.com/swift-microservices/ci#readme) gives each of its CI workflows' jobs and inputs, and what each requires of a repository.
+How each package is tested, released and deployed. On GitHub, a repository's CI workflows call only `swift-microservices/ci`, whose CI pipelines, `library.yml` and `service.yml`, build on swiftlang's and Apple's CI workflows. A repository declares its inputs and secrets and nothing else, so a change every repository needs, such as a flag or a check, lands once in `swift-microservices/ci`. [Its README](https://github.com/swift-microservices/ci#readme) gives each of its CI workflows' jobs and inputs, and what each requires of a repository.
+
+A repository on another CI host holds every change to the same gate: its pipeline runs `scripts/swift_ci.sh` and each check this reference names, as `swift-microservices/ci`'s README describes it.
+
+Where a service runs is the plan's platform ([the plan](system.md#the-plan)). Every platform meets [the deployment contract](#the-deployment-contract), and a platform's own reference gives its deploy jobs, secrets and settings:
+
+| Platform | Reference |
+|---|---|
+| Dokploy | [delivery-dokploy.md](delivery-dokploy.md) |
+
+A platform without a reference here deploys by the contract alone, and the response tells the user that the skill has no reference for it.
 
 ## Contents
 - Package kinds
@@ -9,6 +19,7 @@ How each package is tested, released and deployed. A repository's CI workflows c
 - Foundation linking
 - A library's CI workflows
 - A service's CI workflows
+- The deployment contract
 - The Containerfile
 - Dependabot
 
@@ -27,10 +38,10 @@ Each repository's `.github/workflows/` holds these, each file's `name:` in paren
 | File (`name:`) | Kind | Runs on | Calls in `swift-microservices/ci` | Job `permissions` |
 |---|---|---|---|---|
 | `ci.yml` (CI) | Library | Pull requests, pushes to `main`, a weekly `schedule` | `library.yml` | None of its own |
-| `ci.yml` (CI) | Service | Pull requests, pushes to `main` | `service.yml`, then `deploy_dokploy.yml` for staging and `attest_image.yml` | `contents: read`, `packages: write`; staging: `contents: read`, `actions: read`, `packages: read`; attest: `contents: read`, `packages: write`, `id-token: write`, `attestations: write` |
+| `ci.yml` (CI) | Service | Pull requests, pushes to `main` | `service.yml`, then the platform's staging deploy and `attest_image.yml` | `contents: read`, `packages: write`; attest: `contents: read`, `packages: write`, `id-token: write`, `attestations: write`; staging: the platform's reference |
 | `pull_request_label.yml` (PR label) | Library | Pull requests and label changes | `pull_request_label.yml` | `contents: read`, `pull-requests: read` |
 | `release.yml` (Release) | Library | By hand, on `main` | `release.yml` | `contents: write`, `pull-requests: read` |
-| `deploy.yml` (Deploy to production) | Service | By hand, on `main` | `deploy_dokploy.yml` | `contents: read`, `actions: read`, `packages: read` |
+| `deploy.yml` (Deploy to production) | Service | By hand, on `main` | The platform's deploy | The platform's reference |
 | `cleanup_images.yml` (Clean up images) | Service | Weekly and by hand | `cleanup_images.yml` | `packages: write` |
 
 - Each `uses:` is pinned to the full commit of `swift-microservices/ci`'s latest release, with the release in a comment: `@<commit>  # <release>`, looked up with `git ls-remote --tags <url>`. Dependabot moves the pin.
@@ -40,7 +51,7 @@ Each repository's `.github/workflows/` holds these, each file's `name:` in paren
 - Soundness checks every file's license header against `.license_header_template`, which holds the compact SPDX header with `@@` for the comment marker and `YEARS` for the year. `.licenseignore` lists `LICENSE` and `Package.swift`, whose tools-version line must come first.
 - A library's pull request carries exactly one label: `⚠️ semver/major`, `🆕 semver/minor`, `🔨 semver/patch` or `semver/none`. Below 1.0, a breaking change is minor and an addition patch; a doc-comment fix is patch; a change to the README, tests or CI is none.
 - Release tags the next version without a `v` and writes its notes grouped by `.github/release.yml`; the first release and every major one are tagged by hand. A tag never moves: a bad release is fixed forward with a new version.
-- Secrets: `PACKAGES_TOKEN`, which only a package with private dependencies passes: a fine-grained token owned by `<owner>`, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy its applications and read their containers, which the deploy reads to wait for the new image.
+- Secrets: `PACKAGES_TOKEN`, which only a package with private dependencies passes: a fine-grained token owned by `<owner>`, with read-only Contents on the private package repositories, stored as an Actions secret and as a Dependabot secret. A service adds the platform's deploy secrets, which its reference names.
 
 ## Tests
 
@@ -52,7 +63,8 @@ The CI pipelines run the tests, and they're the gate:
 | `--explicit-target-dependency-import-check error` | Every kind | Importing no module outside the target's dependency closure |
 | `-Xswiftc -require-explicit-sendable` | Libraries | Every `public` type stating whether it's `Sendable` |
 
-- The toolchain is the package's `swift-tools-version`. CI tests on it, on Ubuntu noble and linux/arm64 for a service and a system library, where services run, and the `Containerfile` builds on it, so moving a package to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.
+- The toolchain is the package's `swift-tools-version`. CI tests on it, on Ubuntu noble, and the `Containerfile` builds on it, so moving a package to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.
+- A service and a system library test on the plan's architectures, the ones the platform's servers run: `ci.yml` passes them as `linux_host_archs` (`'["aarch64"]'`, `'["x86_64"]'` or both), and a service's image builds for the same ones.
 - `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, 18 or later, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it. `XValkeyTests` need a real Valkey: a service with XValkey passes `valkey_image: valkey/valkey:<major>-alpine` too, the major its Valkey runs, 9 or later, and the tests reach it through `VALKEY_HOST` and `VALKEY_PORT`, unset without it.
 
 ## Foundation linking
@@ -88,6 +100,7 @@ jobs:
     name: CI
     uses: swift-microservices/ci/.github/workflows/library.yml@<commit>  # <release>
     with:
+      linux_host_archs: '["aarch64"]'
       api_breakage_check_enabled: true
       docs_check_targets: "BookshelfAuthentication BookshelfPersistence BookshelfTransport BookshelfTesting"
       foundation_linking_check_excluded_products: '["BookshelfPersistence"]'
@@ -102,7 +115,7 @@ jobs:
 
 ## A service's CI workflows
 
-Loans' `ci.yml` has the library's `name`, `on` without its `schedule`, `permissions` and `concurrency`, and these jobs:
+Loans' `ci.yml` has the library's `name`, `on` without its `schedule`, `permissions` and `concurrency`, these jobs, and the platform's `staging` job after `ci` ([Dokploy's](delivery-dokploy.md#staging-and-production)):
 
 ```yaml
 jobs:
@@ -115,28 +128,11 @@ jobs:
     with:
       executable_product: loans
       image_repository: ghcr.io/bookshelf/bookshelf-loans
+      linux_host_archs: '["aarch64"]'
       postgres_image: postgres:<major>-alpine
       foundation_linking_check_excluded_products: '["loans"]'
     secrets:
       PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-
-  staging:
-    name: Staging
-    needs: [ci]
-    if: github.event_name == 'push'
-    permissions:
-      contents: read
-      actions: read
-      packages: read
-    uses: swift-microservices/ci/.github/workflows/deploy_dokploy.yml@<commit>  # <release>
-    with:
-      environment: staging
-      image_repository: ghcr.io/bookshelf/bookshelf-loans
-      application_ids: '["<loans migrate>", "<loans serve>", "<loans worker>"]'
-      run_to_completion_application_ids: '["<loans migrate>"]'
-    secrets:
-      DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
-      DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
 
   attest:
     name: Attest
@@ -152,13 +148,26 @@ jobs:
       image_repository: ghcr.io/bookshelf/bookshelf-loans
 ```
 
-- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest. An environment runs it as one Dokploy application per command ([commands](composition.md#commands)), in `application_ids`' order: `loans migrate` at one replica, alone holding the owner's login ([Postgres](security.md#postgres)), then `loans serve` and `loans worker run`. `run_to_completion_application_ids` lists `loans migrate`, so `deploy_dokploy.yml` deploys serve only once migrate's container of the new image exits 0, and a failed migration stops the deploy with serve and the worker on the previous image ([migrations](persistence.md#migrations)). Each other application waits for the one before it to run, and to pass its health check where it has one ([health](composition.md#health)). The migrate application has no health check, and its Swarm settings in Dokploy give it a restart policy whose condition is `none` and an update config whose failure action is `continue`, as swift-microservices/ci requires of an application that runs to completion.
+- `image_repository` is the service's image in the plan's registry ([naming](conventions.md#naming)).
 - Every image build keeps the image's SBOM as a workflow artifact. A pull request's build fails on a critical vulnerability that has a fixed version, which a base image update or a dependency bump resolves; the publish on `main` reports one without failing, so a deploy or a hotfix never waits on a vulnerability disclosed after its pull request passed.
 - `attest_image.yml` signs each published image's build provenance and SBOM and pushes them beside the image, where they last as long as the image, so the deployment can verify an image with `gh attestation verify oci://<image> --owner <owner>`. GitHub stores attestations for a private repository only on Enterprise Cloud, so a service on another plan leaves out the `attest` job.
-- The gateway's `ci.yml` has no `postgres_image` and one application per environment, since it has no worker or database, and excludes `gateway` while its generated OpenAPI code links full Foundation.
+- The gateway's `ci.yml` has no `postgres_image` and one process per environment, since it has no worker or database, and excludes `gateway` while its generated OpenAPI code links full Foundation.
 - The gateway's `ci.yml` also passes `openapi_breakage_check_path: Sources/GatewayHTTP/openapi.yaml`, so oasdiff fails a pull request whose `openapi.yaml` breaks a client of the base's, such as a route removed or an input newly required ([versions](gateway.md#versions)). Removing a route the base marks `deprecated: true` passes, as its sunset's pull request does. `oasdiff breaking main:Sources/GatewayHTTP/openapi.yaml Sources/GatewayHTTP/openapi.yaml --fail-on ERR` runs the same check locally.
-- `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls `deploy_dokploy.yml` with `environment: production`, that `commit`, the `image_repository`, the production `application_ids` and `run_to_completion_application_ids`, and the Dokploy secrets. It deploys only a commit that staging ran, and may skip the commits between ([migrations](persistence.md#migrations)).
-- `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package, keeping its 30 newest versions. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).
+- `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls the platform's deploy for production with that `commit`. It deploys only a commit that staging ran, and may skip the commits between ([migrations](persistence.md#migrations)).
+- `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package on GHCR, keeping its 30 newest versions. A registry other than GHCR keeps as many through its own retention rules. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).
+
+## The deployment contract
+
+What every platform's deploy does, whatever runs it:
+
+- `service.yml` publishes the image once, as `:<commit-sha>`, and every environment deploys it by digest.
+- Each command runs as its own process ([commands](composition.md#commands)): `loans migrate` at one replica, alone holding the owner's login ([Postgres](security.md#postgres)), then `loans serve` and `loans worker run`.
+- `migrate` runs to completion: serve and the worker deploy only once migrate's container of the new image exits 0, and a failed migration stops the deploy with serve and the worker on the previous image ([migrations](persistence.md#migrations)). Nothing restarts a migrate that exited.
+- Each other process waits for the one before it to run, and to pass its health check where it has one ([health](composition.md#health)).
+- Staging deploys each push to `main` after `ci`; production deploys by hand through `deploy.yml`.
+- The stop timeout exceeds the worker's shutdown period ([the worker's root](composition.md#the-workers-root)).
+- A client's host resolves to every replica of its upstream ([transports](grpc.md#transports)); the platform's reference names it.
+- Certificates, keys and secrets are files mounted read-only at configured paths ([mutual TLS](security.md#mutual-tls), [secrets](security.md#secrets)), and the root filesystem may be read-only ([the Containerfile](#the-containerfile)).
 
 ## The Containerfile
 
@@ -167,7 +176,7 @@ A service's `Containerfile`, at its root, builds the image `service.yml` publish
 - A build stage on `swift:<tools version>-noble` resolves with `RUN --mount=type=secret,id=netrc,target=/root/.netrc swift package --disable-automatic-resolution resolve`, so the token never enters a layer, then runs `swift build --configuration release --disable-automatic-resolution --static-swift-stdlib --product loans`. It passes none of CI's flags: CI held the commit to them, and a warning a newer toolchain adds mustn't stop a deploy or a hotfix.
 - A runtime stage on `ubuntu:noble` installs only `ca-certificates`, `tzdata` and `libjemalloc2`, creates an unprivileged user with a fixed numeric id (`useradd --uid 10001 loans`), and copies the product, `swift-backtrace-static` and any resource bundles to `/app`.
 - It runs as `USER 10001:10001`, the numeric id, so the platform can tell from the image's configuration alone that it isn't root, from `WORKDIR /app`, with `ENTRYPOINT ["./loans"]` and `SWIFT_BACKTRACE` pointing at the static backtracer.
-- It preloads `libjemalloc.so.2` from `/usr/lib/aarch64-linux-gnu` through the dynamic loader's preload variable, so the process allocates with jemalloc: glibc's allocator keeps the memory a long-running server's many threads fragment, and its resident size grows for days.
+- It preloads `libjemalloc.so.2` by name alone, with no directory, through the dynamic loader's preload variable, so the loader finds it on every architecture the image builds for and the process allocates with jemalloc: glibc's allocator keeps the memory a long-running server's many threads fragment, and its resident size grows for days. A path for one architecture fails on another with only a warning, and the process runs on glibc's allocator.
 - The process writes nothing inside the image, only to standard output and standard error, so the deployment may mount its root filesystem read-only.
 - A `.dockerignore` beside it keeps `.build`, `.swiftpm`, `.env*`, `.netrc`, secrets and key files out of the build context.
 

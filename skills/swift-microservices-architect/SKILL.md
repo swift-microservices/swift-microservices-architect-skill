@@ -1,6 +1,6 @@
 ---
 name: swift-microservices-architect
-description: Architects and checks Swift server backends. Use when planning a Swift backend or splitting it into services, adding a service, endpoint, use case, repository, migration, webhook, multi-tenant table, background job, Kafka event or durable Temporal workflow, drawing a Swift server's module boundaries or writing its Package.swift, wiring configuration, graceful shutdown, mTLS or JWT auth, naming server types and targets, setting up a server package's tests, CI/CD or deployment, or reviewing a Swift server's architecture or code style. Builds them as gRPC microservices behind a Hummingbird gateway, one Swift package per service, with Postgres row-level security, Valkey and Temporal workflows. Not for iOS, macOS or SwiftUI apps. Applies even when the user doesn't name the architecture.
+description: Architects and checks Swift server backends. Use when planning a Swift backend or splitting it into services, adding a service, endpoint, use case, repository, migration, webhook, multi-tenant table, background job, Kafka event or durable Temporal workflow, drawing a Swift server's module boundaries or writing its Package.swift, wiring configuration, graceful shutdown, mTLS or JWT auth, naming server types and targets, setting up a server package's tests, CI/CD, deployment or Dokploy, or reviewing a Swift server's architecture or code style. Builds them as gRPC microservices behind a Hummingbird gateway, one Swift package per service, with Postgres row-level security, Valkey and Temporal. Not for iOS, macOS or SwiftUI apps. Applies even when the user doesn't name the architecture.
 license: MIT
 metadata:
   author: Zaid Rahhawi
@@ -150,8 +150,9 @@ Read a reference only when the task reaches its row or a checklist names it.
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |
 | [delivery.md](references/delivery.md) | CI, releases, deployment, the Containerfile or Dependabot |
+| [delivery-dokploy.md](references/delivery-dokploy.md) | Deploying to Dokploy |
 | [conventions.md](references/conventions.md) | Naming anything or placing a file |
-| [related-skills.md](references/related-skills.md) | Work a related skill covers, and where this skill wins over one |
+| [related-skills.md](references/related-skills.md) | Work a related skill covers |
 
 ## Related skills
 
@@ -159,7 +160,7 @@ Read a reference only when the task reaches its row or a checklist names it.
 
 ## Instructions
 
-Copy the task's checklist into the response, **Verify**'s lines replacing a `Verify` item, and tick items when done; its `.md` files are in `references/`. Every related skill is installed before the first checklist starts, and a line naming one invokes it with the Skill tool there (related-skills.md#installing-them). A new backend runs **Plan a backend**, then each Build order line's checklist (system.md#the-plan); with no task, propose the next unticked line.
+Copy the task's checklist into the response, **Verify**'s lines replacing a `Verify` item, and tick items when done; its `.md` files are in `references/`. A line naming a related skill invokes it with the Skill tool there (related-skills.md#installing-them). A new backend runs **Plan a backend**, then each Build order line's checklist (system.md#the-plan); with no task, propose the next unticked line.
 
 **Plan a backend**
 
@@ -171,7 +172,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 - [ ] Invoke temporal-developer before shaping the plan's workflows
 - [ ] Per service: its targets and commands; its own Postgres and roles, if it stores data (system.md#data-placement)
 - [ ] <project>-core's products, <project>-protos' contracts, the gateway's routes by tier
-- [ ] Write the plan from system.md#the-plan; check it against the hard rules and put its questions, Postgres's and Temporal's setup among them, to the user before any code
+- [ ] Write the plan from system.md#the-plan; check it against the hard rules and put its questions, with Postgres's, Temporal's and the platform's setup, to the user before any code
 ```
 
 **Start a project**
@@ -265,7 +266,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 ```
 - [ ] scripts/swift_ci.sh build and test with POSTGRES_* and VALKEY_* set (delivery.md#tests); report any suite that can't run
 - [ ] scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries), and swift-format lint
-- [ ] Each skill the task's checklist names was invoked with the Skill tool
+- [ ] Each skill the task's checklist names was invoked with the Skill tool, or reported as skipped
 - [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency-pro, never silenced; a warning in a dependency's code is a departure (style.md#warnings-from-dependencies)
 ```
 

@@ -23,7 +23,7 @@ The code inside a shape:
 
 ## Installing them
 
-Every one of these eleven skills is installed before any checklist starts. The skill list in the session is compared with their names; a skill from the Engineering plugin is present under its `engineering:` prefix, such as `engineering:system-design`. When any is missing, the user is asked, in one message, to install each with its source's command, and the task stops until every one is installed:
+A skill is installed when a checklist line that names it is reached. The skill list in the session is compared with its name; a skill from the Engineering plugin is present under its `engineering:` prefix, such as `engineering:system-design`. When it's missing, the user is asked to install it with its source's command; if the user declines, the task proceeds without it, and the response names the skill whose pass was skipped:
 
 ```
 npx skills@1.9.0 add https://github.com/anthropics/knowledge-work-plugins --skill system-design architecture code-review deploy-checklist incident-response
@@ -36,13 +36,13 @@ npx skills@1.9.0 add https://github.com/Erikote04/Swift-API-Design-Guidelines-Ag
 ```
 
 - A command lists only the missing skills from its source.
-- A checklist line that names a skill invokes it with the Skill tool at that line, or, in a harness without one, reads its `SKILL.md` there. The agent never works from what it already knows of the skill's subject in its place.
-- `Verify` checks that each skill the task's checklist names was invoked.
+- A checklist line that names a skill invokes it with the Skill tool at that line, or, in a harness without one, reads its `SKILL.md` there. The agent never works from what it already knows of the skill's subject in its place, and a skipped pass is reported as skipped, never as done.
+- `Verify` checks that each skill the task's checklist names was invoked, or reported as skipped.
 
 ## Where this skill wins
 
 - A related skill decides what a design, a piece of code, a review or a release needs. This skill decides the service that owns it, the mechanism that carries it, the shape that holds it, and how the code reads.
-- Where a related skill proposes another stack, shape, mechanism or name, such as REST or a message queue between services, a cache in front of the owner's data, or a helper method in a use case, this skill's choice holds and the need it raised is met inside it.
+- Where a related skill proposes another stack, shape, mechanism or name, such as REST or a message queue between services, a cache in front of the owner's data, or a helper method in a use case, this skill's choice holds and the need it raised is met inside it. A platform isn't among this skill's choices: where one proposes a platform, the plan's answer holds ([the plan](system.md#the-plan)).
 - Their overlap with this skill is never restated here, and their examples are never copied in.
 
 ## Turning a design into shapes

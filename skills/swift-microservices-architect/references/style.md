@@ -41,7 +41,7 @@ Then:
 - Code is copied or ported only under a permissive license, keeping its notice, and the original's tests or test vectors become its tests.
 - The sources go in the plan's Decisions ([the plan](system.md#the-plan)) or, outside a plan, the response, so the user sees what was found.
 - Handle what most production systems meet. A rare edge case gets a sentence to the user, not code.
-- Without web access, the design stops, and the user is asked to enable it or to supply the sources.
+- Without web access, a security-sensitive feature, such as authentication, tokens, cryptography, payments or webhooks, stops, and the user is asked to enable it or to supply the sources. Any other feature proceeds, and the response says its design checked no sources.
 
 ## Build, then call
 
