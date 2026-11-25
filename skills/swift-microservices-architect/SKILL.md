@@ -64,7 +64,7 @@ A service has only the targets it needs, each importing only what [its row](refe
 | Business rules, authorization decisions, what an error means | The use case, in XCore; adapters only convert and delegate |
 | What a service knows about another's data | A model in an XCore folder named for the owning service (`LoansCore/Catalog/`), never in `Ports/` |
 | Protobuf ↔ domain, HTTP ↔ protobuf | `Protobuf/` in XGRPC and XKafka; the gateway's `Schemas/` |
-| Messages between processes; the public API | `<project>-protos`; the gateway's `openapi.yaml` |
+| Messages between processes; the public API | `<project>-protos`; the gateway's OpenAPI document |
 | Who the caller is | The token, verified by the gateway and again by each service |
 | Which processes may call an internal RPC | The plan's callers per RPC, admitted by their certificates' DNS names through `InternalCallerInterceptor`; never the gateway |
 | Tenant isolation | Row-level security; `<Project>Persistence` binds the caller per transaction, and each audience's use cases run as [its database role](references/persistence.md#database-roles) |
@@ -95,7 +95,7 @@ do {
 - One `do` holds the work through its `return`, and each `catch` ends its path: nothing is declared before the `do` for a `catch` to fill, and a `do` nests only around a workflow's start ([errors](references/style.md#errors)).
 - Build, then call: a value a call takes is a named `let`, never a conversion, `try` or `await` in the arguments ([style](references/style.md#build-then-call)).
 - No helper methods in use cases, workflows or activities, and no `Result` juggling, steering flags, `try?` or force unwraps.
-- Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows.
+- Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached {}`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows.
 
 ## Troubleshooting
 
@@ -104,7 +104,7 @@ do {
 - The database owner bypasses row-level security: only `migrate` and `build-indexes` connect as it ([migrations](references/persistence.md#migrations)).
 - Policies combine with `OR`: a session acting for an organization reaches its rows through the caller's own use cases ([tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
-- Workflow code is replayed: `Date.now`, `UUID()`, randomness, `Task.sleep` or any I/O in a workflow breaks it ([determinism](references/workflows.md#determinism)).
+- Workflow code is replayed: the clock, `UUID()`, randomness, `Task.sleep(for:)` or any I/O breaks it ([determinism](references/workflows.md#determinism)).
 - An event published after its commit, not from the outbox, is lost if the process stops first ([outbox](references/events.md#the-outbox)).
 - A token whose `kid` a verifier's key file lacks fails there as `unauthenticated`; keys change by [a runbook](references/security.md#signing-keys).
 
@@ -275,7 +275,7 @@ Copy the task's checklist into the response, **Verify**'s lines replacing a `Ver
 ```
 - [ ] The package's kind: public library, system library or service (delivery.md#package-kinds)
 - [ ] Its CI workflows, on a swift-microservices/ci release's commit; dependabot.yml, .swift-format (style.md#formatting), .license_header_template, .licenseignore and the secrets
-- [ ] A library: the semver labels and .github/release.yml; a service: its Containerfile
+- [ ] A library: the semver labels and release.yml in .github; a service: its Containerfile
 - [ ] scripts/swift_ci.sh build and test, with --library for a library and POSTGRES_* and VALKEY_* for a service (delivery.md#tests); fix and repeat until both pass
 ```
 
