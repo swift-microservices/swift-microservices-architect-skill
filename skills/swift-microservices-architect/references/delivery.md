@@ -64,7 +64,7 @@ The CI pipelines run the tests, and they're the gate:
 | `-Xswiftc -require-explicit-sendable` | Libraries | Every `public` type stating whether it's `Sendable` |
 
 - The toolchain is the package's `swift-tools-version`. CI tests on it, on Ubuntu noble, and the `Containerfile` builds on it, so moving a package to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.
-- A service and a system library test on the plan's architectures, the ones the platform's servers run: `ci.yml` passes them as `linux_host_archs` (`'["aarch64"]'`, `'["x86_64"]'` or both), and a service's image builds for the same ones.
+- A service and a system library test on the plan's architectures, the ones the platform's servers run: `ci.yml` passes them as `linux_host_archs` (`'["aarch64"]'`, `'["x86_64"]'` or both), which both CI pipelines require, and a service's image builds for the same ones. With several, the commit's image is an index from which each server pulls its own.
 - `XPostgresTests` need a real Postgres: `ci.yml` passes `postgres_image: postgres:<major>-alpine`, the major the services run, 18 or later, and the tests reach it through `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, which are unset without it. `XValkeyTests` need a real Valkey: a service with XValkey passes `valkey_image: valkey/valkey:<major>-alpine` too, the major its Valkey runs, 9 or later, and the tests reach it through `VALKEY_HOST` and `VALKEY_PORT`, unset without it.
 
 ## Foundation linking
@@ -154,7 +154,7 @@ jobs:
 - The gateway's `ci.yml` has no `postgres_image` and one process per environment, since it has no worker or database, and excludes `gateway` while its generated OpenAPI code links full Foundation.
 - The gateway's `ci.yml` also passes `openapi_breakage_check_path: Sources/GatewayHTTP/openapi.yaml`, so oasdiff fails a pull request whose `openapi.yaml` breaks a client of the base's, such as a route removed or an input newly required ([versions](gateway.md#versions)). Removing a route the base marks `deprecated: true` passes, as its sunset's pull request does. `oasdiff breaking main:Sources/GatewayHTTP/openapi.yaml Sources/GatewayHTTP/openapi.yaml --fail-on ERR` runs the same check locally.
 - `deploy.yml` takes an optional `commit` on `workflow_dispatch`, runs only on `refs/heads/main`, and calls the platform's deploy for production with that `commit`. It deploys only a commit that staging ran, and may skip the commits between ([migrations](persistence.md#migrations)).
-- `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package on GHCR, keeping its 30 newest versions. A registry other than GHCR keeps as many through its own retention rules. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).
+- `cleanup_images.yml` calls `cleanup_images.yml` with `package_name`, the image's package on GHCR, keeping its 30 newest commits' images, each with its platform images and attestations. A registry other than GHCR keeps as many through its own retention rules. A rollback deploys an older commit's image, rebuilding nothing, so it reaches only a kept image and runs on the current schema ([migrations](persistence.md#migrations)).
 
 ## The deployment contract
 
