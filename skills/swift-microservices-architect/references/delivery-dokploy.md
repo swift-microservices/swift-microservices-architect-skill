@@ -8,24 +8,24 @@ An environment runs a service's image as one Dokploy application per command ([c
 
 - `deploy_dokploy.yml` deploys them in `application_ids`' order. `run_to_completion_application_ids` lists `loans migrate`, so it deploys serve only once migrate's container of the new image exits 0.
 - The migrate application has no health check, and its Swarm settings in Dokploy give it a restart policy whose condition is `none` and an update config whose failure action is `continue`, as `swift-microservices/ci` requires of an application that runs to completion.
+- The deploy reads an application's containers only on the server Dokploy deploys it from, so an application spread across Swarm nodes keeps a replica there.
 - A client dials its upstream's `tasks.<service>`, which resolves to every replica, rather than the service's one virtual address ([transports](grpc.md#transports)).
 
 ## Staging and production
 
-Loans' `ci.yml` adds this job after `ci`:
+Loans' `main.yml` adds this job after `service`:
 
 ```yaml
   staging:
     name: Staging
-    needs: [ci]
-    if: github.event_name == 'push'
+    needs: [service]
     permissions:
       contents: read
-      actions: read
-      packages: read
+      deployments: write
     uses: swift-microservices/ci/.github/workflows/deploy_dokploy.yml@<commit>  # <release>
     with:
       environment: staging
+      image: ${{ needs.service.outputs.image }}
       application_ids: '["<loans migrate>", "<loans serve>", "<loans worker>"]'
       run_to_completion_application_ids: '["<loans migrate>"]'
     secrets:
@@ -33,5 +33,5 @@ Loans' `ci.yml` adds this job after `ci`:
       DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
 ```
 
-- `deploy.yml`'s job has the same `permissions` and calls `deploy_dokploy.yml` with `environment: production`, its `commit`, the production `application_ids` and `run_to_completion_application_ids`, and the Dokploy secrets.
+- `deploy.yml`'s `production` job has the same `permissions` and calls `deploy_dokploy.yml` with `environment: production`, `promote_from: staging`, `commit: ${{ inputs.commit }}`, production's `application_ids` and `run_to_completion_application_ids`, and the Dokploy secrets.
 - Secrets: `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy the service's applications and read their containers, which the deploy reads to wait for the new image.
