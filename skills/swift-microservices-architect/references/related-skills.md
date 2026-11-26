@@ -51,4 +51,4 @@ npx skills@1.9.0 add https://github.com/Erikote04/Swift-API-Design-Guidelines-Ag
 - A requirement that needs something [out of scope](system.md#out-of-scope) is a question for the user.
 - An architecture decision record covers only a choice this skill leaves open, such as a capability's boundary, a provider or a policy's limits; a choice this skill makes has none. Its pick and reason join the plan's Decisions ([the plan](system.md#the-plan)).
 - `code-review`'s findings are ranked with this skill's own, on Review a backend's scale.
-- `deploy-checklist`'s rollback is the plan's runbook for a bad deploy ([the plan](system.md#the-plan)).
+- `deploy-checklist`'s rollback never reverts a migration: a rollback runs the previous image on the current schema ([migrations](persistence.md#migrations)).

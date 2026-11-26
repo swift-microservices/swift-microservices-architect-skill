@@ -15,7 +15,7 @@
 | Service package and repository | `<project>-<x>`, lowercase; the gateway's `<project>-gateway` | `bookshelf-loans`, `bookshelf-gateway` |
 | Shared packages | `<project>-core`, `<project>-protos` | `bookshelf-core` |
 | The plan's repository | `<project>-plan`, the plan its `README.md` | `bookshelf-plan` |
-| Package kind | Public library, system library or service; CI workflow files and jobs as [delivery](delivery.md#ci-workflows) names them | `bookshelf-core` is a system library |
+| Package kind | Public library, system library or service ([package kinds](delivery.md#package-kinds)) | `bookshelf-core` is a system library |
 | Service image | `<registry>/<owner>/<project>-<x>`, lowercase, so it ends in its repository's exact name | `ghcr.io/bookshelf/bookshelf-loans` |
 | Service targets | `XCore`, `XPostgres`, `XGRPC`, `XValkey`, `XKafka`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansGRPC`, `LoansKafka`, `LoansResend`, `LoansCoreTests` |
 | Executable product and command | `x`; subcommands `serve`, `worker run`, `migrate`, `build-indexes` | `loans migrate` |

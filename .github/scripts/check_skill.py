@@ -249,9 +249,15 @@ def check_links() -> None:
 
 
 def check_checklist_references(skill_text: str) -> None:
-    """Checks the references and scripts SKILL.md's checklists name, which sit in code fences."""
+    """Checks the references and scripts the checklists name, which sit in code fences."""
+    checklists = REFERENCES / "checklists.md"
+    for where, text in [("SKILL.md", skill_text), (relative(checklists), read(checklists) if checklists.exists() else "")]:
+        check_fenced_references(where, text)
+
+
+def check_fenced_references(where: str, text: str) -> None:
     in_fence = False
-    for number, line in enumerate(skill_text.splitlines(), 1):
+    for number, line in enumerate(text.splitlines(), 1):
         if line.startswith("```"):
             in_fence = not in_fence
             continue
@@ -261,12 +267,12 @@ def check_checklist_references(skill_text: str) -> None:
         for name, anchor in re.findall(r"\b([a-z-]+\.md)(?:#([\w-]+))?", line):
             path = REFERENCES / name
             if not path.exists():
-                fail(f"SKILL.md:{number}: no reference named {name}")
+                fail(f"{where}:{number}: no reference named {name}")
             elif anchor and anchor not in {slug(heading) for heading in headings(read(path))}:
-                fail(f"SKILL.md:{number}: no heading for {name}#{anchor}")
+                fail(f"{where}:{number}: no heading for {name}#{anchor}")
         for script in re.findall(r"\bscripts/[\w.-]+", line):
             if not (SKILL / script).exists():
-                fail(f"SKILL.md:{number}: no script at {script}")
+                fail(f"{where}:{number}: no script at {script}")
 
 
 def check_pinned_commands() -> None:

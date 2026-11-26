@@ -174,6 +174,29 @@ report "Absence is an optional or a nullable column, never \"\", -1, a distant d
     lines '\?\? *(""|-1([^0-9]|$))|\.distant(Past|Future)|DEFAULT '"''"
 )"
 
+# code_lines <pattern> <find arguments>: like lines, without whole-line comments.
+code_lines() {
+    lines "$@" | grep -vE '^[^:]+:[0-9]+: //'
+}
+
+report "No try? hides a failure" "$(
+    code_lines '(^|[^A-Za-z0-9_])try\?'
+)"
+
+report "No force unwrap or as!" "$(
+    code_lines '(as!|[])]!([^=]|$)|[A-Za-z0-9_]![[:space:]]*$|[A-Za-z0-9_]!\.)'
+)"
+
+report "A switch over a use case's error has no default, in a handler, an event handler or an activity" "$(
+    code_lines '^[[:space:]]*default:' -path 'Sources/*GRPC/*' ! -path '*/Protobuf/*' ! -path '*/Clients/*'
+    code_lines '^[[:space:]]*default:' -path 'Sources/*Kafka/*' ! -path '*/Protobuf/*'
+    code_lines '^[[:space:]]*default:' -path 'Sources/*Core/Workflows/*'
+)"
+
+report "An error's log line holds its description, never String(reflecting:)" "$(
+    code_lines 'String\(reflecting:'
+)"
+
 report "A policy is a predicate on the tenant and reads no role" "$(
     lines "current_setting\\('[^']*role" -path 'Sources/*Postgres/*'
 )"

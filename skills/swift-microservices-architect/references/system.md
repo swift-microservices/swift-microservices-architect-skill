@@ -7,7 +7,6 @@ How a backend splits into services, how they talk, and the packages they share. 
 - Naming a service
 - Contracts
 - How services talk
-- Erasing a person's data
 - Data placement
 - The shared packages
 - The plan
@@ -74,21 +73,12 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 - Calls between services form no cycle. Break one by moving ownership, extracting a third capability, or making one direction a workflow or an event.
 - What each hop proves, and where a user's token may travel: [the trust model](security.md#the-trust-model).
 
-## Erasing a person's data
-
-A person's data lives in every service that keeps rows about them, so erasing it is a workflow of the service that owns the person:
-
-- Identity's `CloseAccount` use case closes the account and starts `AccountErasureWorkflow` after its commit. One activity per service that keeps rows about members calls that service's internal `Erase…` RPC with the user's id: Loans' `EraseMemberLoans`. A service that starts keeping rows about members adds its RPC and its activity in the same change.
-- Each `Erase…` use case deletes what the service owns about the person, or replaces it where a record must stay, such as a loan a branch accounts for, and answers the same when run again.
-- The workflow's calls run against the usual direction, Identity to Loans, which a workflow may do without forming a call cycle ([how services talk](#how-services-talk)).
-- Workflow payloads and log lines carry ids, never personal data ([reaching a run](workflows.md#reaching-a-run-from-a-use-case), [logging](use-cases.md#logging)), so a history and a log hold nothing to erase; the namespace's retention bounds how long histories keep those ids.
-
 ## Data placement
 
 A service's data is its own: only the service reads and writes it, and every other process reaches it through the service's contract.
 
 - A service that stores data has its own Postgres instance, holding its database (`bookshelf_loans`). A service that stores nothing has none, and one whose state is all short-lived has Valkey alone.
-- A plan may instead put every service's database on one instance per environment, recorded under Decisions. Databases, roles and policies stay as they are, since each role's name carries its service's name ([naming](conventions.md#naming)); each database admits only its own roles ([Postgres](security.md#postgres)), and Operations sizes every service's pools against that one instance.
+- A plan may instead put every service's database on one instance per environment, recorded under Decisions. Databases, roles and policies stay as they are, since each role's name carries its service's name ([naming](conventions.md#naming)); each database admits only its own roles ([Postgres](security.md#postgres)), and every service's pools together stay within that instance's connections.
 - Its processes connect as the owner for migrations, then a role per audience, `<x>_service`, `<x>_internal` and `<x>_worker`, each with its own policy and none with `BYPASSRLS` ([database roles](persistence.md#database-roles)). A service with no tenant table has one role; a plan that joins `<x>_internal` and `<x>_worker` records it under Decisions ([the plan](#the-plan)).
 - How the roles log in, the TLS mode and the rest of the instance's setup are the user's answers ([Postgres](security.md#postgres)).
 - A table whose rows belong to a user, or to an organization its callers act for, is a tenant table under [row-level security](persistence.md#row-level-security).
@@ -155,20 +145,12 @@ The plan stays current: each Build order line is ticked once its checklist is do
 - Each boundary and why it holds; each departure from a default or exception to a rule, and each open choice's pick, with its reason and the sources the search found ([reading like the requirement](style.md#reading-like-the-requirement))
 
 ## Operations
-| Environment | Each service's Postgres instance: its `max_connections`, each process's replicas and role pools, and their total | Collector endpoint | Stop timeout | Each topic's partitions and retention |
-|---|---|---|---|---|
-
-| Tier, or a route set apart | Availability over 30 days | Latency at the 99th percentile |
-|---|---|---|
-
-| Alert | Source | Fires when | Runbook |
-|---|---|---|---|
-- Runbooks, as numbered steps: a bad deploy, a stuck or nondeterministic workflow, certificate renewal, a signing key's rotation
-- Each service's Postgres instance: how its roles log in, its TLS mode and the rest of its setup: the user's answers ([Postgres](security.md#postgres))
-- How each process connects to Temporal: the user's answer ([the worker](workflows.md#the-worker))
-- Backups and point-in-time recovery of Postgres and Temporal's store, each service's Temporal namespace and its retention, and whether Temporal's authorizer confines each identity to its namespace: the user's answers
-- Each environment's certificate authority, a developer's machine included, and how a developer runs Postgres, Valkey and Temporal: the user's answers
 - The platform each environment deploys to, its servers' CPU architectures, the image registry and the CI host: the user's answers, with no default ([delivery](delivery.md))
+- Each service's Postgres instance: how its roles log in, its TLS mode and the rest of its setup: the user's answers ([Postgres](security.md#postgres))
+- How each process connects to Temporal, each service's namespace and its retention: the user's answers ([the worker](workflows.md#the-worker))
+- Backups and point-in-time recovery of Postgres and Temporal's store, and whether Temporal's authorizer confines each identity to its namespace: the user's answers
+- Each environment's certificate authority, a developer's machine included, and how a developer runs Postgres, Valkey and Temporal: the user's answers
+- Each topic's partitions and retention, for a service with events ([events](events.md))
 
 ## Build order
 1. [ ] <project>-core and <project>-protos: Start a project
@@ -180,16 +162,6 @@ The plan stays current: each Build order line is ticked once its checklist is do
 ## Questions
 - Each question for the user, with the answer the plan assumes
 ```
-
-Operations' targets and thresholds are the user's answers; what they measure, the gateway and Temporal already emit:
-
-- Objectives take a row per route tier ([request contexts and tiers](gateway.md#request-contexts-and-tiers)), and one per route whose work sets it apart, such as sign-in, which bcrypt slows. The gateway's `MetricsMiddleware` measures both ([a trace across processes](observability.md#a-trace-across-processes)): availability from its count of requests by route and status, as the share answered without a `5xx`, and latency from its duration, which covers only requests answered without an error, since it counts a thrown problem but doesn't time it.
-- Alerts: error rate and latency per tier, against its objective; failed and timed-out runs, and failing workflow tasks, per namespace; schedule-to-start latency per task queue, which rises when no worker polls or every worker is busy; each consumer group's lag per topic, which rises when a handler retries one event or falls behind ([the worker](events.md#the-worker)). The workflow alerts read Temporal's own metrics. A nondeterministic run never fails: its workflow task fails on every retry, so only the failing-task alert sees it.
-- A bad deploy: run Deploy with the last commit production ran, never reverting a migration ([a service's CI workflows](delivery.md#a-services-ci-workflows)). Callers and the gateway roll back before a service whose new RPC they call, the reverse of [the order they deploy in](grpc.md#contracts-in-the-protos-package), and the fix goes forward through staging.
-- A stuck workflow: rising schedule-to-start latency means its task queue's worker isn't polling; otherwise its pending activity's last failure names the dependency it waits on, and the activity's retries resume it once that recovers.
-- A nondeterministic workflow: roll back to the image before the change, so the runs that started before it replay and resume; the runs the bad image started then fail on replay and are reset, as `temporal-developer` describes. The change returns behind a patch, with a failed run's history among the replays `XCoreTests` runs ([changing a workflow](workflows.md#changing-a-workflow)).
-- Certificate renewal, which the deployment performs in the order [mutual TLS](security.md#mutual-tls) gives: a renewed pair at the mount paths needs no deploy.
-- A signing key's rotation, in [its runbook's](security.md#signing-keys) three steps.
 
 Review the plan against the hard rules in `SKILL.md`, and put its questions to the user, before writing code.
 

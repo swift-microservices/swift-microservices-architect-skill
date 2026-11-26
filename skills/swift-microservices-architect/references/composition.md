@@ -7,6 +7,7 @@ The executable target: its commands, the composition root each command runs, con
 - The composition root
 - Configuration
 - Logging
+- Observability
 - Lifecycle
 - Health
 - The worker's root
@@ -34,7 +35,7 @@ struct Loans: AsyncParsableCommand {
 ```
 
 - One executable per service, its command named for the service in lowercase. `serve` is the default subcommand.
-- `migrate` applies pending migrations as the owner and exits ([migrations](persistence.md#migrations)): a short-lived command, which each deploy runs before serve and the worker start ([a service's CI workflows](delivery.md#a-services-ci-workflows)).
+- `migrate` applies pending migrations as the owner and exits ([migrations](persistence.md#migrations)): a short-lived command, which each deploy runs before serve and the worker start ([the deployment contract](delivery.md#the-deployment-contract)).
 - `build-indexes` builds the indexes XPostgres lists for building concurrently, as the owner, since only a table's owner may index it. It's a short-lived command an operator runs after the deploy that lists a new index, never a step of the deploy, so a build that takes minutes holds up no deploy.
 - A service with workflows or [events](events.md#the-worker) adds the group `worker`, whose default subcommand `run` starts its background work, the Temporal worker, the relay and the event consumers: `loans worker run`. The serve process and the worker are separate processes from one image.
 - An operation that must never be reachable over the network, such as a repair, a backfill or a one-off export, is a short-lived command, a subcommand of the executable, never an administrators' RPC. It lives in `Sources/X/<Command>/<Command>.swift`, and its `run()` has the Configuration, Logging, Infrastructure and Composition sections, no Observability and no `ServiceGroup`: it opens its client with `PostgresClient.withClient(configuration:logger:operation:)`, as migrations do, runs its use case inside, and returns.
@@ -92,16 +93,7 @@ struct Serve: AsyncParsableCommand {
 
         // MARK: - Logging
         let logLevel = config.string(forKey: "logLevel", default: Logger.Level.info)
-        let traceMetadataProvider = OTel.makeLoggingMetadataProvider()
-        let metadataProvider = Logger.MetadataProvider.multiplex([.user, traceMetadataProvider])
-        LoggingSystem.bootstrap(
-            { label, metadataProvider in
-                var handler = StreamLogHandler.standardOutput(label: label, metadataProvider: metadataProvider)
-                handler.logLevel = logLevel
-                return handler
-            },
-            metadataProvider: metadataProvider
-        )
+        …  // LoggingSystem.bootstrap at logLevel, with the .user and trace metadata providers
         let logger = Logger(label: "bookshelf-loans")
 
         // MARK: - Observability
@@ -129,35 +121,15 @@ struct Serve: AsyncParsableCommand {
         …  // internalPostgresClient the same way, for the role "internal"
 
         let catalogConfig = config.scoped(to: "grpc.catalog")
-        let catalogHost = try catalogConfig.requiredString(forKey: "host")
-        let catalogPort = try catalogConfig.requiredInt(forKey: "port")
-        let catalogTransportConfig = HTTP2ClientTransport.Posix.Config(config: catalogConfig)
-        let catalogServiceConfig = ServiceConfig(config: catalogConfig)
-        let catalogTransport = try HTTP2ClientTransport.Posix(
-            target: .dns(host: catalogHost, port: catalogPort),
-            transportSecurity: clientSecurity,
-            config: catalogTransportConfig,
-            serviceConfig: catalogServiceConfig
-        )
-        let catalogTracing = ClientOTelTracingInterceptor(serverHostname: catalogHost, networkTransportMethod: "tcp")
-        let catalogGRPCClient = GRPCClient(
-            transport: catalogTransport,
-            interceptorPipeline: [.apply(catalogTracing, to: .all)]
-        )
+        let catalogTransport = …  // HTTP2ClientTransport.Posix from catalogConfig's readers, over clientSecurity
+        let catalogGRPCClient = …  // GRPCClient over catalogTransport, ClientOTelTracingInterceptor first
 
         let jwtConfig = config.scoped(to: "jwt")
         let authenticator = try await JWTAuthenticator<UserIdentity>(config: jwtConfig)
 
         let temporalConfig = config.scoped(to: "temporal")
-        let temporalHost = try temporalConfig.requiredString(forKey: "host")
-        let temporalPort = try temporalConfig.requiredInt(forKey: "port")
-        …  // temporalSecurity, and any credential, as the plan's answer on Temporal's connection sets
         let temporalClientConfiguration = try TemporalClient.Configuration(configReader: temporalConfig)
-        let temporalClient = try TemporalClient(
-            target: .dns(host: temporalHost, port: temporalPort),
-            transportSecurity: temporalSecurity,
-            configuration: temporalClientConfiguration
-        )
+        let temporalClient = …  // at temporal.host and temporal.port, secured as the plan's answer sets
 
         // MARK: - Composition
         // The caller's own loans run on the tenant database, where the policy confines each
@@ -172,14 +144,7 @@ struct Serve: AsyncParsableCommand {
         let taskQueue = try temporalConfig.requiredString(forKey: "worker.taskqueue")
         let loansConfig = config.scoped(to: "loans")
         let policy = try LoanPolicy(config: loansConfig)
-        let resendConfig = config.scoped(to: "resend")
-        let noticeEventVerifier = try ResendNoticeEventVerifier(config: resendConfig)
 
-        let receiveNoticeEventUseCase = ReceiveNoticeEventUseCase(
-            database: internalDatabase,
-            noticeEventVerifier: noticeEventVerifier,
-            logger: logger
-        )
         let borrowBookUseCase = BorrowBookUseCase(
             database: database,
             catalogClient: catalogClient,
@@ -188,35 +153,15 @@ struct Serve: AsyncParsableCommand {
             policy: policy,
             logger: logger
         )
-        let returnBookUseCase = ReturnBookUseCase(database: database, logger: logger)
-        let listLoansUseCase = ListLoansUseCase(database: database, logger: logger)
         let listAllLoansUseCase = ListAllLoansUseCase(database: internalDatabase, logger: logger)
-        let loanService = LoanService(
-            receiveNoticeEventUseCase: receiveNoticeEventUseCase,
-            borrowBookUseCase: borrowBookUseCase,
-            returnBookUseCase: returnBookUseCase,
-            listLoansUseCase: listLoansUseCase,
-            listAllLoansUseCase: listAllLoansUseCase
-        )
+        …  // every other use case the same way, on its audience's database
+        let loanService = …  // LoanService over every use case above, by name
 
         // MARK: - gRPC
         let serverConfig = config.scoped(to: "grpc.server")
-        let serverHost = try serverConfig.requiredString(forKey: "host")
-        let serverPort = try serverConfig.requiredInt(forKey: "port")
+        let serverTransport = …  // HTTP2ServerTransport.Posix from serverConfig's readers, mTLS over certificateReloader
+        let internalCallers = …  // InternalCallerInterceptor over grpc.server.internalCallers
         let serverHostname = try serverConfig.requiredString(forKey: "hostname")
-        let serverSecurity: HTTP2ServerTransport.Posix.TransportSecurity = try .mTLS(
-            config: tlsConfig,
-            certificateReloader: certificateReloader
-        )
-        let serverTransportConfig = HTTP2ServerTransport.Posix.Config(config: serverConfig)
-        let serverTransport = HTTP2ServerTransport.Posix(
-            address: .ipv4(host: serverHost, port: serverPort),
-            transportSecurity: serverSecurity,
-            config: serverTransportConfig
-        )
-        let internalCallersConfig = serverConfig.scoped(to: "internalCallers")
-        let callers = …  // the executable's reader over internalCallersConfig: each internal RPC to its callers
-        let internalCallers = InternalCallerInterceptor(callers: callers, logger: logger)
         let serverTracing = ServerOTelTracingInterceptor(serverHostname: serverHostname, networkTransportMethod: "tcp")
         let bearerAuthentication = BearerAuthenticationInterceptor(authenticator: authenticator)
         let userSettings = UserSettingsInterceptor()
@@ -254,7 +199,7 @@ struct Serve: AsyncParsableCommand {
 }
 ```
 
-- **Configuration, Logging, Observability, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order ([observability](observability.md)): the server is `gRPC` in a service's root, `Worker` in the worker's and `Router` and `Hummingbird` in the gateway's. A short-lived command's are in [commands](#commands).
+- **Configuration, Logging, Observability, Infrastructure, Composition, the server, Lifecycle**: every long-running root has these sections, in this order: the server is `gRPC` in a service's root, `Worker` in the worker's and `Router` and `Hummingbird` in the gateway's. A short-lived command's are in [commands](#commands).
 - Infrastructure builds what talks to the outside: certificate reloaders, database clients per role, upstream clients, the authenticator, the Temporal and Valkey clients.
 - Composition builds the application from them: a `PostgresDatabase` per role, adapters for Core's ports, use cases, and the services that hold them. A comment says which database each audience's use cases run on, since that choice is the authorization design.
 - The use cases that start workflows take what [starting a workflow](workflows.md#starting-a-workflow-from-a-use-case) names.
@@ -262,7 +207,7 @@ struct Serve: AsyncParsableCommand {
 
 ## Configuration
 
-swift-configuration reads every value through one `ConfigReader`, built first in each root, except the OpenTelemetry variables swift-otel reads itself ([observability](observability.md#the-bootstrap)):
+swift-configuration reads every value through one `ConfigReader`, built first in each root; the one exception is the OpenTelemetry variables swift-otel reads itself ([observability](#observability)). Nothing below a root reads configuration: the code below it takes typed values that readers build.
 
 - Providers in order: `EnvironmentVariablesProvider()`, then `InMemoryProvider.applicationDefaults`. A value a command also takes as an option goes into an `InMemoryProvider` of the parsed options at the front. A secret is a file whose path is a key, unless [secrets](security.md#secrets) allows an environment variable.
 - `Configuration/InMemoryProvider+ApplicationDefaults.swift` holds the deployment's layout, which environment variables override key by key:
@@ -277,58 +222,81 @@ extension InMemoryProvider {
             "grpc.server.port": 50051,
             "grpc.server.hostname": "loans",
             "grpc.catalog.port": 50051,
-            "grpc.identity.port": 50051,
             "tls.certificatePath": "/run/tls/cert.pem",
-            "tls.privateKeyPath": "/run/tls/key.pem",
-            "tls.trustRootsPath": "/run/tls/ca.pem",
             "jwt.publicKeyPath": "/run/jwt/public.pem",
-            "postgres.port": 5432,
             "postgres.db": "bookshelf_loans",
-            "postgres.owner.user": "loans_owner",
             "postgres.service.user": "loans_service",
-            "postgres.internal.user": "loans_internal",
-            "postgres.worker.user": "loans_worker",
-            "temporal.port": 7233,
             "temporal.client.namespace": "bookshelf-loans",
             "temporal.worker.namespace": "bookshelf-loans",
             "temporal.worker.taskqueue": "loans",
-            "temporal.worker.gracefulShutdownPeriodSeconds": 30,
             "loans.maximumActiveLoans": 5,
-            "loans.loanPeriodDays": 21,
+            // … every other mount path, port, role name and policy value the same way
         ])
     }
 }
 ```
 
 - Defaults hold mount paths, ports, an upstream's included, the database's name, role names, the Temporal namespace, task queues and policies' standard values. Never a secret, and never a host of another system: those are required, so a missing one fails at startup with the key's name.
-- A type is read by a reader, `Type+ConfigReader.swift`, an `init(config: ConfigReader)` over relative keys, which its caller scopes first: `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig)`. Required keys and validation live in the reader, not in the root.
-- A reader maps keys to values and nothing else: it takes no `Logger` and no callback. The root sets those on the value the reader returns, as Serve does: `var certificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: tlsConfig)`, then its `logger` and `onCertificateLoadFailed`.
-- A list default is a `ConfigValue` of its own, since `ConfigValue` has no array literal: `"grpc.server.internalCallers.getBook": .init(.stringArray(["loans", "loans-worker"]), isSecret: false)` in Catalog's defaults. A bare array literal fails to compile, and takes every other entry's type inference down with it.
-- A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
-- A library's native reader comes first: `ApplicationConfiguration(reader:)`, `TemporalClient.Configuration(configReader:)`, `TemporalWorker.Configuration(configReader:)`, `ValkeyClientConfiguration(configReader:)`, with the key names that library chose. A service's own readers are in the executable's `Configuration/`: its policies' (`LoanPolicy+ConfigReader.swift`), and its provider clients', as extensions on the provider target's types (`ResendNoticeEventVerifier+ConfigReader.swift`), since a provider target never reads configuration.
-- `ValkeyClientConfiguration(configReader:)` leaves TLS off and connects unauthenticated, so the root reads it into a `var`, sets `tls = try .enable(tlsConfiguration, tlsServerName: host)` from a NIOSSL `TLSConfiguration` with the environment's trust roots, and sets its `authentication` to the service's ACL user and the password its reader loads from `authentication.passwordPath`, before building its one `ValkeyClient` ([the trust model](security.md#the-trust-model)).
-- Readers every executable shares are `<Project>Transport`'s and `<Project>Persistence`'s, under these keys, relative to the scopes the roots give them:
 
-| Reader | Scopes | Keys, with tuning defaults |
+### Readers
+
+A root reads as a list of scopes and readers: each type it configures is built by an initializer over a `ConfigReader` scoped to that type's keys, `let tlsConfig = config.scoped(to: "tls")`, then `TimedCertificateReloader.Configuration(config: tlsConfig)`. Required keys and validation live in the reader, never in the root.
+
+- A library's own reader comes first, with the key names the library chose: Hummingbird's `ApplicationConfiguration(reader:)`, from its `ConfigurationSupport` trait; swift-temporal-sdk's `TemporalClient.Configuration(configReader:)` and `TemporalWorker.Configuration(configReader:)`, which require their keys up front ([the worker](workflows.md#the-worker)); valkey-swift's `ValkeyClientConfiguration(configReader:)`.
+- Before wiring a library, read its reader's source for the release the package resolves: the keys it reads, which of them it requires, and its defaults. Each required key gets a value in the defaults or from the deployment. A reader that leaves security off, such as TLS or authentication, gets it from the root, set on the value the reader returns, as [the trust model](security.md#the-trust-model) requires.
+- Where a library has no reader, the project writes one: a convenience initializer, `init(config: ConfigReader)`, in `Type+ConfigReader.swift`. It lives in `<project>-core` when every executable needs it (the table below), and in the executable's `Configuration/` otherwise: a policy's (`LoanPolicy+ConfigReader.swift`), or a provider client's as an extension on the provider target's type (`ResendNoticeEventVerifier+ConfigReader.swift`), since a provider target never reads configuration.
+
+```swift
+import Configuration
+import LoansCore
+
+extension LoanPolicy {
+    /// The lending rules operators tune.
+    ///
+    /// ## Configuration keys
+    /// - `maximumActiveLoans` (int, required): the loans a member may hold at once.
+    /// - `loanPeriodDays` (int, required): how long a loan runs.
+    init(config: ConfigReader) throws {
+        let maximumActiveLoans = try config.requiredInt(forKey: "maximumActiveLoans")
+        let loanPeriodDays = try config.requiredInt(forKey: "loanPeriodDays")
+        let loanPeriodSeconds = loanPeriodDays * 86_400
+        let loanPeriod = Duration.seconds(loanPeriodSeconds)
+        self.init(maximumActiveLoans: maximumActiveLoans, loanPeriod: loanPeriod)
+    }
+}
+```
+
+- A reader maps keys to values and nothing else: it takes no `Logger` and no callback. The root sets those on the value the reader returns, as Serve does: `var certificateReloaderConfiguration = try TimedCertificateReloader.Configuration(config: tlsConfig)`, then its `logger` and `onCertificateLoadFailed`.
+- A read with a default also returns the default when the supplied value is malformed. A setting that governs security or a business rule (`LoanPolicy`) uses a throwing read, with its standard value in the defaults, so a bad override fails startup.
+- A reader's doc comment lists its keys, their types and defaults, and which name a secret's file.
+- Readers every executable shares are `<Project>Transport`'s and `<Project>Persistence`'s, under these keys, relative to the scopes the roots give them, each with its tuning keys defaulted:
+
+| Reader | Scopes | Required keys |
 |---|---|---|
-| `TimedCertificateReloader.Configuration(config:)` | `tls`, and any pair the plan's answers add | `certificatePath`, `privateKeyPath`; `refreshIntervalSeconds` (60) |
+| `TimedCertificateReloader.Configuration(config:)` | `tls`, and any pair the plan's answers add | `certificatePath`, `privateKeyPath` |
 | The server's and the client's `TransportSecurity.mTLS(config:certificateReloader:)` | `tls` | `trustRootsPath` |
-| `HTTP2ServerTransport.Posix.Config(config:)` | `grpc.server` | `maxConnectionAgeSeconds` (1800), `connectionGraceTimeSeconds` (30), `minPingIntervalSeconds` (10), `maxConcurrentStreams` (100) |
-| `HTTP2ClientTransport.Posix.Config(config:)`, `ServiceConfig(config:)` | `grpc.<upstream>` | `keepaliveTimeSeconds` (30), `keepaliveTimeoutSeconds` (10); `deadlineSeconds` (10), with round-robin balancing ([transports](grpc.md#transports)) |
+| `HTTP2ServerTransport.Posix.Config(config:)` | `grpc.server` | None: connection age, keepalive and concurrent calls are tuning ([transports](grpc.md#transports)) |
+| `HTTP2ClientTransport.Posix.Config(config:)`, `ServiceConfig(config:)` | `grpc.<upstream>` | None: keepalive and the deadline are tuning, with round-robin balancing ([transports](grpc.md#transports)) |
 | `JWTAuthenticator<UserIdentity>(config:)` | `jwt` | `publicKeyPath` ([signing keys](security.md#signing-keys)) |
-| `PostgresClient.Configuration(config:role:)` | `postgres` | `host`, `port`, `db`, `<role>.user`, and the keys the plan's answer on logins and TLS adds; `<role>.maximumConnections` (10), `statementTimeoutSeconds` (5), `idleInTransactionTimeoutSeconds` (10), `lockTimeoutSeconds` (5) ([connections and timeouts](persistence.md#connections-and-timeouts)) |
+| `PostgresClient.Configuration(config:role:)` | `postgres` | `host`, `port`, `db`, `<role>.user`, and the keys the plan's answer on logins and TLS adds; the pool and timeouts are tuning ([connections and timeouts](persistence.md#connections-and-timeouts)) |
 
 - A `<project>-core` reader requires every value a deployment sets, such as a path, host, port or user, and defaults only tuning; the executable's defaults hold the deployment's values.
 - Keys are named as [naming](conventions.md#naming) gives them, and environment variables derive from them: `postgres.service.user` is `POSTGRES_SERVICE_USER`, `tls.refreshIntervalSeconds` is `TLS_REFRESH_INTERVAL_SECONDS`.
 - A duration's key names its unit and reads as a `Duration`: `config.int(forKey: "refreshIntervalSeconds", as: Duration.self, default: .seconds(60))`.
 - Secrets and key material follow [secrets](security.md#secrets).
-- A reader's doc comment lists its keys, their types and defaults, and which name a secret's file.
 
 ## Logging
 
 - `LoggingSystem.bootstrap` runs once, first after configuration, with a metadata provider that multiplexes `.user` from `<Project>Authentication` ([user tokens](security.md#user-tokens)) and swift-otel's, which adds the trace and span ids.
 - The level comes from `logLevel`, defaulting to `info`; the label is as [naming](conventions.md#naming) gives it.
 - The root's `logger` is passed to every client, database, use case and server that takes one, and bound around the group's run with `withLogger(logger)` for the libraries that log through `Logger.current`, such as swift-temporal-sdk. Nothing creates a logger of its own.
+
+## Observability
+
+- Every long-running root bootstraps swift-otel in its Observability section, after Logging: `OTel.bootstrap(configuration:)` sets the process's metrics and tracing systems once and returns the exporters' `Service`, which joins the `ServiceGroup` first. The service name is the root's logger label, and logs stay on standard output, so `logs.enabled` is `false`. A short-lived command bootstraps nothing.
+- swift-otel reads the OpenTelemetry environment variables itself, since the specification names them: the deployment sets `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_PROTOCOL=grpc`.
+- Each hop continues its caller's trace: `ClientOTelTracingInterceptor` first in every `GRPCClient`, `ServerOTelTracingInterceptor` after `InternalCallerInterceptor` on every server, Hummingbird's `TracingMiddleware` and `MetricsMiddleware` on the gateway's router, and the SDK's tracing interceptors, which Temporal's configuration readers install and a root never replaces. An event carries no trace: the relay and each consumer start their own spans.
+- The interceptors keep `includeRequestMetadata` and `includeResponseMetadata` off, since request metadata holds the bearer token, and the deployment's probes record no spans.
 
 ## Lifecycle
 
@@ -429,13 +397,7 @@ let api = BookshelfAPI(
 )
 
 // MARK: - Router
-let allowedHeaders: [HTTPField.Name] = …  // content type, authorization, Idempotency-Key, If-Match
-let cors = CORSMiddleware<BasicRequestContext>(
-    allowOrigin: .originBased,
-    allowHeaders: allowedHeaders,
-    allowMethods: [.get, .post, .put, .delete],
-    exposedHeaders: ["ETag", "Deprecation", "Sunset", "Link"]
-)
+let cors = CORSMiddleware<BasicRequestContext>(…)  // the headers, methods and exposed headers clients use ([the edge](gateway.md#the-edge))
 let requestLogging = LogRequestsMiddleware<BasicRequestContext>(logLevel)
 let router = Router(context: BasicRequestContext.self)
 // First, so no middleware traces, measures or logs a probe.

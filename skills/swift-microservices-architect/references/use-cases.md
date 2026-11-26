@@ -204,12 +204,6 @@ package import Logging
 package import Persistence
 package import Temporal
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
-
 /// Lends the subject a copy of a book and starts the loan's workflow.
 ///
 /// The member is the token's subject; the request names only the book. Runs on the tenant

@@ -63,20 +63,11 @@ paths:
       responses:
         "201":
           …
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
-        "504":
-          $ref: "#/components/responses/GatewayTimeout"
+        …
 
 components:
   responses:
@@ -101,7 +92,7 @@ Each group of routes runs in the context that states what it guarantees:
 
 | Tier | Context | Guarantees |
 |---|---|---|
-| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, sign-out, public reads, signed webhooks, the JWK Set where one is served |
+| No caller | `BasicRequestContext` | Nothing: registration, sign-in, refresh, sign-out, public reads, signed webhooks |
 | A caller | `IdentityRequestContext`, behind `BearerAuthenticationMiddleware` and `IsAuthenticatedMiddleware` | `identity` is set |
 | Administrators | `AdministratorRequestContext`, converted at the verb | A non-optional administrator `identity` |
 
@@ -253,38 +244,11 @@ package struct LoanController: Sendable {
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
 - A route's path and method come from the feature's research ([reading like the requirement](style.md#reading-like-the-requirement)).
 - Status codes follow the method: `201` with `EditedResponse` for a create, `202` for a route that only asks for work to happen later and has nothing yet to return, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, a `DELETE` included, `200` otherwise.
-- Hummingbird keys a path capture by one name per segment, so every route on one path shares its capture name (`:id`).
 
-A provider's webhooks get a controller of their own, in the no-caller tier, that forwards each event unparsed:
-
-```swift
-/// Resend's delivery events, forwarded to Loans as Resend signed them.
-package struct ResendWebhookController: Sendable {
-    /// Resend's events are small, so a larger body is refused before it's read.
-    private static let maximumEventSize = 1_048_576
-    private let client: any Bookshelf_Loans_V1_LoanService.ClientProtocol
-
-    …
-
-    private func receiveNoticeEvent(
-        request: Request,
-        context: BasicRequestContext
-    ) async throws -> HTTPResponse.Status {
-        let body = try await request.body.collect(upTo: Self.maximumEventSize)
-        let eventRequest = try Bookshelf_Loans_V1_ReceiveNoticeEventRequest(body: body, headers: request.headers)
-        _ = try await client.receiveNoticeEvent(eventRequest)
-        return .noContent
-    }
-}
-```
+A provider's webhooks get a controller of their own (`ResendWebhookController`), in the no-caller tier, that collects the body up to a limit the provider's events fit and forwards each event unparsed:
 
 - The conversion copies the bytes and the provider's signature headers unchanged, refusing a request missing one as `400`; the service verifies them ([webhooks](security.md#webhooks)).
 - A body over the limit answers `413` through `ErrorMiddleware`.
-
-Only when something outside the system verifies tokens does the gateway serve the public keys, at `GET /.well-known/jwks.json`, where RFC 8615 places well-known resources ([signing keys](security.md#signing-keys)):
-
-- `SigningKeyController`, in the no-caller tier, holds the keys the gateway's own `jwt.publicKeyPath` file holds, and answers them as `JWKSetResponse`, an RFC 7517 JWK Set: per key, `kty` `OKP`, `crv` `Ed25519`, `alg` `EdDSA`, `use` `sig`, the `kid` and the key as `x`. It calls no service.
-- `BookshelfAPI`'s `addWellKnownRoutes(to:)` registers it on the router's `.well-known` group beside `v1`, and `openapi.yaml` documents the path with a path-level `servers` entry at the origin, since it's outside `/v1`.
 
 ## Conversions
 
@@ -312,7 +276,6 @@ extension Bookshelf_Loans_V1_BorrowBookRequest {
 ```
 
 - An id passes through as the string it is: a response takes the service's lowercase id unchanged, and a request parses a body's id with `UUID(uuidString:)`, answering `400` for one that isn't a UUID, and sends it lowercased. A path's id is read with `context.parameters.require("id", as: UUID.self)`.
-- A file that imports `SwiftProtobuf` spells the standard library's decoder `any Swift.Decoder`, since SwiftProtobuf declares a `Decoder` protocol too.
 - A request conversion takes the body unlabeled, then what the path or headers gave, labeled for what it is (`idempotencyKey:`, `loanID:`).
 - A response conversion throws `UpstreamValueError`, in `Schemas/Shared/`, on a malformed upstream value, such as an unspecified enum or an unset field the schema requires. It isn't an HTTP error, so `ErrorMiddleware`'s final `catch` logs it and answers `500` with no detail, rather than dropping or inventing a field.
 - An upstream's unset `optional` field becomes an absent property, read with its `has…` property, never by testing for an empty string.
@@ -377,9 +340,9 @@ package struct Problem: HTTPResponseError {
 - A refusal answers in its own words: an `HTTPError`'s message, which the gateway or Hummingbird wrote, and a `4xx` upstream's message, which the service wrote for clients ([status codes](grpc.md#status-codes)).
 - An `HTTPError`'s headers, such as `WWW-Authenticate`, `Allow` or `Retry-After`, go out on its problem: `response(from:context:)` writes them beside the content type.
 - An upstream's server error answers its status alone, since a transport's message can name internal hosts. It's logged with its cause, as is anything that isn't an HTTP or RPC error, which answers `500`.
-- Hummingbird's other `HTTPResponseError`s keep their status, such as `413` for a body over the upload limit. Router middleware also wraps the not-found responder, so an unmatched path's `404` is a problem too.
+- Hummingbird's other `HTTPResponseError`s keep their status, such as `413` for a body over its limit. Router middleware also wraps the not-found responder, so an unmatched path's `404` is a problem too.
 - `RPCError` gets no retroactive `HTTPResponseError` conformance: the middleware is the one place it becomes a status.
-- A problem's `instance` is the request's id, `urn:bookshelf:request:<context.id>`. It's the `hb.request.id` on every log line the request writes, beside its trace id ([observability](observability.md#the-bootstrap)), so a client that reports a problem names the trace to read.
+- A problem's `instance` is the request's id, `urn:bookshelf:request:<context.id>`. It's the `hb.request.id` on every log line the request writes, beside its trace id ([observability](composition.md#observability)), so a client that reports a problem names the trace to read.
 - `openapi.yaml` declares the `Problem` schema once and references it from every error response a route documents.
 
 `HTTPResponse.Status.init(_ code: RPCError.Code)`, a `switch` with a `default`, maps the codes:
@@ -405,23 +368,17 @@ package struct Problem: HTTPResponseError {
 
 - A breaking change to a route is that route again under `/v2`, beside `/v1`'s; the routes it leaves alone stay at `/v1` only. `openapi.yaml` documents it with a path-level `servers` entry ending in `/v2`, and names a schema whose shape changed with a `V2` suffix (`LoanResponseV2`), so both versions' types generate side by side.
 - `BookshelfAPI`'s `addV2Routes(to:)` registers it on the router's `v2` group, in its tier. Its handler sits beside `/v1`'s in the resource's controller, and both call the same RPC unless the contract changed too ([contracts](grpc.md#contracts-in-the-protos-package)).
-- From the deploy that ships `/v2`, `/v1`'s route is `deprecated: true` in `openapi.yaml`, and `DeprecationMiddleware`, on the group the controller registers it in, adds three headers to its responses, which CORS exposes ([the edge](#the-edge)):
-  - `Deprecation` (RFC 9745): when the route was deprecated, as a structured-field date, `@` and the Unix time in seconds
-  - `Sunset` (RFC 8594): when it will be removed, as an HTTP-date, never before the deprecation
-  - `Link`: `<the migration guide's URL>; rel="deprecation"`
-- The sunset date is the user's. When it passes, one pull request removes the route and its handler, and the path answers `404` like any unmatched path.
-- CI fails a pull request whose `openapi.yaml` breaks a client of its base's ([a service's CI workflows](delivery.md#a-services-ci-workflows)).
+- From the deploy that ships `/v2`, `/v1`'s route is `deprecated: true` in `openapi.yaml`, and it's removed once the user's sunset date passes.
+- CI fails a pull request whose `openapi.yaml` breaks a client of its base's ([the gate](delivery.md#the-gate)).
 
 ## Upstream clients
 
-The executable builds one `GRPCClient` per upstream service over mTLS, its transport built like any client's ([transports](grpc.md#transports)), with `ClientOTelTracingInterceptor` first ([observability](observability.md#a-trace-across-processes)) and `BearerPropagationInterceptor` applied to the descriptors the gateway calls ([the gateway's root](composition.md#the-gateways-root)).
+The executable builds one `GRPCClient` per upstream service over mTLS, its transport built like any client's ([transports](grpc.md#transports)), with `ClientOTelTracingInterceptor` first ([observability](composition.md#observability)) and `BearerPropagationInterceptor` applied to the descriptors the gateway calls ([the gateway's root](composition.md#the-gateways-root)).
 
 - Propagation presents the caller's original token, as `BearerAuthenticationMiddleware` bound it, when a route identified a caller; a public route's call goes upstream anonymously.
-- Each service's cap on concurrent calls holds the gateway's excess calls to it in their connection, within their deadline ([transports](grpc.md#transports)), so a slow service delays only its own routes. The gateway adds no limit of its own: Hummingbird's `MaximumAvailableConnections` bounds connections, not requests, and a connection past it waits unanswered in the listen backlog, holding the edge's request with it.
 
 ## The edge
 
-- Clients reach the gateway over TLS, terminated by the edge in front of it (a CDN or reverse proxy, which may itself re-encrypt to the proxy beside the gateway). The gateway listens for plain HTTP on its private interface; it never configures TLS for clients.
-- Limits per client address are the edge proxy's, before a request reaches the gateway; limits per account are the owning service's ([attempt limits](security.md#attempt-limits)).
-- CORS is the gateway's, in `CORSMiddleware` first on the router, for the origins, methods and headers browsers use, `Idempotency-Key` and `If-Match` among them ([the gateway's root](composition.md#the-gateways-root)). It exposes each response header a client reads beyond the CORS-safelisted ones, `ETag` among them, since a browser hides any other from the page and a client couldn't send `If-Match`.
-- It answers any origin (`.originBased`) and never allows credentials, since the API authenticates by bearer token alone, never a cookie: a page on another origin reaches only what a token it already holds allows. A session cookie would need an origin allowlist from configuration first.
+- Clients reach the gateway over TLS, terminated by the edge in front of it (a CDN or reverse proxy). The gateway listens for plain HTTP on its private interface; it never configures TLS for clients.
+- Limits per client address are the edge proxy's, before a request reaches the gateway; limits per account are the owning service's.
+- CORS is the gateway's, in `CORSMiddleware` first on the router, allowing the headers clients send, `Idempotency-Key` and `If-Match` among them, and exposing the ones they read, such as `ETag`. The API authenticates by bearer token alone, never a cookie, so it allows no credentials.

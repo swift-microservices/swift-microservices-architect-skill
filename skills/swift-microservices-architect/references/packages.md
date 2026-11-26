@@ -77,26 +77,9 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/bookshelf/bookshelf-core.git", from: "1.0.0"),
         .package(url: "https://github.com/bookshelf/bookshelf-protos.git", from: "1.0.0"),
-        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "1.0.0"),
-        .package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "1.0.0"),
-        .package(url: "https://github.com/swift-microservices/swift-authentication-jwt.git", from: "1.0.0"),
-        .package(url: "https://github.com/swift-microservices/swift-operation-context.git", from: "1.0.0"),
-        .package(url: "https://github.com/swift-microservices/swift-persistence.git", from: "1.0.0"),
-        .package(url: "https://github.com/swift-microservices/swift-persistence-postgres.git", from: "1.0.0"),
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
-        .package(url: "https://github.com/apple/swift-async-algorithms.git", from: "1.1.5"),
         .package(url: "https://github.com/apple/swift-configuration.git", from: "1.5.0", traits: []),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.17.0"),
-        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.35.2"),
-        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.36.0", traits: []),
         .package(url: "https://github.com/apple/swift-temporal-sdk.git", from: "1.5.0"),
-        .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
-        .package(url: "https://github.com/grpc/grpc-swift-extras.git", from: "2.2.2"),
-        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
-        .package(url: "https://github.com/hummingbird-project/postgres-migrations.git", from: "1.2.0"),
-        .package(url: "https://github.com/swift-otel/swift-otel.git", from: "1.6.1", traits: ["OTLPGRPC"]),
-        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.13.0"),
-        .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.33.2"),
+        // … one requirement per library a target imports, each from its latest release
     ],
     targets: [
         .target(
@@ -109,66 +92,8 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
-        .target(
-            name: "LoansPostgres",
-            dependencies: [
-                "LoansCore",
-                .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
-                .product(name: "Logging", package: "swift-log"),
-                .product(name: "PersistencePostgres", package: "swift-persistence-postgres"),
-                .product(name: "PostgresMigrations", package: "postgres-migrations"),
-                .product(name: "PostgresNIO", package: "postgres-nio"),
-            ],
-            swiftSettings: swiftSettings
-        ),
-        .target(
-            name: "LoansGRPC",
-            dependencies: [
-                "LoansCore",
-                .product(name: "Authentication", package: "swift-authentication"),
-                .product(name: "BookshelfAuthentication", package: "bookshelf-core"),
-                .product(name: "CatalogProtos", package: "bookshelf-protos"),
-                .product(name: "GRPCCore", package: "grpc-swift-2"),
-                .product(name: "IdentityProtos", package: "bookshelf-protos"),
-                .product(name: "LoansProtos", package: "bookshelf-protos"),
-                .product(name: "OperationContext", package: "swift-operation-context"),
-                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-            ],
-            swiftSettings: swiftSettings
-        ),
-        .executableTarget(
-            name: "Loans",
-            dependencies: [
-                "LoansCore",
-                "LoansGRPC",
-                "LoansPostgres",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
-                .product(name: "AuthenticationGRPC", package: "swift-authentication-grpc"),
-                .product(name: "AuthenticationJWT", package: "swift-authentication-jwt"),
-                .product(name: "BookshelfAuthentication", package: "bookshelf-core"),
-                .product(name: "BookshelfPersistence", package: "bookshelf-core"),
-                .product(name: "BookshelfTransport", package: "bookshelf-core"),
-                .product(name: "CatalogProtos", package: "bookshelf-protos"),
-                .product(name: "Configuration", package: "swift-configuration"),
-                .product(name: "GRPCCore", package: "grpc-swift-2"),
-                .product(name: "GRPCHealthService", package: "grpc-swift-extras"),
-                .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
-                .product(name: "GRPCOTelTracingInterceptors", package: "grpc-swift-extras"),
-                .product(name: "GRPCServiceLifecycle", package: "grpc-swift-extras"),
-                .product(name: "IdentityProtos", package: "bookshelf-protos"),
-                .product(name: "LoansProtos", package: "bookshelf-protos"),
-                .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIOCertificateReloading", package: "swift-nio-extras"),
-                .product(name: "OTel", package: "swift-otel"),
-                .product(name: "PersistencePostgres", package: "swift-persistence-postgres"),
-                .product(name: "PostgresMigrations", package: "postgres-migrations"),
-                .product(name: "PostgresNIO", package: "postgres-nio"),
-                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
-                .product(name: "Temporal", package: "swift-temporal-sdk"),
-                .product(name: "UnixSignals", package: "swift-service-lifecycle"),
-            ],
-            swiftSettings: swiftSettings
-        ),
+        // … LoansPostgres, LoansGRPC and the executable the same way: each lists every module it imports,
+        // product by product, with swiftSettings
     ],
     swiftLanguageModes: [.v6]
 )
@@ -176,10 +101,10 @@ let package = Package(
 
 - The tools version is the newest Swift release: the toolchain the services build and deploy with, which the system libraries share. A public library's is instead the oldest Swift its users build with. 6.2 is the floor for these settings.
 - `platforms: [.macOS(.v15)]` is the floor several dependencies declare; Linux ignores it. A dependency that requires a newer macOS raises it, with the reason in the package's README.
-- Every target lists each module it imports, product by product. CI's `--explicit-target-dependency-import-check error` fails only an import the target can't reach ([delivery](delivery.md#tests)), so listing a module reached through another dependency, such as `GRPCCore` through `LoansCore`, is kept by review.
+- Every target lists each module it imports, product by product. CI's `--explicit-target-dependency-import-check error` fails only an import the target can't reach ([the gate](delivery.md#the-gate)), so listing a module reached through another dependency, such as `GRPCCore` through `LoansCore`, is kept by review.
 - Each requirement follows [choosing versions](stack.md#choosing-versions).
 - A target joins `Package.swift` when its first source file is written: SPM refuses a target with no sources, so a package builds target by target, Core first.
-- A provider target (`LoansResend`), a Kafka target (`LoansKafka`) and test targets follow the same form, and the executable lists each. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([delivery](delivery.md#tests)), so a local or release build never stops on one.
+- A provider target (`LoansResend`), a Kafka target (`LoansKafka`) and test targets follow the same form, and the executable lists each. No target sets `.treatAllWarnings(as: .error)`: warnings fail CI's test builds ([the gate](delivery.md#the-gate)), so a local or release build never stops on one.
 
 ## Swift settings
 
@@ -198,7 +123,6 @@ On Linux, full Foundation brings `FoundationInternationalization` and ICU's data
 | swift-otel | `OTLPHTTP`*, `OTLPGRPC`* | `traits: ["OTLPGRPC"]`: one exporter, over the gRPC stack every process links |
 
 - Traits unify across the graph: a default trait is off only when every package that declares the dependency turns it off. `<project>-core`, `<project>-protos`, each service and the gateway turn off the same Foundation traits, and so must the libraries they depend on; the template's lower bounds are releases that do.
-- A few products link full Foundation and stay out of `dependencies`: `NIOFoundationCompat` (`NIOFoundationEssentialsCompat` instead), `NIOCertificateHelpers` (`NIOCertificateReloading` is Foundation-free), `HTTPTypesFoundation`. `HummingbirdTesting` links it, in test targets only.
 - A dependency that links full Foundation ([the stack](stack.md#full-foundation)) is recorded in the service's README, and owned code stays on `FoundationEssentials` ([Foundation linking](delivery.md#foundation-linking)).
 - Before adding a dependency, list its traits with `swift package show-traits` and read its sources' Foundation imports. A library proves it in CI with the Foundation-linking check ([Foundation linking](delivery.md#foundation-linking)).
 
@@ -289,39 +213,7 @@ bookshelf-protos/
     └── LoansProtos/                                  the same files for bookshelf.loans.v1, plus its events.proto
 ```
 
-Each target:
-
-```swift
-.target(
-    name: "LoansProtos",
-    dependencies: [
-        .product(name: "GRPCCore", package: "grpc-swift-2"),
-        .product(name: "GRPCProtobuf", package: "grpc-swift-protobuf"),
-        .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-    ],
-    swiftSettings: swiftSettings,
-    plugins: [
-        .plugin(name: "GRPCProtobufGenerator", package: "grpc-swift-protobuf")
-    ]
-),
-```
-
-with `grpc-swift-proto-generator-config.json`:
-
-```json
-{
-  "generate": {
-    "clients": true,
-    "servers": true,
-    "messages": true
-  },
-  "generatedSource": {
-    "accessLevel": "public",
-    "accessLevelOnImports": true
-  }
-}
-```
-
+- Each target depends on `GRPCCore`, `GRPCProtobuf` and `SwiftProtobuf`, and runs grpc-swift-protobuf's `GRPCProtobufGenerator` plugin, whose `grpc-swift-proto-generator-config.json` generates clients, servers and messages, `public`, with access levels on imports.
 - One library product per target; swift-protobuf declared with `traits: []`.
 - The plugin generates at build time with the `protoc` swift-protobuf builds from source (`PROTOC_PATH` overrides it), so a build machine installs nothing, and generated files are never committed or edited.
 - The package holds the `.proto` files and nothing else in Swift: conversions and validation belong to each service's `Protobuf/` folders.
