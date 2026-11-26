@@ -140,7 +140,7 @@ The plan stays current: each Build order line is ticked once its checklist is do
 |---|---|---|
 
 ## Decisions
-- Each boundary and why it holds; each departure from a default or exception to a rule, and each open choice's pick, with its reason and the sources the search found ([reading like the requirement](style.md#building-the-established-way))
+- Each boundary and why it holds; each departure from a default or exception to a rule, and each open choice's pick, with its reason and the sources the search found ([building the established way](style.md#building-the-established-way))
 
 ## Operations
 - The platform each environment deploys to, its servers' CPU architectures, the image registry and the CI host: the user's answers, with no default ([delivery](delivery.md))

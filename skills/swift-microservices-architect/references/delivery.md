@@ -47,7 +47,7 @@ The tests run on Ubuntu noble, on these toolchains and architectures:
 - A service's `Containerfile` builds on its `swift-tools-version` too, so moving a service to a newer Swift changes its tools version and its `Containerfile`'s `FROM` in one pull request.
 - The plan's architectures are the ones the platform's servers run. A service passes them as `linux_host_archs` (`'["aarch64"]'`, `'["x86_64"]'` or both), which `service.yml` requires, and its image builds for the same ones; with several, the commit's image is an index from which each server pulls its own. A system library passes the same `linux_host_archs`, since only the project's services build it; a public library passes none.
 - A library's pull request carries exactly one semver label, and its release tags the next version without a `v`; a tag never moves, and a bad release is fixed forward.
-- `<project>-protos` also runs buf, which fails a pull request that breaks the wire, such as a renumbered field or a reused tag. The gateway's CI fails a pull request whose `openapi.yaml` breaks a client of its base's.
+- `<project>-protos` also runs buf, which fails a pull request that breaks the wire, such as a renumbered field or a reused tag. The gateway's CI fails a pull request whose `openapi.yaml` breaks a client of its base's ([versions](gateway.md#versions)); removing a route the base marks `deprecated: true` passes, as its sunset's pull request does.
 
 ## Tests
 

@@ -76,6 +76,7 @@ The signal carries nothing: its handler ends the run's wait, and the run reads t
 
 ```swift
 package import Temporal
+…  // FoundationEssentials, imported as style.md's Foundation section shows
 
 /// A loan from borrowing to its due date: a book still out then makes the loan overdue,
 /// and the member is sent a notice.
@@ -172,6 +173,7 @@ A container is injected only with use case protocols (`any MarkLoanOverdueUseCas
 
 ```swift
 package import Temporal
+…  // FoundationEssentials, imported as style.md's Foundation section shows
 
 /// The loan workflow's side effects, each over a use case or a port.
 @ActivityContainer

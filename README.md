@@ -74,7 +74,7 @@ A new backend goes from idea to production through the skill's checklists, in th
 
 The plan's Build order lists these steps and ticks each one once its checklist's build, tests and checks pass, so invoking the skill with no task picks up at the next step.
 
-On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. Planning a backend or adding a feature always starts by searching online for how it's already solved: the standard, such as an RFC or OWASP's guidance, how production systems handle it, and a Swift package to reuse or a well-tested implementation to port. The agent names its sources, then designs the feature with Engineering's system design skill. One that changes code ends with a build and a test run repeated until both pass.
+On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. Planning a backend or adding a feature that has a standard or an open choice starts by searching online for how it's already solved: the standard, such as an RFC or OWASP's guidance, how production systems handle it, and a Swift package to reuse or a well-tested implementation to port. The agent names its sources, then designs the feature with Engineering's system design skill. One that changes code ends with a build and a test run repeated until both pass.
 
 ## What it covers
 
@@ -88,7 +88,7 @@ On a backend that already runs, the agent follows the checklist for the task: ad
 | Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details, versions |
 | Workflows | Temporal workflows and activities in Core, how use cases start and reach them, determinism, activity options, the worker |
 | Events | When a fact is an event rather than a workflow or a call, contracts on Kafka, the transactional outbox and its relay, consumers that tolerate redelivery |
-| Composition | Commands, configuration through each library's reader, logging, telemetry, and graceful shutdown |
+| Composition | Commands, configuration through each library's reader, logging, observability and graceful shutdown |
 | Security | mTLS with certificate reloading, internal callers admitted per RPC, JWTs signed with Ed25519 key files, secrets as files, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
 | Delivery | The gate every change passes, semantic-version releases, a deployment contract every platform meets, and deploys to Dokploy |
@@ -134,7 +134,7 @@ skills/swift-microservices-architect/
     ├── gateway.md              the Hummingbird gateway
     ├── workflows.md            Temporal workflows, activities, the worker
     ├── events.md               choosing an event or a workflow, the outbox, consumers
-    ├── composition.md          commands, composition roots, configuration readers, telemetry, lifecycle, health
+    ├── composition.md          commands, composition roots, configuration readers, observability, lifecycle, health
     ├── security.md             mTLS, tokens and signing keys, authorization, secrets, webhooks
     ├── style.md                how the code reads
     ├── testing.md              test targets and mocks

@@ -13,7 +13,7 @@ An environment runs a service's image as one Dokploy application per command ([c
 
 ## Staging and production
 
-Loans' `main.yml` adds this job after `service`:
+Loans' `main.yml`, as `swift-microservices/ci`'s [README](https://github.com/swift-microservices/ci#readme) gives it, adds this job after its `service` job:
 
 ```yaml
   staging:
@@ -33,5 +33,5 @@ Loans' `main.yml` adds this job after `service`:
       DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
 ```
 
-- `deploy.yml`'s `production` job has the same `permissions` and calls `deploy_dokploy.yml` with `environment: production`, `promote_from: staging`, `commit: ${{ inputs.commit }}`, production's `application_ids` and `run_to_completion_application_ids`, and the Dokploy secrets.
+- `deploy.yml`, the CI workflow that README gives for deploying production by hand, has a `production` job with the same `permissions`, which calls `deploy_dokploy.yml` with `environment: production`, `promote_from: staging`, `commit: ${{ inputs.commit }}`, production's `application_ids` and `run_to_completion_application_ids`, and the Dokploy secrets.
 - Secrets: `DOKPLOY_URL` and `DOKPLOY_TOKEN`, a Dokploy API key that can read, update and deploy the service's applications and read their containers, which the deploy reads to wait for the new image.

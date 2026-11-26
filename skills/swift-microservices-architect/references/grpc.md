@@ -323,7 +323,6 @@ extension Bookshelf_Loans_V1_ListAllLoansResponse {
 | The resource changed since the caller read it (`versionConflict`) | `aborted` |
 | The resource's state refuses it, whoever asks (`loanLimitReached`, `alreadyReturned`, `idempotencyConflict`) | `failedPrecondition` |
 | Who the caller is refuses it (`forbidden`) | `permissionDenied` |
-| An attempt limit refuses it (`tooManyAttempts`) | `resourceExhausted` |
 | A dependency is down (`…Unavailable`) | `unavailable` |
 | `unknown` | `internalError` |
 

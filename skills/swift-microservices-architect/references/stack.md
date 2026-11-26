@@ -71,7 +71,7 @@ A managed service that can't meet [the trust model](security.md#the-trust-model)
 
 ## Full Foundation
 
-A few packages in the stack link full Foundation on Linux whatever their traits, such as postgres-nio and the gateway's generated OpenAPI code. Each product that depends on one is listed in `foundation_linking_check_excluded_products` ([Foundation linking](delivery.md#foundation-linking)) and recorded in the service's README; every other package stays Foundation-free with the traits [traits and Foundation](packages.md#traits-and-foundation) declares, and CI's check finds one that isn't.
+A few packages in the stack link full Foundation on Linux whatever their traits, such as postgres-nio and the gateway's generated OpenAPI code. Each product that depends on one is listed in `foundation_linking_check_excluded_products` ([Foundation linking](delivery.md#foundation-linking)); every other package stays Foundation-free with the traits [traits and Foundation](packages.md#traits-and-foundation) declares, and CI's check finds one that isn't.
 
 ## Choosing versions
 

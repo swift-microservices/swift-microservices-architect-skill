@@ -203,6 +203,7 @@ package import BookshelfAuthentication
 package import Logging
 package import Persistence
 package import Temporal
+…  // FoundationEssentials, imported as style.md's Foundation section shows
 
 /// Lends the subject a copy of a book and starts the loan's workflow.
 ///

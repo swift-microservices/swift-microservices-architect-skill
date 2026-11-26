@@ -146,7 +146,7 @@ Read a reference only when the task reaches its row or a checklist names it.
 | [gateway.md](references/gateway.md) | A route or its breaking change, a request context, controller, webhook route or error mapping |
 | [workflows.md](references/workflows.md) | A workflow, activity container or worker; starting or reaching a run |
 | [events.md](references/events.md) | An event, or choosing one over a workflow |
-| [composition.md](references/composition.md) | A command, composition root, configuration and its readers, logging, telemetry, health or the ServiceGroup |
+| [composition.md](references/composition.md) | A command, composition root, configuration and its readers, logging, observability, health or the ServiceGroup |
 | [security.md](references/security.md) | mTLS, Postgres logins, tokens and their key files, secrets or webhooks |
 | [style.md](references/style.md) | Writing or reviewing any Swift |
 | [testing.md](references/testing.md) | Writing tests or mocks |

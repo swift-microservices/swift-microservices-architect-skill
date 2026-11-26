@@ -242,7 +242,7 @@ package struct LoanController: Sendable {
 - A read of a resource that people edit answers its `etag` as the `ETag` header too, and an update reads it from `If-Match` with `requireIfMatch()`, beside `requireIdempotencyKey()`, which answers `400` without it ([transactions](use-cases.md#transactions)).
 - A query value that is present and malformed answers `400`, like a malformed body; only an absent one takes the service's default.
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
-- A route's path and method come from the feature's research ([reading like the requirement](style.md#building-the-established-way)).
+- A route's path and method come from the feature's research ([building the established way](style.md#building-the-established-way)).
 - Status codes follow the method: `201` with `EditedResponse` for a create, `202` for a route that only asks for work to happen later and has nothing yet to return, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, a `DELETE` included, `200` otherwise.
 
 A provider's webhooks get a controller of their own (`ResendWebhookController`), in the no-caller tier, that collects the body up to a limit the provider's events fit and forwards each event unparsed:
@@ -368,8 +368,7 @@ package struct Problem: HTTPResponseError {
 
 - A breaking change to a route is that route again under `/v2`, beside `/v1`'s; the routes it leaves alone stay at `/v1` only. `openapi.yaml` documents it with a path-level `servers` entry ending in `/v2`, and names a schema whose shape changed with a `V2` suffix (`LoanResponseV2`), so both versions' types generate side by side.
 - `BookshelfAPI`'s `addV2Routes(to:)` registers it on the router's `v2` group, in its tier. Its handler sits beside `/v1`'s in the resource's controller, and both call the same RPC unless the contract changed too ([contracts](grpc.md#contracts-in-the-protos-package)).
-- From the deploy that ships `/v2`, `/v1`'s route is `deprecated: true` in `openapi.yaml`, and it's removed once the user's sunset date passes.
-- CI fails a pull request whose `openapi.yaml` breaks a client of its base's ([the gate](delivery.md#the-gate)).
+- From the deploy that ships `/v2`, `/v1`'s route is `deprecated: true` in `openapi.yaml`, and it's removed once the user's sunset date passes, a removal [the gate](delivery.md#the-gate) lets through.
 
 ## Upstream clients
 
