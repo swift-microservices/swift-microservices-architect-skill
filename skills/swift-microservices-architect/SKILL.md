@@ -15,7 +15,7 @@ Decides how a Swift backend splits into services and modules, who owns what and 
 
 ## Examples
 
-In names, `X` stands for the service in a target (`LoansCore`) and for what a type is named after (`BorrowBookUseCase`, `LoanRepository`); `<Project>` and `<project>` stand for the project's name. Examples are Bookshelf, a lending library:
+In names, `X` stands for the service in a target (`LoansCore`) and for what a type is named after (`BorrowBookUseCase`, `LoanRepository`); `<Project>` and `<project>` stand for the project's name. Examples are Bookshelf, a lending library, whose names teach the shapes; a user's plan, code and review use the user's own names and state the rule itself, never "as Bookshelf does":
 
 | Package | Holds |
 |---|---|
