@@ -22,6 +22,7 @@ Each task's checklist, which the agent copies into its response as [the instruct
 - [ ] scripts/check_boundaries.sh and scripts/check_style.sh (packages.md#checking-the-boundaries), and swift-format lint
 - [ ] Each skill the task's checklist names was invoked with the Skill tool, or reported as skipped
 - [ ] Fix and repeat until all pass; a concurrency diagnostic goes through swift-concurrency-pro, never silenced; a warning in a dependency's code is a departure (style.md#warnings-from-dependencies)
+- [ ] A check that couldn't run here, such as a missing toolchain, Postgres or swift-format, stays unticked, and the response says why
 ```
 
 ## Plan a backend

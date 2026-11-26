@@ -110,8 +110,8 @@ report "Only the executable reads configuration" "$(
     grep -rlE "${import_prefix} Configuration\$" Sources 2>/dev/null | grep -v "^${executable}/"
 )"
 
-report "Every Foundation import is the conditional one" "$(
-    grep -rlE '^(@[A-Za-z_]+ )*([a-z]+ )*import( [a-z]+)? Foundation(\.|$)' Sources 2>/dev/null | while read -r file; do
+report "Every Foundation import is the conditional one, in Sources/ and Tests/" "$(
+    grep -rlE '^(@[A-Za-z_]+ )*([a-z]+ )*import( [a-z]+)? Foundation(\.|$)' Sources Tests 2>/dev/null | while read -r file; do
         grep -q 'canImport(FoundationEssentials)' "$file" || echo "$file"
     done
 )"

@@ -111,6 +111,7 @@ do {
 ## Prerequisites
 
 - A Swift toolchain at the package's `swift-tools-version`; for `XPostgresTests` and `XValkeyTests`, Postgres 18 and Valkey 9 or later, through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
+- swift-format, for the lint every change passes ([formatting](references/style.md#formatting)).
 - Network access for an XCore with workflows: its build fetches Temporal's sdk-core and its tests the test server ([Core's links](references/packages.md#what-core-may-link)).
 - The [related skills](#related-skills) `system-design`, `architecture`, `code-review`, `deploy-checklist`, `incident-response`, `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`.
 

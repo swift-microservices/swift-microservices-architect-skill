@@ -23,7 +23,7 @@ The code inside a shape:
 
 ## Installing them
 
-A skill is installed when a checklist line that names it is reached. The skill list in the session is compared with its name; a skill from the Engineering plugin is present under its `engineering:` prefix, such as `engineering:system-design`. When it's missing, the user is asked to install it with its source's command; if the user declines, the task proceeds without it, and the response names the skill whose pass was skipped:
+A skill is installed when a checklist line that names it is reached. The skill list in the session is compared with its name; a skill a plugin ships is present under the plugin's prefix, such as `engineering:system-design` or `temporal:temporal-developer`, and counts as installed. When it's missing, the user is asked to install it with its source's command; if the user declines, the task proceeds without it, and the response names the skill whose pass was skipped:
 
 ```
 npx skills@1.9.0 add https://github.com/anthropics/knowledge-work-plugins --skill system-design architecture code-review deploy-checklist incident-response

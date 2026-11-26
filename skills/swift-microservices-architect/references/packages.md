@@ -238,7 +238,7 @@ SPM checks that a target can reach what it imports, but not what a declaration s
 - Generated contract types stay in XGRPC, the gateway's `GatewayHTTP` and the executable.
 - The gateway names no `XInternalService`.
 - Only the executable reads configuration.
-- Every Foundation import is the conditional one.
+- Every Foundation import is the conditional one, in `Sources/` and `Tests/`.
 - There are no unstructured tasks.
 - Every use case protocol has typed throws.
 - No package defaults to the main actor.

@@ -41,7 +41,7 @@
 | A use case's Temporal properties | `temporalClient`, `taskQueue` | `private let temporalClient: TemporalClient` |
 | Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `currentState(input:)` |
 | Workflow id, task queue, Temporal namespace | `<x>-<workflow>-<id>`; `x`; `<project>-<x>` | `loans-loan-0193…`; `loans`; `bookshelf-loans` |
-| Schedule id, scheduled workflow | `<x>-<process>`; `<Process>Workflow` | `loans-purge-notice-events`; `PurgeNoticeEventsWorkflow` |
+| Schedule id, scheduled workflow | `<x>-<process>`; `<Process>Workflow` | `loans-send-due-reminders`; `SendDueRemindersWorkflow` |
 | Event, its kinds | `<Resource>Event` in `<project>/<x>/v1/events.proto`, and a Core model of the same name; `<Resource>EventKind`, whose cases are facts in the past tense | `LoanEvent`, `LOAN_EVENT_KIND_BORROWED`, `LoanEventKind.borrowed` |
 | Topic, its configuration key | `<project>.<x>.v1.<resource>-events`; `kafka.topics.<resource>Events` | `bookshelf.loans.v1.loan-events`; `kafka.topics.loanEvents` |
 | Outbox and relay | Table `<resource>_event_outbox`; repository `<Resource>EventRepository`, its command `Record<Resource>EventCommand`; `Publish<Resource>EventsUseCase` over the port `<Resource>EventPublisher`, implemented by `Kafka<Resource>EventPublisher` | `loan_event_outbox`, `PublishLoanEventsUseCase`, `KafkaLoanEventPublisher` |
