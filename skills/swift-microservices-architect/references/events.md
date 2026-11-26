@@ -28,7 +28,6 @@ In Bookshelf:
 | Need | Mechanism | Not the other, because |
 |---|---|---|
 | Mark a loan overdue at its due date and send a notice | `LoanWorkflow` | An event has no timer, and Loans must know when the notice fails |
-| Erase a member's data from every service | `AccountErasureWorkflow` ([erasing a person's data](system.md#erasing-a-persons-data)) | Identity must know each service erased it; after an event, nobody notices the consumer that never did |
 | Order Catalog's books by how often they're borrowed | Loans' `LoanEvent`, which Catalog counts | Catalog calling Loans would close a cycle with Loans' calls to Catalog, and a workflow in Loans would have to name Catalog, then every later consumer |
 | Feed loans to a warehouse or a search index | The same `LoanEvent` | Consumers arrive and leave without a change to Loans, and a new one reads the topic from its oldest event |
 | Whether a book exists when a member borrows it | `GetBook` on Catalog's internal service | A consumer's copy lags its owner, so a decision that must see the owner's current state asks the owner |
@@ -71,7 +70,7 @@ enum LoanEventKind {
 - A message's value is the event's plain protobuf encoding, with no schema registry's prefix. A consumer outside the project's Swift packages, such as a warehouse connector, decodes it with the descriptors `buf build` makes from `<project>-protos`.
 - One topic per resource, named as [naming](conventions.md#naming) gives it and keyed by the resource's id, so a resource's events share a partition. The deployment creates each topic with the partitions and retention the plan records; nothing relies on the broker creating one.
 - A kind is a fact in the past tense (`BORROWED`), never a request (`SEND_NOTICE`) or an instruction to a consumer.
-- An event carries its own `id`, the resource's id, and only the fields its consumers need. It carries ids, never personal data: a topic keeps its messages for its retention, beyond the reach of [erasure](system.md#erasing-a-persons-data). A consumer that needs a member's name asks Identity.
+- An event carries its own `id`, the resource's id, and only the fields its consumers need. It carries ids, never personal data: a topic keeps its messages for its retention, where no deletion of the person's rows reaches them. A consumer that needs a member's name asks Identity.
 
 ## The outbox
 
@@ -172,7 +171,7 @@ package struct LoanEventHandler: EventHandler {
 - `receive(_:)` acts on the kinds it handles and returns on every other, those added after it was written included.
 - Its conversion follows [conversions](grpc.md#conversions), in XKafka's `Protobuf/`, and refuses a malformed event with `EventRejection`, as a request's conversion refuses with `invalidArgument`.
 - It maps its use case's error as an activity does ([activities](workflows.md#activities)): a case no retry changes returns, or throws `EventRejection` when the event itself is wrong, and every other case is rethrown, so the event is retried. No logging: the use case logged what happened.
-- The use case is a system use case on the worker's database, safe to run twice: its write is keyed by the fact it records, or by the event's `id` when the fact has no key of its own. `RecordBookBorrow` inserts the loan into `book_borrows`, keyed by its loan id, and raises the book's `borrow_count` only when the insert lands, in one transaction, so a redelivery and an out-of-order arrival count once.
+- The use case is a system use case on the worker's database (its one role's, in a service with one), safe to run twice: its write is keyed by the fact it records, or by the event's `id` when the fact has no key of its own. `RecordBookBorrow` inserts the loan into `book_borrows`, keyed by its loan id, and raises the book's `borrow_count` only when the insert lands, in one transaction, so a redelivery and an out-of-order arrival count once.
 - A reaction that waits, retries a remote call or spans services is a workflow the use case starts, by an id that names the event, with the policies a webhook's start takes ([starting a workflow](workflows.md#starting-a-workflow-from-a-use-case)).
 
 `EventConsumer`, from `<Project>Events`, runs a handler over one topic. It decodes each message into the handler's event, and stores the message's offset once `receive(_:)` returns or throws `EventRejection`, logging a rejection, and a value that doesn't decode, with its topic, partition and offset. Any other error it logs and retries after a pause, before the next message, so an offset never passes an event the handler hasn't finished. Kafka commits the stored offsets, so a restart redelivers at most what was handled since the last commit.
@@ -217,6 +216,5 @@ let loanEvents = EventConsumer(
 ```
 
 - A producer comes before its relay, and a `KafkaConsumer` before its `EventConsumer`, both after the database clients they use, so the relay stops before its producer flushes, and the handler before its consumer leaves the group ([lifecycle](composition.md#lifecycle)).
-- Only `sendAndAwait` reports deliveries, so the producer's events sequence is discarded, as is the consumer's.
 - `<Project>Events`' readers give every client what the project fixes: the brokers, TLS and its service's Kafka user ([the trust model](security.md#the-trust-model)); a producer idempotence and acknowledgment by every in-sync replica; a consumer its group, `<x>`, offsets stored only by `EventConsumer`, and the oldest offset for a group that has none, so a new consumer reads the topic from its start. A topic's name is a configuration key the publisher's and each consumer's defaults set alike.
-- The worker serves nothing: swift-kafka-client's `consumer.lag` metric shows whether a consumer keeps up, and joins the plan's alerts ([the plan](system.md#the-plan)).
+- The worker serves nothing: swift-kafka-client's `consumer.lag` metric shows whether a consumer keeps up.

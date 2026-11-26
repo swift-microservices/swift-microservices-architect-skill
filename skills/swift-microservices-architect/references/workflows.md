@@ -48,19 +48,8 @@ let loan = try await database.withTransaction { scope in
     …  // the conditional write, with ExtendLoanCommand, or the use case's case when the loan can't be extended
 }
 
-let workflowID = LoanWorkflow.id(loanID: loan.id)
-let workflowOptions = WorkflowOptions(
-    id: workflowID,
-    taskQueue: taskQueue,
-    idReusePolicy: .allowDuplicateFailedOnly,
-    idConflictPolicy: .useExisting
-)
-let workflowInput = LoanWorkflow.Input(
-    loanID: loan.id,
-    userID: loan.userID,
-    bookID: loan.bookID,
-    dueDate: loan.dueDate
-)
+let workflowOptions = …  // as BorrowBook builds them
+let workflowInput = …
 _ = try await temporalClient.signalWithStartWorkflow(
     type: LoanWorkflow.self,
     input: workflowInput,
@@ -87,12 +76,7 @@ The signal carries nothing: its handler ends the run's wait, and the run reads t
 
 ```swift
 package import Temporal
-
-#if canImport(FoundationEssentials)
-package import FoundationEssentials
-#else
-package import Foundation
-#endif
+…  // FoundationEssentials, imported as style.md's Foundation section shows
 
 /// A loan from borrowing to its due date: a book still out then makes the loan overdue,
 /// and the member is sent a notice.
@@ -104,9 +88,7 @@ package struct LoanWorkflow {
         package let bookID: UUID
         package let dueDate: Date
 
-        package init(loanID: UUID, userID: UUID, bookID: UUID, dueDate: Date) {
-            …
-        }
+        package init(loanID: UUID, userID: UUID, bookID: UUID, dueDate: Date) { … }
     }
 
     private var isDueDateExtended = false
@@ -191,12 +173,7 @@ A container is injected only with use case protocols (`any MarkLoanOverdueUseCas
 
 ```swift
 package import Temporal
-
-#if canImport(FoundationEssentials)
-package import FoundationEssentials
-#else
-package import Foundation
-#endif
+…  // FoundationEssentials, imported as style.md's Foundation section shows
 
 /// The loan workflow's side effects, each over a use case or a port.
 @ActivityContainer
@@ -260,17 +237,8 @@ package struct LoanActivities {
     /// Reads the member and the book on every attempt, so the workflow's history holds neither.
     @Activity
     package func sendOverdueNotice(input: SendOverdueNoticeInput) async throws {
-        guard let member = try await identityClient.member(id: input.userID) else {
-            throw ApplicationError(
-                message: "Identity has no such member.",
-                type: "MemberNotFound",
-                isNonRetryable: true
-            )
-        }
-
-        guard let book = try await catalogClient.book(id: input.bookID) else {
-            throw ApplicationError(message: "Catalog has no such book.", type: "BookNotFound", isNonRetryable: true)
-        }
+        let member = …  // from identityClient, on every attempt; a missing member is a non-retryable ApplicationError
+        let book = …  // from catalogClient, the same way
 
         let idempotencyKey = "loans-overdue-notice-\(input.loanID.uuidString.lowercased())"
         try await noticeSender.sendOverdueNotice(member: member, book: book, idempotencyKey: idempotencyKey)
@@ -322,11 +290,10 @@ A deploy replaces the code under every run in flight, and `LoanWorkflow`'s runs 
 
 ## Recurring work
 
-Work on a calendar, such as deleting rows whose retention has ended, is a workflow a Temporal Schedule starts: never a timer loop in serve, a cron container, or a workflow that sleeps forever.
+Work on a calendar is a workflow a Temporal Schedule starts: never a timer loop in serve, a cron container, or a workflow that sleeps forever.
 
 - A service declares its schedules once, in `XCore/Workflows/XSchedules.swift`: each one's id, calendar, workflow and input, with `overlap: .skip`, so a run that outlasts its interval isn't joined by a second.
-- `worker run` applies them before its `ServiceGroup` starts ([the worker's root](composition.md#the-workers-root)): inside `TemporalClient.connect(transport:configuration:_:)`, it creates each schedule by its id, and on `ScheduleAlreadyRunningError` updates it to the declared one, so every replica converges on the same schedules.
-- A table whose rows stop mattering has a retention period, a policy value, and a scheduled workflow whose activity runs a system use case that deletes the expired rows in batches by id: the webhook event ids Loans keeps against redelivery (`PurgeNoticeEventsWorkflow`), and Identity's ended sessions and their refresh tokens.
+- `worker run` applies them before its `ServiceGroup` starts, creating or updating each by its id, so every replica converges on the declared schedules ([the worker's root](composition.md#the-workers-root)).
 
 ## The worker
 
@@ -335,4 +302,14 @@ Work on a calendar, such as deleting rows whose retention has ended, is a workfl
 - Each service has one task queue, named for it (`loans`), under the SDK's key `temporal.worker.taskqueue`, which the serve process also reads for its starts.
 - Each service has its own namespace, named like its package (`bookshelf-loans`), so its runs, schedules and retention are its own. No service reaches another's runs: what another service must do, it asks through that service's contract.
 - How each process connects to Temporal, such as Temporal Cloud with an API key over TLS, or a self-hosted server with mTLS, is a question the plan puts to the user, with no default; the roots build the connection the answer names. Whatever the answer, each process reaches its service's namespace only, and a setup that would let it reach another's goes to the user as a question too.
-- The SDK's readers take the namespace under `temporal.client.namespace` for starts and `temporal.worker.namespace` for polling, which the defaults set together. They also require `temporal.client.instrumentation.serverhostname` and `temporal.worker.client.instrumentation.serverhostname` (the Temporal host), `temporal.worker.buildid` (the image's commit) and `temporal.worker.client.identity`, which the deployment sets.
+- swift-temporal-sdk's readers, `TemporalClient.Configuration(configReader:)` and `TemporalWorker.Configuration(configReader:)`, require their keys before a root runs, so the defaults or the deployment set every one ([configuration](composition.md#configuration)):
+
+  | Key | Value | Set by |
+  |---|---|---|
+  | `temporal.client.namespace`, `temporal.worker.namespace` | The service's namespace, the same in both | The defaults |
+  | `temporal.worker.taskqueue` | The service's task queue | The defaults |
+  | `temporal.client.instrumentation.serverhostname`, `temporal.worker.client.instrumentation.serverhostname` | The Temporal host | The deployment |
+  | `temporal.worker.buildid` | The image's commit | The deployment |
+  | `temporal.worker.client.identity` | The process's identity | The deployment |
+
+- A release of the SDK may require another key, which reading its readers' source finds ([readers](composition.md#readers)).

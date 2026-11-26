@@ -4,6 +4,7 @@ How the code reads: the bar for readability, error handling, strict concurrency,
 
 ## Contents
 - Reading like the requirement
+- Building the established way
 - Build, then call
 - Errors
 - Concurrency
@@ -27,7 +28,9 @@ The bar is the sample code in Apple's WWDC sessions: small types named for their
 - `// MARK: -` names the sections of a composition root and the groups inside a type: a service's RPCs by audience, a router builder's tiers, an activity container's steps.
 - Code that a reader would otherwise check twice gets a one-line comment with the reason: a business rule, an ordering constraint, a safety property. A comment never narrates the next line.
 
-A feature is built the established way. Before designing any feature, the agent searches online for how it's already solved, in this order; the search is never skipped:
+## Building the established way
+
+A feature with a standard or a well-known solution, such as authentication, tokens, payments, idempotency, webhooks or rate limits, or one that opens a choice this skill leaves open, is built the established way: before designing it, the agent searches online for how it's already solved, in this order. An operation this skill's shapes fully determine, such as a list or a state change, needs no search.
 1. The standard: an RFC, OWASP's guidance, or the provider's or library's documentation, such as RFC 9457 for problem details, RFC 8725 for JWTs, OWASP's password storage, the IETF `Idempotency-Key` header, RFC 3339 for dates on the wire and Google's AIPs for a contract's standard methods and fields.
 2. Where no standard covers it, how established production systems and the community solve it, such as Stripe's idempotency keys, the transactional outbox or a token bucket for rate limits.
 3. An existing implementation: a maintained Swift package first, else a well-tested one in another language, such as Go, Rust or Java, to port.

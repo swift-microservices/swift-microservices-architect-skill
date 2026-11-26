@@ -110,8 +110,8 @@ report "Only the executable reads configuration" "$(
     grep -rlE "${import_prefix} Configuration\$" Sources 2>/dev/null | grep -v "^${executable}/"
 )"
 
-report "Every Foundation import is the conditional one" "$(
-    grep -rlE '^(@[A-Za-z_]+ )*([a-z]+ )*import( [a-z]+)? Foundation(\.|$)' Sources 2>/dev/null | while read -r file; do
+report "Every Foundation import is the conditional one, in Sources/ and Tests/" "$(
+    grep -rlE '^(@[A-Za-z_]+ )*([a-z]+ )*import( [a-z]+)? Foundation(\.|$)' Sources Tests 2>/dev/null | while read -r file; do
         grep -q 'canImport(FoundationEssentials)' "$file" || echo "$file"
     done
 )"
@@ -125,6 +125,21 @@ report "Every use case protocol has typed throws" "$(
         [ -f "$file" ] || continue
         grep -q 'throws(' "$file" || echo "$file"
     done
+)"
+
+report "Every use case has its protocol in Core" "$(
+    grep -rnoE '^((public|package) +)?struct +[A-Za-z0-9_]+UseCase([^A-Za-z0-9_]|$)' "$core" 2>/dev/null | while IFS= read -r match; do
+        file=${match%%:*}
+        name=$(echo "$match" | sed -nE 's/.*struct +([A-Za-z0-9_]+UseCase).*/\1/p')
+        grep -rqE "protocol +${name}Protocol([^A-Za-z0-9_]|$)" "$core" || echo "$file: no ${name}Protocol"
+    done
+)"
+
+report "Every repository Core names is a protocol declared in Core" "$(
+    grep -rhoE 'any +[A-Za-z0-9_]+Repository([^A-Za-z0-9_]|$)' "$core" 2>/dev/null |
+        sed -E 's/any +([A-Za-z0-9_]+Repository).*/\1/' | sort -u | while read -r name; do
+            grep -rqE "protocol +${name}([^A-Za-z0-9_]|$)" "$core" || echo "${name}: named in ${core}, declared nowhere in it"
+        done
 )"
 
 report "No package defaults to the main actor" "$(grep -n 'defaultIsolation' Package.swift)"

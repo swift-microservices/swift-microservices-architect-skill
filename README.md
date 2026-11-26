@@ -74,35 +74,35 @@ A new backend goes from idea to production through the skill's checklists, in th
 
 The plan's Build order lists these steps and ticks each one once its checklist's build, tests and checks pass, so invoking the skill with no task picks up at the next step.
 
-On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. Planning a backend or adding a feature always starts by searching online for how it's already solved: the standard, such as an RFC or OWASP's guidance, how production systems handle it, and a Swift package to reuse or a well-tested implementation to port. The agent names its sources, then designs the feature with Engineering's system design skill. One that changes code ends with a build and a test run repeated until both pass.
+On a backend that already runs, the agent follows the checklist for the task: adding a service, an operation or a durable process, setting up CI/CD, or reviewing a backend. Planning a backend or adding a feature that has a standard or an open choice starts by searching online for how it's already solved: the standard, such as an RFC or OWASP's guidance, how production systems handle it, and a Swift package to reuse or a well-tested implementation to port. The agent names its sources, then designs the feature with Engineering's system design skill. One that changes code ends with a build and a test run repeated until both pass.
 
 ## What it covers
 
 | Area | Covers |
 |---|---|
-| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan with its objectives, alerts, runbooks and build order |
+| System design | Splitting a backend into services, contracts, how services talk, where data lives, the written plan with its decisions, questions and build order |
 | Packages | Targets and their dependency rules, `Package.swift`, Swift settings, the shared `<project>-core` and `<project>-protos` packages |
 | Application layer | Models, errors, repositories, ports, typed-throws use cases for people and the system, transactions, authorization |
 | Persistence | A Postgres instance per service, or a database each on a shared one, its roles, row-level security for user and organization tenants, statements, paging, migrations, Valkey |
 | gRPC | Contracts, services, handlers, conversions, status codes, clients, transports |
-| Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details, versions and the retirement of routes |
+| Gateway | OpenAPI types, request contexts by tier, controllers, webhooks, problem details, versions |
 | Workflows | Temporal workflows and activities in Core, how use cases start and reach them, determinism, activity options, the worker |
 | Events | When a fact is an event rather than a workflow or a call, contracts on Kafka, the transactional outbox and its relay, consumers that tolerate redelivery |
-| Composition | Commands, configuration, logging, and graceful shutdown |
-| Security | mTLS with certificate reloading, internal callers admitted per RPC, JWTs signed with Ed25519 key files and their rotation, secrets as files, webhook signatures |
+| Composition | Commands, configuration through each library's reader, logging, observability and graceful shutdown |
+| Security | mTLS with certificate reloading, internal callers admitted per RPC, JWTs signed with Ed25519 key files, secrets as files, webhook signatures |
 | Testing | A test target per module, over hand-written mocks |
-| Delivery | GitHub Actions CI, semantic-version releases, images in the plan's registry, a deployment contract every platform meets, and deploys to Dokploy |
+| Delivery | The gate every change passes, semantic-version releases, a deployment contract every platform meets, and deploys to Dokploy |
 | Style | How the code reads, and how everything is named |
 
 It builds on [Hummingbird](https://github.com/hummingbird-project/hummingbird), [gRPC Swift 2](https://github.com/grpc/grpc-swift-2), the [Temporal Swift SDK](https://github.com/apple/swift-temporal-sdk), [PostgresNIO](https://github.com/vapor/postgres-nio), [valkey-swift](https://github.com/valkey-io/valkey-swift), [Swift Kafka Client](https://github.com/swift-server/swift-kafka-client), [Swift Configuration](https://github.com/apple/swift-configuration), [Swift Service Lifecycle](https://github.com/swift-server/swift-service-lifecycle) and the [swift-microservices](https://github.com/swift-microservices) libraries.
 
-Not covered: setting up the deployment platform and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, backups, client SDKs and frontends.
+Not covered: setting up the deployment platform and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, backups, object storage, client SDKs and frontends.
 
 ### Works well with
 
 The skill decides the architecture and the style; maintained skills cover the technique, from a feature's design to the code inside a shape. The agent invokes each where a checklist calls for it, such as Engineering's system design skill before a new feature, Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you to install one that's missing when a step needs it, carrying on without it if you decline. Where one's advice differs, the skill's services, shapes, stack and style win.
 
-- [Engineering](https://github.com/anthropics/knowledge-work-plugins): a feature's requirements and trade-offs, architecture decision records, code review, release checklists and incident response
+- [Engineering](https://github.com/anthropics/knowledge-work-plugins): a feature's requirements and trade-offs, architecture decision records, code review and release checklists
 - [Swift Concurrency Pro](https://github.com/twostraws/Swift-Concurrency-Agent-Skill): actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics
 - [Swift Testing Pro](https://github.com/twostraws/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
 - [Temporal Developer](https://github.com/temporalio/skill-temporal-developer): how a workflow is designed and behaves, from signals and updates to versioning
@@ -117,13 +117,14 @@ The skill decides the architecture and the style; maintained skills cover the te
 .codex-plugin/                  Codex plugin manifest
 .agents/plugins/                Codex marketplace
 skills/swift-microservices-architect/
-├── SKILL.md                    what every task needs: the shape, hard rules, style, troubleshooting, scripts, checklists
+├── SKILL.md                    what every task needs: the shape, hard rules, style, troubleshooting, scripts, which checklist each task follows
 ├── agents/openai.yaml          the skill's name in Codex
 ├── scripts/check_boundaries.sh the boundary checks for a service or the gateway
 ├── scripts/check_style.sh      the style checks for any package
 ├── scripts/common.sh           what the two check scripts share
 ├── scripts/swift_ci.sh         swift build and swift test with CI's flags
 └── references/                 read when a task reaches their topic
+    ├── checklists.md           the checklist each task copies, Verify first
     ├── system.md               services, contracts, shared packages, the plan
     ├── packages.md             targets, Package.swift, Swift settings, boundary checks
     ├── stack.md                the libraries, and choosing their versions
@@ -133,15 +134,15 @@ skills/swift-microservices-architect/
     ├── gateway.md              the Hummingbird gateway
     ├── workflows.md            Temporal workflows, activities, the worker
     ├── events.md               choosing an event or a workflow, the outbox, consumers
-    ├── composition.md          commands, composition roots, configuration, lifecycle, health
-    ├── observability.md        swift-otel, and one request's trace across processes
+    ├── composition.md          commands, composition roots, configuration readers, observability, lifecycle, health
     ├── security.md             mTLS, tokens and signing keys, authorization, secrets, webhooks
     ├── style.md                how the code reads
     ├── testing.md              test targets and mocks
-    ├── delivery.md             CI/CD for each kind of package, and the deployment contract
+    ├── delivery.md             the gate for each kind of package, and the deployment contract
     ├── delivery-dokploy.md     deploying services to Dokploy
     ├── conventions.md          names, folders, files
     └── related-skills.md       which maintained skill each task invokes, and where this skill wins
+evals/                          behavioural test cases, one folder per case, in the layout `claude plugin eval` reads, and trigger-set.json, requests that should and shouldn't start the skill
 .github/                        validation, SkillSpector's reviewed exceptions, the Tier 2 runner, the semver label check, releases
 CLAUDE.md                       authoring rules for changing the skill
 ```

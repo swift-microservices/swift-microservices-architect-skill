@@ -100,7 +100,7 @@ service LoanService {
 
 - The file and package are named as [naming](conventions.md#naming) gives them. Generated types take the package as a prefix: `Bookshelf_Loans_V1_Loan`, `Bookshelf_Loans_V1_LoanService`.
 - Comments in the contract say who calls each group of RPCs and what a request may name.
-- Fields are snake_case. swift-protobuf generates `book_id` as `bookID` but `book_ids` as `bookIds`, and code spells each as generated. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
+- Fields are snake_case. An enum's values carry its name as a prefix, and value 0 is `…_UNSPECIFIED`, which a receiver refuses.
 - Ids are lowercase UUID strings, instants `google.protobuf.Timestamp`, nothing `google.protobuf.Empty`. A scalar the domain may lack is `optional` (`optional string email`), read with its `has…` property; an empty string never stands for absence. Only a closed set is a proto enum; an open set, such as `UserRole`, is its raw `string`.
 - A list that can grow large pages from its first version, by key or by page number ([lists and pages](#lists-and-pages)).
 - A provider's webhook is an anyone RPC taking the body unparsed as `bytes payload` and the headers the provider signs with as `signature_headers`, keyed by lowercased name ([webhooks](security.md#webhooks)).
@@ -323,7 +323,6 @@ extension Bookshelf_Loans_V1_ListAllLoansResponse {
 | The resource changed since the caller read it (`versionConflict`) | `aborted` |
 | The resource's state refuses it, whoever asks (`loanLimitReached`, `alreadyReturned`, `idempotencyConflict`) | `failedPrecondition` |
 | Who the caller is refuses it (`forbidden`) | `permissionDenied` |
-| An attempt limit refuses it (`tooManyAttempts`) | `resourceExhausted` |
 | A dependency is down (`…Unavailable`) | `unavailable` |
 | `unknown` | `internalError` |
 
@@ -331,7 +330,7 @@ A refusal that turns on who the caller is, such as approving a request the calle
 
 ## Interceptors
 
-`InternalCallerInterceptor` comes first on every server, applied to every service (`.all`), so it refuses an unlisted caller of an internal RPC before anything runs ([mutual TLS](security.md#mutual-tls)). `ServerOTelTracingInterceptor` follows on every `XService` and `XInternalService` descriptor, and `ClientOTelTracingInterceptor` comes first in every client ([observability](observability.md#a-trace-across-processes)). The others apply to the person-facing descriptors only, as [the composition root](composition.md#the-composition-root) wires them:
+`InternalCallerInterceptor` comes first on every server, applied to every service (`.all`), so it refuses an unlisted caller of an internal RPC before anything runs ([mutual TLS](security.md#mutual-tls)). `ServerOTelTracingInterceptor` follows on every `XService` and `XInternalService` descriptor, and `ClientOTelTracingInterceptor` comes first in every client ([observability](composition.md#observability)). The others apply to the person-facing descriptors only, as [the composition root](composition.md#the-composition-root) wires them:
 
 - `BearerAuthenticationInterceptor` proves a bearer token if there is one and binds the principal; an invalid token ends the call as `unauthenticated` before the handler runs, and a missing one continues unbound.
 - `UserSettingsInterceptor` follows it in a service with tenant tables ([binding the tenant](persistence.md#binding-the-tenant)).
@@ -371,16 +370,12 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 - A list that shows another service's data for each item reads it in one call, never a call per item. The owner's internal contract offers a batch read, `BatchGetBooks`, which takes `ids` up to the list's maximum page size and returns the books it found; the port reads `books(ids: Set<UUID>) async throws -> [UUID: Book]`, and an id with no book is absent from the dictionary.
 - `notFound` on a lookup becomes `nil`, matching the port's optional.
 - The response conversion (`Book+Protobuf.swift` in `Clients/Protobuf/`) throws on a malformed message, such as an id that isn't a UUID or an unset field the domain needs, rather than inventing a value.
-- Every call has a deadline: the client's `ServiceConfig` sets one for all methods, and a method that needs a tighter bound passes `CallOptions` with its own `timeout`.
 
 ## Transports
 
 The executable builds the server's and each client's transport from `<Project>Transport`'s readers ([mutual TLS](security.md#mutual-tls)), as [the composition root](composition.md#the-composition-root) shows:
 
-- One `clientSecurity` serves every client of the process, and each upstream gets its own scoped configuration (`grpc.catalog`) with its host, port, transport config and service config.
-- The server's config bounds a connection's age (`maxConnectionAgeSeconds`, `connectionGraceTimeSeconds`), so clients reconnect with renewed certificates and drain in-flight calls, and accepts idle keepalive pings.
-- The server's config caps each connection's concurrent calls (`maxConcurrentStreams`), so a slowdown never piles more calls onto a replica than it can work through. A grpc-swift caller holds a call past the cap in its connection until another call on it ends, and the call's deadline bounds the wait: one that waits it out ends `deadlineExceeded`, which the client maps to `…Unavailable` and the gateway answers `504`. Each caller holds one connection per replica, so a replica runs at most the cap times its callers.
-- A client's host is the name in the peer certificate's DNS names. Its config sends keepalive pings on idle connections; its `ServiceConfig` waits for a ready connection, bounded by a deadline, so a transient reconnect doesn't fail a call and a down upstream still does.
-- A client's host resolves to every replica of the upstream, never to one virtual address in front of them, as the platform's reference names it ([delivery](delivery.md#the-deployment-contract)), and the upstream's certificate names it. Its `ServiceConfig` balances `.roundRobin` across those addresses: the default picks the first and sends every call down one connection, so one replica takes a caller's whole load.
-- A client neither retries nor hedges: its `ServiceConfig` sets only the deadline, wait-for-ready and round-robin balancing. Each call chain has one owner of retries: Temporal for activities, and the app calling the public API, with an idempotency key, for public creates. A port call inside an activity never retries on its own.
-- One long-lived `GRPCClient` per upstream process, shared by every port and handler that calls it, run in the `ServiceGroup`. `GRPCServiceLifecycle` makes `GRPCServer` and `GRPCClient` services.
+- Each call chain has one owner of retries: Temporal for activities, and the app calling the public API, with an idempotency key, for public creates. A client neither retries nor hedges, and a port call inside an activity never retries on its own.
+- A client's host resolves to every replica of the upstream, never to one virtual address in front of them, as the platform's reference names it ([delivery](delivery.md#the-deployment-contract)), and the upstream's certificate names it. Its `ServiceConfig` balances `.roundRobin` across those addresses and waits for a ready connection within the call's deadline.
+- Every call has a deadline, from the client's `ServiceConfig`, or from `CallOptions` with its own `timeout` for a method that needs a tighter bound, and the server bounds each connection's age and concurrent calls, all read from the scope's configuration ([configuration](composition.md#configuration)).
+- One long-lived `GRPCClient` per upstream process, shared by every port and handler that calls it, runs in the `ServiceGroup`. `GRPCServiceLifecycle` makes `GRPCServer` and `GRPCClient` services.

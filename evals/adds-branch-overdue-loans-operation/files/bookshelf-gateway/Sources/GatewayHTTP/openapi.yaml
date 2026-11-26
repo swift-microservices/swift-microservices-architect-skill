@@ -1,0 +1,237 @@
+openapi: 3.1.0
+info:
+  title: Bookshelf API
+  version: 1.0.0
+  description: |
+    The public HTTP API of Bookshelf, a lending library.
+
+    Every error is RFC 9457 problem details (`application/problem+json`). Besides the statuses each
+    operation documents, any route can answer `413` for a body over its limit, `429` from the edge's
+    rate limits, `499` when the client closed the request and `501` for a method the API doesn't implement.
+servers:
+  - url: /v1
+
+paths:
+  /loans:
+    get:
+      operationId: listLoans
+      summary: The caller's own loans, a page at a time, newest first.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: One page of the caller's loans.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoanPageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+
+  /admin/loans:
+    get:
+      operationId: listAllLoans
+      summary: Every member's loans, for administrators, a page at a time, newest first.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: One page of every member's loans.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoanKeyedPageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: The page to read, counting from 1. Absent or 0 reads the first page.
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+    PageSize:
+      name: pageSize
+      in: query
+      description: The loans a page holds. Absent or 0 takes the service's default; more than its maximum gets the maximum.
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+    PageToken:
+      name: pageToken
+      in: query
+      description: The `nextPageToken` of the previous page. Absent reads the first page.
+      required: false
+      schema:
+        type: string
+
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+
+    LoanStatus:
+      type: string
+      enum:
+        - active
+        - overdue
+        - returned
+
+    LoanResponse:
+      type: object
+      required:
+        - id
+        - bookID
+        - status
+        - dueDate
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        bookID:
+          $ref: "#/components/schemas/UUID"
+        status:
+          $ref: "#/components/schemas/LoanStatus"
+        dueDate:
+          type: string
+          format: date-time
+
+    PageInfo:
+      type: object
+      required:
+        - page
+        - pageSize
+        - totalCount
+        - totalPages
+      properties:
+        page:
+          type: integer
+          format: int32
+        pageSize:
+          type: integer
+          format: int32
+        totalCount:
+          type: integer
+          format: int32
+        totalPages:
+          type: integer
+          format: int32
+
+    LoanPageResponse:
+      type: object
+      required:
+        - loans
+        - pageInfo
+      properties:
+        loans:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoanResponse"
+        pageInfo:
+          $ref: "#/components/schemas/PageInfo"
+
+    LoanKeyedPageResponse:
+      type: object
+      required:
+        - loans
+        - nextPageToken
+      properties:
+        loans:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoanResponse"
+        nextPageToken:
+          type: string
+          description: The token that reads the next page; empty after the last page.
+
+    Problem:
+      type: object
+      required:
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+  responses:
+    BadRequest:
+      description: The request is malformed, or the resource's state refuses it.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: The request carries no valid access token.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: The caller may not do this.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    InternalServerError:
+      description: The request failed on the server.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ServiceUnavailable:
+      description: A service the request needs is unavailable.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    GatewayTimeout:
+      description: A service the request needs didn't answer in time.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"

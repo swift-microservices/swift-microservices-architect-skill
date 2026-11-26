@@ -10,7 +10,6 @@ Design and operations, whatever the stack:
 - A choice this skill leaves open, weighed as an architecture decision record: `architecture` ([source](https://github.com/anthropics/knowledge-work-plugins))
 - A review's security, performance and correctness pass: `code-review` ([source](https://github.com/anthropics/knowledge-work-plugins))
 - A release's checks and rollback triggers: `deploy-checklist` ([source](https://github.com/anthropics/knowledge-work-plugins))
-- A production incident's triage, status updates and postmortem: `incident-response` ([source](https://github.com/anthropics/knowledge-work-plugins))
 
 The code inside a shape:
 
@@ -23,10 +22,10 @@ The code inside a shape:
 
 ## Installing them
 
-A skill is installed when a checklist line that names it is reached. The skill list in the session is compared with its name; a skill from the Engineering plugin is present under its `engineering:` prefix, such as `engineering:system-design`. When it's missing, the user is asked to install it with its source's command; if the user declines, the task proceeds without it, and the response names the skill whose pass was skipped:
+A skill is installed when a checklist line that names it is reached. The skill list in the session is compared with its name; a skill a plugin ships is present under the plugin's prefix, such as `engineering:system-design` or `temporal:temporal-developer`, and counts as installed. When it's missing, the user is asked to install it with its source's command; if the user declines, the task proceeds without it, and the response names the skill whose pass was skipped:
 
 ```
-npx skills@1.9.0 add https://github.com/anthropics/knowledge-work-plugins --skill system-design architecture code-review deploy-checklist incident-response
+npx skills@1.9.0 add https://github.com/anthropics/knowledge-work-plugins --skill system-design architecture code-review deploy-checklist
 npx skills@1.9.0 add https://github.com/temporalio/skill-temporal-developer --skill temporal-developer
 npx skills@1.9.0 add https://github.com/supabase/agent-skills --skill supabase-postgres-best-practices
 npx skills@1.9.0 add https://github.com/valkey-io/valkey-skills --skill valkey
@@ -51,4 +50,4 @@ npx skills@1.9.0 add https://github.com/Erikote04/Swift-API-Design-Guidelines-Ag
 - A requirement that needs something [out of scope](system.md#out-of-scope) is a question for the user.
 - An architecture decision record covers only a choice this skill leaves open, such as a capability's boundary, a provider or a policy's limits; a choice this skill makes has none. Its pick and reason join the plan's Decisions ([the plan](system.md#the-plan)).
 - `code-review`'s findings are ranked with this skill's own, on Review a backend's scale.
-- `deploy-checklist`'s rollback is the plan's runbook for a bad deploy ([the plan](system.md#the-plan)).
+- `deploy-checklist`'s rollback never reverts a migration: a rollback runs the previous image on the current schema ([migrations](persistence.md#migrations)).

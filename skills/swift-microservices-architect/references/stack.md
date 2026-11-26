@@ -71,17 +71,11 @@ A managed service that can't meet [the trust model](security.md#the-trust-model)
 
 ## Full Foundation
 
-These link full Foundation on Linux whatever their traits, so the products that depend on them are listed in `foundation_linking_check_excluded_products` ([Foundation linking](delivery.md#foundation-linking)):
-- postgres-nio, and so postgres-migrations and swift-persistence-postgres: every service with XPostgres
-- swift-openapi-generator's generated files, which `public import Foundation`: the gateway
-- swift-temporal-sdk through 1.5.0, whose scoped `import struct Foundation.Data` imports link it: every service with workflows
-- swift-kafka-client through 1.0.0, whose scoped `import struct Foundation.UUID` imports link it: `<Project>Events`, and every service with XKafka
-
-Every other package in the stack is Foundation-free with the traits [traits and Foundation](packages.md#traits-and-foundation) declares, and CI's check finds one that isn't.
+A few packages in the stack link full Foundation on Linux whatever their traits, such as postgres-nio and the gateway's generated OpenAPI code. Each product that depends on one is listed in `foundation_linking_check_excluded_products` ([Foundation linking](delivery.md#foundation-linking)); every other package stays Foundation-free with the traits [traits and Foundation](packages.md#traits-and-foundation) declares, and CI's check finds one that isn't.
 
 ## Choosing versions
 
-- A new package depends on each library from its latest release; look it up with `git ls-remote --tags <url>` rather than copying a version from an example.
+- A new package depends on each library from its latest release, never a version copied from an example.
 - A library from 1.0, such as the swift-microservices libraries, is `from:`, a lower bound up to the next major, so resolution picks up fixes and additions; raise it when the code needs a newer API, or to the version from which a package stops linking full Foundation ([full Foundation](#full-foundation)).
 - A library below 1.0 is `.upToNextMinor(from:)`, since its next minor may change its API. Moving to that minor is a change of its own, made by hand.
 - A service's package commits `Package.resolved`; a library's ignores it.

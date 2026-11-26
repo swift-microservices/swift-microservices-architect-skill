@@ -1,6 +1,6 @@
 # Security
 
-Who proves what on each hop, mutual TLS with certificate reloading, user tokens and their key files, authorization in layers, and secrets.
+Who proves what on each hop, mutual TLS with certificate reloading, user tokens and their key files, authorization in layers, secrets and webhooks.
 
 ## Contents
 - The trust model
@@ -9,7 +9,6 @@ Who proves what on each hop, mutual TLS with certificate reloading, user tokens 
 - User tokens
 - Authorization
 - Secrets
-- Attempt limits
 - Webhooks
 
 ## The trust model
@@ -170,9 +169,7 @@ public struct UserRole: RawRepresentable, Hashable, Codable, ExpressibleByString
 - The token carries identity only: `sub`, `role`, `iss`, `iat`, `exp`, `aud` where an audience is used, and `org` where callers act for an organization ([organization tenants](persistence.md#organization-tenants)). It carries no permissions, entitlements, business state or personal data; a use case reads those from the service that owns them.
 - The subject is the user's id and nothing else: a token whose `sub` isn't a UUID fails to decode, so no handler sees an identity without a user. `verify(using:)` checks every claim the system relies on: the expiry, and the issuer and audience where more than one exists.
 - Identity's use cases issue access tokens through `any CredentialIssuer<UserIdentity, String>`, swift-authentication's protocol, which IdentityCore links as a library [Core may link](packages.md#what-core-may-link); the executable passes the `JWTIssuer` it builds from the private key ([signing keys](#signing-keys)).
-- An access token lives 15 minutes, `SessionPolicy.accessTokenLifetime`, a policy value Identity reads from configuration: a revoked session or a changed role reaches every service within that time, since no service asks Identity about a token it can verify.
-- A refresh token is an opaque random secret Identity stores only as a digest and accepts only on its refresh and sign-out RPCs, which the gateway routes in the no-caller tier ([request contexts](gateway.md#request-contexts-and-tiers)). Sign-out ends the one session that refresh token belongs to.
-- Each refresh replaces the refresh token: in one transaction, the use case moves the presented token from active to used with a conditional write, and stores its successor in the same session. A used token presented again was copied, by whoever holds either copy, so the use case ends the whole session and refuses; the holder of the real one signs in again.
+- An access token is short-lived: a revoked session or a changed role reaches every service once the token expires, since no service asks Identity about a token it can verify.
 - Each service's `BearerAuthenticationInterceptor` verifies again the token the gateway verified to pick a tier and forwards ([upstream clients](gateway.md#upstream-clients)). A token never travels on an internal RPC, into a workflow's input, or into a log.
 
 `<Project>Authentication` spells the lookup of the bound principal once, for handlers, interceptors and logging:
@@ -224,14 +221,7 @@ extension JWTAuthenticator {
 - A key's `kid` is its RFC 7638 thumbprint, so the issuer and every verifier derive it from the key itself. A token that names no `kid`, or one no verifier's file holds, fails as `unauthenticated`.
 - The file at `jwt.publicKeyPath` holds one PEM public key, or two during a rotation; `<Project>Transport`'s reader, `JWTAuthenticator(config:)`, loads every key in it. Identity's executable reads `jwt.privateKeyPath` in its own `Configuration/` ([secrets](#secrets)).
 - A process reads its key files once, at startup: a changed key reaches it with its next deploy.
-
-A key changes by this runbook, in this order, so no verifier meets a token it can't check:
-
-1. Add the new public key to every verifier's file beside the old one, and deploy every process that verifies tokens.
-2. Point Identity's `jwt.privateKeyPath` at the new private key, and deploy Identity: its tokens now name the new `kid`.
-3. Once one access-token lifetime (`SessionPolicy.accessTokenLifetime`) has passed, remove the old public key from every file, and deploy again.
-
-`/.well-known/jwks.json` is served only when something outside the system verifies tokens, by the gateway from its own public key file, with no RPC ([controllers](gateway.md#controllers)).
+- A new public key joins every verifier's file before Identity signs with its private key, and the old one leaves once no unexpired token names it.
 
 ## Authorization
 
@@ -245,7 +235,6 @@ Each layer refuses what it can see; the use case decides.
 | Row-level security | The tenant: a caller's transaction sees only the caller's rows ([row-level security](persistence.md#row-level-security)) |
 
 - Every layer but the use case is defense in depth. A rule that exists only in the gateway or only in a policy is missing from the domain.
-- An anonymous RPC that could confirm whether an account exists answers the same either way: a password reset for an unknown address succeeds and sends nothing. Registration is the one exception: an address already registered answers `duplicateEmail` as `alreadyExists`, so sign-up stays one step, at the cost of revealing which addresses are registered.
 - A caller asking for another user's resource gets the answer a missing resource gets.
 
 ## Secrets
@@ -254,19 +243,7 @@ Each layer refuses what it can see; the use case decides.
 - An environment variable holds a secret only on a platform that can deliver it no other way, recorded under the plan's Decisions with the exposure it accepts: `docker inspect` and `/proc/<pid>/environ` show it to anyone who can read the container's configuration.
 - Its configuration key is the file's path, named for the secret with `Path` (`jwt.privateKeyPath`, `resend.webhookSecretPath`, `valkey.authentication.passwordPath`), and the reader that needs the secret loads the file ([configuration](composition.md#configuration)). A secret from an environment variable takes the key without `Path` (`jwt.privateKey`), read as a secret. The value never reaches a log line.
 - Secrets the service issues, such as refresh tokens and reset codes, are random. Postgres and Valkey store their SHA-256 digest (`Crypto`), never the secret, Valkey with its expiry.
-- Passwords are hashed with bcrypt in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), off the cooperative pool ([concurrency](style.md#concurrency)). The cost is a policy value, `PasswordPolicy.bcryptCost` (12), raised as hardware gets faster.
-- A password longer than 72 bytes of UTF-8 is refused as `invalidPassword` (`PasswordPolicy.maximumByteCount`): bcrypt ignores every byte after the 72nd, so two passwords that share their first 72 bytes would both sign in. The limit counts bytes, not characters.
-
-## Attempt limits
-
-A request that proves a secret someone could guess, signing in with a password or redeeming a reset code, is limited per account: Identity counts the account's failures in Valkey and refuses once the policy's limit is reached, before checking the secret.
-
-- The count is an XValkey repository behind a Core port, keyed by the account's id: `SignInFailureRepository` (`identity:sign-in-failures:<user id>`) and `ResetCodeFailureRepository` (`identity:reset-code-failures:<user id>`), each with `failures(userID:)`, `recordFailure(userID:window:)`, which increments and sets the window's expiry on the first failure, and `clear(userID:)` after a success ([Valkey](persistence.md#valkey)).
-- So the account is known before the secret is checked: a sign-in names its address, and a reset code's redemption names the address it was sent to. An unknown address counts nothing and answers as a wrong secret does ([authorization](#authorization)).
-- The limits and windows are policy values: `SessionPolicy.maximumSignInFailures` and `signInFailureWindow`, and the reset code's alike.
-- The use case's case is `tooManyAttempts` ([status codes](grpc.md#status-codes)).
-- Unlike a cache's read, a failed read of the count fails the request: a limit that Valkey's outage turned off would let guessing through.
-- Limits per address, against many accounts at once, are the edge's ([the edge](gateway.md#the-edge)).
+- Passwords are hashed in a provider target (`IdentityBcrypt`'s `BcryptPasswordHasher`), off the cooperative pool ([concurrency](style.md#concurrency)).
 
 ## Webhooks
 

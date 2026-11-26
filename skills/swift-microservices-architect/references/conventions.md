@@ -15,14 +15,14 @@
 | Service package and repository | `<project>-<x>`, lowercase; the gateway's `<project>-gateway` | `bookshelf-loans`, `bookshelf-gateway` |
 | Shared packages | `<project>-core`, `<project>-protos` | `bookshelf-core` |
 | The plan's repository | `<project>-plan`, the plan its `README.md` | `bookshelf-plan` |
-| Package kind | Public library, system library or service; CI workflow files and jobs as [delivery](delivery.md#ci-workflows) names them | `bookshelf-core` is a system library |
+| Package kind | Public library, system library or service ([package kinds](delivery.md#package-kinds)) | `bookshelf-core` is a system library |
 | Service image | `<registry>/<owner>/<project>-<x>`, lowercase, so it ends in its repository's exact name | `ghcr.io/bookshelf/bookshelf-loans` |
 | Service targets | `XCore`, `XPostgres`, `XGRPC`, `XValkey`, `XKafka`, `X<Provider>`; the executable `X`; tests the target's name + `Tests` | `LoansGRPC`, `LoansKafka`, `LoansResend`, `LoansCoreTests` |
 | Executable product and command | `x`; subcommands `serve`, `worker run`, `migrate`, `build-indexes` | `loans migrate` |
 | `<project>-core` products | `<Project>Authentication`, `<Project>Persistence`, `<Project>Transport`, `<Project>Events`, `<Project>Testing`; tests the product's name + `Tests` | `BookshelfTransport`, `BookshelfAuthenticationTests` |
 | Contract target, proto package and file | `XProtos`; `<project>.<x>.v1`; `<project>/<x>/v1/<x>.proto` | `LoansProtos`, `bookshelf.loans.v1` |
 | Proto services | `<Resource>Service` and `<Resource>InternalService`; the service's name when its RPCs aren't about one resource | `LoanService`, `BookInternalService`, `IdentityService` |
-| RPCs | The standard methods' verbs (`Get`, `List`, `Create`, `Update`, `Delete`, `BatchGet` for several by id), or a domain verb and noun; an administrators' list of everyone's is `ListAll…`; an internal read keyed differently from the public one of its name says its key (`Get…ByID`) | `GetBook`, `ListLoans`, `ListAllLoans`, `BorrowBook` |
+| RPCs | The standard methods' verbs (`Get`, `List`, `Create`, `Update`, `Delete`, `BatchGet` for several by id), or a domain verb and noun; an administrators' list of everyone's is `ListAll…`; an internal read whose key differs from the public RPC of the same name adds its key (`GetMemberByEmail`) | `GetBook`, `ListLoans`, `ListAllLoans`, `BorrowBook` |
 | Paging | Requests carry `page_size` and `page`, or `page_token`; responses `page_info` (`page`, `page_size`, `total_count`, `total_pages`) or `next_page_token`. Core has `Page<Item>` and `KeyedPage<Item>` (`nextCursor`) and reads `page:pageSize:` or `startingAfter:pageSize:`. A client-chosen order is `order_by`, a field and an optional ` desc`. Over HTTP the same names in camelCase | `loans(userID:page:pageSize:)`, `loans(startingAfter:pageSize:)`, `LoansByUserIDStatement`, `CountLoansByUserIDStatement` |
 | Webhooks | An anyone RPC `Receive<Event>`; `<Provider>WebhookController`; the port `<Event>Verifier` | `ReceiveNoticeEvent`, `ResendWebhookController`, `NoticeEventVerifier` |
 | Domain model | A plain noun in the service's language, clashing with no type every file sees ([naming a service](system.md#naming-a-service)); never `DTO`, `Row`, `Entity`, `Response` or `Detail` | `Loan`, `LoanStatus` |
@@ -41,7 +41,7 @@
 | A use case's Temporal properties | `temporalClient`, `taskQueue` | `private let temporalClient: TemporalClient` |
 | Signals, queries, updates | Verbs for signals and updates, noun phrases for queries | `currentState(input:)` |
 | Workflow id, task queue, Temporal namespace | `<x>-<workflow>-<id>`; `x`; `<project>-<x>` | `loans-loan-0193…`; `loans`; `bookshelf-loans` |
-| Schedule id, scheduled workflow | `<x>-<process>`; `<Process>Workflow` | `loans-purge-notice-events`; `PurgeNoticeEventsWorkflow` |
+| Schedule id, scheduled workflow | `<x>-<process>`; `<Process>Workflow` | `loans-send-due-reminders`; `SendDueRemindersWorkflow` |
 | Event, its kinds | `<Resource>Event` in `<project>/<x>/v1/events.proto`, and a Core model of the same name; `<Resource>EventKind`, whose cases are facts in the past tense | `LoanEvent`, `LOAN_EVENT_KIND_BORROWED`, `LoanEventKind.borrowed` |
 | Topic, its configuration key | `<project>.<x>.v1.<resource>-events`; `kafka.topics.<resource>Events` | `bookshelf.loans.v1.loan-events`; `kafka.topics.loanEvents` |
 | Outbox and relay | Table `<resource>_event_outbox`; repository `<Resource>EventRepository`, its command `Record<Resource>EventCommand`; `Publish<Resource>EventsUseCase` over the port `<Resource>EventPublisher`, implemented by `Kafka<Resource>EventPublisher` | `loan_event_outbox`, `PublishLoanEventsUseCase`, `KafkaLoanEventPublisher` |

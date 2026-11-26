@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: plans-clinic-booking-backend
+expected_outcome: |
+  Produces the plan from system.md's template before any code: services split by capability (identity as token issuer, scheduling/appointments, and so on), contracts by audience, tenant tables per clinic under row-level security, the reminder as a Temporal workflow, an SMS provider target behind a port, gateway routes by tier, a build order, and questions for the user, including which platform to deploy to with no default assumed.

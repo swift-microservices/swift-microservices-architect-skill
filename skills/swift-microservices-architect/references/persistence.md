@@ -33,9 +33,9 @@ Each service's database has an owner and a role per purpose ([data placement](sy
 
 `internal` in a role's name says no single tenant is bound: the use case confines the work, where a policy can't. It isn't the `Internal` of `XInternalService`, which says who calls; an administrators' RPC and a webhook run on the internal role too.
 
-A service declares only the roles it uses ([data placement](system.md#data-placement)): Catalog has no tenant table and runs everything as `catalog_service`. A use case runs on its role's `PostgresDatabase`: the tenant database (`<x>_service`), the internal database or the worker's database.
+A service declares only the roles it uses ([data placement](system.md#data-placement)): Catalog has no tenant table and runs everything as `catalog_service`; its worker connects as that role too, so that role's scope also adopts the scope protocols of its system use cases. A use case runs on its role's `PostgresDatabase`: the tenant database (`<x>_service`), the internal database or the worker's database.
 
-Row-level security holds while the role a caller's transaction runs as isn't a superuser, has no `BYPASSRLS` and doesn't own the table, and the caller is bound per transaction ([binding the tenant](#binding-the-tenant)). `CreateServiceRole` creates such roles, and no command but `migrate` and `build-indexes` connects as the owner.
+Row-level security holds while the role a caller's transaction runs as isn't a superuser, has no `BYPASSRLS` and doesn't own the table, and the caller is bound per transaction ([binding the tenant](#binding-the-tenant)). `CreateServiceRole` creates such roles; [Postgres](security.md#postgres) names the commands that log in as the owner.
 
 The internal and worker roles see every row, so a query on them that acts for one user, a system use case's read for one user included, names that user in its own `WHERE`, and a write there names the tenant the same way, in its `WHERE` or its values. A read by id that relies on the tenant policy confines nothing there.
 
@@ -59,15 +59,13 @@ package struct PostgresLoansScope:
 
 - A scope adopts exactly the scope protocols of the use cases that may run as its role. `PostgresLoansInternalScope` adopts `ListAllLoansUseCaseScope` and `ReceiveNoticeEventUseCaseScope`; `PostgresLoansWorkerScope` adopts `MarkLoanOverdueUseCaseScope`. Composing `ListAllLoansUseCase` on the tenant database then fails to compile, so which role a use case runs as is checked by the compiler.
 - Several scopes hold the same repository types; each is built on its own role's connection.
-- PostgresNIO declares a protocol named `PostgresDatabase` too, so a type annotation in a file that imports both modules, such as a test's, spells `PersistencePostgres.PostgresDatabase<PostgresLoansScope>`.
 
 ## Connections and timeouts
 
-Every role's `PostgresClient` is built from `<Project>Persistence`'s reader, `PostgresClient.Configuration(config:role:)`, which logs in as the plan's answer sets ([Postgres](security.md#postgres)) and bounds its pool and its sessions from configuration ([configuration](composition.md#configuration)):
+Every role's `PostgresClient` is built from `<Project>Persistence`'s reader, `PostgresClient.Configuration(config:role:)`, which logs in as the plan's answer sets ([Postgres](security.md#postgres)):
 
-- The pool opens at most `<role>.maximumConnections`. The plan sizes the pools against the instance the service's database is on: the maximums of the role clients of every service there, times each process's replicas, add up to less than the instance's `max_connections`, with room left for migrations and administration.
-- A role that serves requests or runs activities starts each connection with `statement_timeout` and `idle_in_transaction_session_timeout`, sent as startup parameters. A slow statement fails before the caller's deadline instead of holding its connection, and a transaction a stalled process left open ends and releases its locks.
-- The owner starts its connection with `lock_timeout` and no statement timeout: a migration waits at most that long for a table's lock, rather than queueing every query behind it, and then runs as long as it needs. A migration refused by the timeout fails `migrate`, and with it the deploy, before serve and the worker start; deploying again retries it.
+- Each role's pool is bounded, and the pools of every process on one instance stay within its `max_connections`.
+- A role that serves requests or runs activities starts each connection with `statement_timeout` and `idle_in_transaction_session_timeout`, so a slow statement fails before the caller's deadline and a stalled transaction releases its locks. The owner sets only `lock_timeout`, so a migration waits a bounded time for a table's lock, then runs as long as it needs.
 
 ## Row-level security
 
@@ -180,7 +178,6 @@ struct CreateLoanStatement: PostgresPreparedStatement {
 ```
 
 - Every query is a prepared statement with bindings; SQL is never built by interpolating values.
-- A statement that returns no rows declares `typealias Row = Void` and an empty `decodeRow(_:)`, and the repository runs it with `_ = try await connection.execute(statement, logger: logger)`, since an unused result is a warning, which fails CI.
 - A statement lists its columns, in the order `Model+PostgresRow.swift` decodes them as one tuple (`row.decode((UUID, UUID, …).self)`).
 - An idempotent create is one statement. Its key is unique with its owner, as the constraint `<table>_idempotency_key_key` (`UNIQUE (user_id, idempotency_key)`), and its insert ends `ON CONFLICT ON CONSTRAINT <table>_idempotency_key_key DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key WHERE` the stored values match the request's, then `RETURNING` the row. A retry gets back the row its first request created; a key reused for another request returns no row, which the repository throws as `LoanRepositoryError.idempotencyConflict`. The no-op `SET` is what makes the existing row come back, which `DO NOTHING` doesn't return.
 - A rule over a count no constraint can state, such as the loan limit, takes a transaction-scoped advisory lock on what it counts, and nothing else takes one: `lockLoans(userID:)` runs `SELECT pg_advisory_xact_lock(hashtextextended('loans:' || $1::text, 0))`. The key starts with what it guards, so locks on different things for the same id don't wait on each other.
@@ -189,7 +186,6 @@ struct CreateLoanStatement: PostgresPreparedStatement {
 - A state transition is one statement whose `WHERE` names the states the row may leave: `UPDATE loans SET status = 'returned' WHERE id = $1 AND status <> 'returned' RETURNING …`. No row back means the row isn't in a state it may leave, such as a loan another transaction returned first, and the repository returns `nil` (`markReturned(id:) -> Loan?`). The method or command names only the destination; a read, a decision in Swift and an unconditional write never stand in for it.
 - The `WHERE` names the source states, never the destination, so a repeat of the same transition finds no row. A transition that a stored value guards names that value too: `markOverdue(id:)` runs `UPDATE loans SET status = 'overdue' WHERE id = $1 AND status = 'active' AND due_date <= now() RETURNING …`, so a loan extended after its run woke stays active.
 - A transition that also writes other columns, or that returns the row to a state it may leave again, keeps each of those writes repeat-safe on its own: it sets a value, never adds to one.
-- A Core enum stored as text conforms to `PostgresNonThrowingEncodable` and `PostgresDecodable` in `Extensions/`, with an `encode(into:context:)` that forwards to its `rawValue`, which can't throw; the type, format and decoding come from the raw value. A type from `<project>-core`, such as `UserRole`, is bound and decoded through its `rawValue` instead, since a conformance on it would be retroactive.
 - A write that returns its row takes the first of `RETURNING`'s rows. A stored value its type refuses to decode throws the decoding error, which propagates like a driver's ([errors](use-cases.md#errors)).
 - A delete is conditional like any transition: its `WHERE` names the row and, on a role that sees every row, its tenant, and it returns the deleted row or `nil`. A read, an ownership check in Swift and a delete by id never stand in for it.
 - Ids default in the database (`uuidv7()` on Postgres 18 and later), as do creation and update dates; commands carry neither.
@@ -215,7 +211,7 @@ struct LoansByUserIDStatement: PostgresPreparedStatement {
 - `CountLoansByUserIDStatement` is `SELECT count(*) FROM loans WHERE user_id = $1`, decoding an `Int`. The repository runs both and returns `Page(items:page:pageSize:totalCount:)`.
 - A page by key reads one row more than the page size, so the repository knows whether another page follows: `WHERE id < COALESCE($1, 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid) ORDER BY id DESC LIMIT $2 + 1`, the greatest UUID standing for no cursor, never `$1 IS NULL OR id < $1`. It returns `KeyedPage(items:nextCursor:)` without the extra row and, when that row came back, the last kept item's id as the cursor.
 - Both order by `id DESC`, so the primary key's index serves every page, and the statement, not Swift, turns a page number into an offset.
-- A list with an order of its own, such as a branch's overdue loans by due date, pages by number and orders by its columns, then `id`, so the order is total. An order the client chooses is a Core enum the statement maps to a fixed `ORDER BY` with a `CASE` over the bound raw value; a column name is never interpolated.
+- A list with an order of its own, such as a book's loans by due date, pages by number and orders by its columns, then `id`, so the order is total. An order the client chooses is a Core enum the statement maps to a fixed `ORDER BY` with a `CASE` over the bound raw value; a column name is never interpolated.
 - A read with more than two or three filters takes them as one value, `<Resource>Query` ([folders](conventions.md#folders)). A search's predicate uses the operator its index serves, and its threshold is the policy's.
 
 ## Migrations
@@ -256,9 +252,7 @@ package struct CreateLoansTable: DatabaseMigration {
 ```
 
 - One migration per change, each its own type named for what it does, since postgres-migrations records a migration by its type's name: `CreateServiceRole`, `CreateInternalRole`, `CreateWorkerRole`, `CreateLoansTable`, `CreateLoansRLSPolicy`, `AddLoansReturnDate`. The roles come first, since a policy's `TO` names them.
-- One SQL statement per `connection.query`: PostgresNIO sends every query as a prepared statement, and Postgres refuses several commands in one. `CreateLoansRLSPolicy` runs four.
-- A migration keeps the schema usable by the image before it, since a rollback runs that image on the current schema ([deployment](delivery.md#a-services-ci-workflows)): it expands now and contracts in a later deploy, and a change that renames or moves data ships with code that reads both shapes.
-- A contracting migration, one that drops or narrows what an older image reads, merges only after the commit that stopped reading the old shape has reached production, and its pull request names that commit. Production deploys any commit staging ran, so it could otherwise jump from an image that reads the old shape straight to the one that removes it, while that image's replicas still serve.
+- A migration keeps the schema usable by the image before it, since a rollback runs that image on the current schema ([the deployment contract](delivery.md#the-deployment-contract)): it expands now and contracts in a later deploy, and a change that renames or moves data ships with code that reads both shapes.
 - Migrations create the roles, since the database and its owner exist before the service first deploys; the owner has `CREATEROLE` for them. Role names are cluster-wide, so they carry the service's name (`loans_service`). `CreateServiceRole(role:database:)` creates the login role and grants it `CONNECT`, schema usage, `SELECT, INSERT, UPDATE, DELETE` on tables and `USAGE` on sequences, and the same for future tables through default privileges; never `ALL`, since `TRUNCATE` ignores row-level security. How a role logs in is the plan's answer ([Postgres](security.md#postgres)); when it's a password, `Migrations.apply()` runs the list and then sets each role's password from its file (`ALTER ROLE … PASSWORD`), since a migration runs once, and rotating one is a configuration change and a deploy. Role names, and any passwords, come from configuration and are quoted into `PostgresQuery(unsafeSQL:)`, since a statement that names a role takes no bindings.
 - XPostgres states the order once, in `Migrations/LoansMigrations.swift`, so the executable and `XPostgresTests` apply the same list:
 
@@ -284,7 +278,7 @@ package enum LoansMigrations {
 - `migrate` applies them over a short-lived client, `PostgresClient.withClient(configuration:logger:operation:)` ([commands](composition.md#commands)).
 - Every pending migration applies in one transaction, which holds each lock it takes until the last migration commits. An index on a table that already holds many rows is built with `CREATE INDEX CONCURRENTLY`, which can't run in a transaction and doesn't block writes: XPostgres lists those in `Migrations/LoansIndexes.swift`, and `loans build-indexes` runs each as `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, first dropping one that an interrupted build left invalid ([commands](composition.md#commands)).
 - A backfill of existing rows is never a migration: it's a short-lived command on the internal role ([commands](composition.md#commands)) that updates in batches by id, each batch its own transaction, between the deploy that adds the column and the one that relies on it.
-- One process migrates, before serve and the worker start: postgres-migrations takes no lock, so processes that apply at once race and all but one fail ([a service's CI workflows](delivery.md#a-services-ci-workflows)).
+- One process migrates, before serve and the worker start: postgres-migrations takes no lock, so processes that apply at once race and all but one fail ([the deployment contract](delivery.md#the-deployment-contract)).
 
 ## Valkey
 
@@ -323,7 +317,7 @@ package struct ValkeyResetCodeRepository<Client: ValkeyClientProtocol>: ResetCod
 ```
 
 - The repository is generic over `ValkeyClientProtocol`, takes the client in its initializer, and lives in XValkey; the use case holds it as a port.
-- A reset code is keyed by its user, so the user's failures are counted before the code is checked ([attempt limits](security.md#attempt-limits)), and stored as its digest ([secrets](security.md#secrets)).
+- A reset code is keyed by its user and stored as its digest ([secrets](security.md#secrets)).
 - Keys are as [naming](conventions.md#naming) gives them, so services sharing an instance never collide, and each service's ACL user reaches only its own ([the trust model](security.md#the-trust-model)).
 - Every write sets its expiry, passed by the use case from its policy, never configured in the store.
 - A cache is never the source of truth and never holds a decision. Its expiry is the use case's staleness budget, and its read answers `nil` on a miss and on a Valkey error, which the repository logs as a warning, so the use case reads the database and carries on.
