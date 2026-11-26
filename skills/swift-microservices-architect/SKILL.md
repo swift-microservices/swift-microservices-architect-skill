@@ -15,7 +15,7 @@ Decides how a Swift backend splits into services and modules, who owns what and 
 
 ## Examples
 
-`X` is a service in a target's name (`LoansCore`) and what a type is named for (`BorrowBookUseCase`); `<Project>` and `<project>` are the project. Examples are Bookshelf, a lending library:
+In names, `X` stands for the service in a target (`LoansCore`) and for what a type is named after (`BorrowBookUseCase`, `LoanRepository`); `<Project>` and `<project>` stand for the project's name. Examples are Bookshelf, a lending library:
 
 | Package | Holds |
 |---|---|
@@ -92,9 +92,9 @@ do {
 }
 ```
 
-- One `do` holds the work through its `return`, and each `catch` ends its path: nothing is declared before the `do` for a `catch` to fill, and a `do` nests only around a workflow's start ([errors](references/style.md#errors)).
-- Build, then call: a value a call takes is a named `let`, never a conversion, `try` or `await` in the arguments ([style](references/style.md#build-then-call)).
-- No helper methods in use cases, workflows or activities, and no `Result` juggling, steering flags, `try?` or force unwraps.
+- One `do` holds the work through its `return`, and each `catch` ends its path, so every outcome reads in one place: nothing is declared before the `do` for a `catch` to fill, and a `do` nests only around a workflow's start ([errors](references/style.md#errors)).
+- Build, then call: a value a call takes is a named `let`, never a conversion, `try` or `await` in the arguments, so each step reads as one named fact and a failure points at one line ([style](references/style.md#build-then-call)).
+- No helper methods in use cases, workflows or activities, so each reads top to bottom as its requirement; a step worth naming is a policy's method, a port or another activity. No `Result` juggling, steering flags, `try?` or force unwraps, which hide a failure the caller must map.
 - Everything crossing a boundary is `Sendable`; no `Task {}` or `Task.detached {}`, and unchecked concurrency only where [concurrency](references/style.md#concurrency) allows.
 
 ## Troubleshooting
@@ -102,7 +102,7 @@ do {
 - A component left out of the `ServiceGroup` never runs: a `GRPCClient` or `PostgresClient` never connects, and its calls hang to their deadline.
 - The worker's `gracefulShutdownPeriod` defaults to zero, so every deploy cancels in-flight activities and repeats their effects ([worker's root](references/composition.md#the-workers-root)).
 - The database owner bypasses row-level security: only `migrate` and `build-indexes` connect as it ([migrations](references/persistence.md#migrations)).
-- Policies combine with `OR`: a session acting for an organization reaches its rows through the caller's own use cases ([tenants](references/persistence.md#organization-tenants)).
+- Policies combine with `OR`, so a session acting for a branch also sees the branch's rows in the caller's own queries: a caller's own read names the user in its `WHERE`, and a branch's read names the branch ([tenants](references/persistence.md#organization-tenants)).
 - Temporal checks `Codable` only at run time: every workflow and activity payload, and each type it holds, is `Codable, Sendable` ([workflows](references/workflows.md#a-workflow)).
 - Workflow code is replayed: the clock, `UUID()`, randomness, `Task.sleep(for:)` or any I/O breaks it ([determinism](references/workflows.md#determinism)).
 - An event published after its commit, not from the outbox, is lost if the process stops first ([outbox](references/events.md#the-outbox)).
