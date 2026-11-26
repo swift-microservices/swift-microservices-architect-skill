@@ -371,7 +371,6 @@ package struct GRPCCatalogClient<Transport: ClientTransport>: CatalogClient {
 - A list that shows another service's data for each item reads it in one call, never a call per item. The owner's internal contract offers a batch read, `BatchGetBooks`, which takes `ids` up to the list's maximum page size and returns the books it found; the port reads `books(ids: Set<UUID>) async throws -> [UUID: Book]`, and an id with no book is absent from the dictionary.
 - `notFound` on a lookup becomes `nil`, matching the port's optional.
 - The response conversion (`Book+Protobuf.swift` in `Clients/Protobuf/`) throws on a malformed message, such as an id that isn't a UUID or an unset field the domain needs, rather than inventing a value.
-- Every call has a deadline: the client's `ServiceConfig` sets one for all methods, and a method that needs a tighter bound passes `CallOptions` with its own `timeout`.
 
 ## Transports
 
@@ -379,5 +378,5 @@ The executable builds the server's and each client's transport from `<Project>Tr
 
 - Each call chain has one owner of retries: Temporal for activities, and the app calling the public API, with an idempotency key, for public creates. A client neither retries nor hedges, and a port call inside an activity never retries on its own.
 - A client's host resolves to every replica of the upstream, never to one virtual address in front of them, as the platform's reference names it ([delivery](delivery.md#the-deployment-contract)), and the upstream's certificate names it. Its `ServiceConfig` balances `.roundRobin` across those addresses and waits for a ready connection within the call's deadline.
-- Every call has a deadline, from the client's `ServiceConfig`, and the server bounds each connection's age and concurrent calls, all read from the scope's configuration ([configuration](composition.md#configuration)).
+- Every call has a deadline, from the client's `ServiceConfig`, or from `CallOptions` with its own `timeout` for a method that needs a tighter bound, and the server bounds each connection's age and concurrent calls, all read from the scope's configuration ([configuration](composition.md#configuration)).
 - One long-lived `GRPCClient` per upstream process, shared by every port and handler that calls it, runs in the `ServiceGroup`. `GRPCServiceLifecycle` makes `GRPCServer` and `GRPCClient` services.

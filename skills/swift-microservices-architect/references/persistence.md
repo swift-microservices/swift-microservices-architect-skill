@@ -33,9 +33,9 @@ Each service's database has an owner and a role per purpose ([data placement](sy
 
 `internal` in a role's name says no single tenant is bound: the use case confines the work, where a policy can't. It isn't the `Internal` of `XInternalService`, which says who calls; an administrators' RPC and a webhook run on the internal role too.
 
-A service declares only the roles it uses ([data placement](system.md#data-placement)): Catalog has no tenant table and runs everything as `catalog_service`. A use case runs on its role's `PostgresDatabase`: the tenant database (`<x>_service`), the internal database or the worker's database.
+A service declares only the roles it uses ([data placement](system.md#data-placement)): Catalog has no tenant table and runs everything as `catalog_service`; its worker connects as that role too, so that role's scope also adopts the scope protocols of its system use cases. A use case runs on its role's `PostgresDatabase`: the tenant database (`<x>_service`), the internal database or the worker's database.
 
-Row-level security holds while the role a caller's transaction runs as isn't a superuser, has no `BYPASSRLS` and doesn't own the table, and the caller is bound per transaction ([binding the tenant](#binding-the-tenant)). `CreateServiceRole` creates such roles, and no command but `migrate` and `build-indexes` connects as the owner.
+Row-level security holds while the role a caller's transaction runs as isn't a superuser, has no `BYPASSRLS` and doesn't own the table, and the caller is bound per transaction ([binding the tenant](#binding-the-tenant)). `CreateServiceRole` creates such roles; [Postgres](security.md#postgres) names the commands that log in as the owner.
 
 The internal and worker roles see every row, so a query on them that acts for one user, a system use case's read for one user included, names that user in its own `WHERE`, and a write there names the tenant the same way, in its `WHERE` or its values. A read by id that relies on the tenant policy confines nothing there.
 
@@ -211,7 +211,7 @@ struct LoansByUserIDStatement: PostgresPreparedStatement {
 - `CountLoansByUserIDStatement` is `SELECT count(*) FROM loans WHERE user_id = $1`, decoding an `Int`. The repository runs both and returns `Page(items:page:pageSize:totalCount:)`.
 - A page by key reads one row more than the page size, so the repository knows whether another page follows: `WHERE id < COALESCE($1, 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid) ORDER BY id DESC LIMIT $2 + 1`, the greatest UUID standing for no cursor, never `$1 IS NULL OR id < $1`. It returns `KeyedPage(items:nextCursor:)` without the extra row and, when that row came back, the last kept item's id as the cursor.
 - Both order by `id DESC`, so the primary key's index serves every page, and the statement, not Swift, turns a page number into an offset.
-- A list with an order of its own, such as a branch's overdue loans by due date, pages by number and orders by its columns, then `id`, so the order is total. An order the client chooses is a Core enum the statement maps to a fixed `ORDER BY` with a `CASE` over the bound raw value; a column name is never interpolated.
+- A list with an order of its own, such as a book's loans by due date, pages by number and orders by its columns, then `id`, so the order is total. An order the client chooses is a Core enum the statement maps to a fixed `ORDER BY` with a `CASE` over the bound raw value; a column name is never interpolated.
 - A read with more than two or three filters takes them as one value, `<Resource>Query` ([folders](conventions.md#folders)). A search's predicate uses the operator its index serves, and its threshold is the policy's.
 
 ## Migrations

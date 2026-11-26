@@ -224,34 +224,7 @@ bookshelf-protos/
 
 ## Checking the boundaries
 
-SPM checks that a target can reach what it imports, but not what a declaration should be. This skill's `scripts/check_boundaries.sh <X> <Project>` checks the rest, run from a service's root (`check_boundaries.sh Loans Bookshelf`) or the gateway's (`check_boundaries.sh Gateway Bookshelf`). It prints each violation under its rule and exits non-zero if there is any:
+SPM checks that a target can reach what it imports, but not what a declaration should be. Two scripts check the rest, and each prints the rule it checks above its violations and exits non-zero if there is any, so they're run rather than read:
 
-- Core imports no adapter technology or contract.
-- Temporal stays out of the adapter targets.
-- Inside Core, only `Workflows/` and use case implementations import Temporal, and a use case that imports it names `TemporalClient`.
-- Only the executable builds a Temporal client or worker.
-- An activity container stores only use case and port protocols and a `Logger`.
-- Activities call system use cases only, so nothing in `Workflows/` names a caller.
-- `Ports/` declares only protocols and their error enums.
-- Every repository protocol in Core has its `XRepositoryError` in a file beside it.
-- Adapters import no sibling adapter, and only XGRPC imports the service's contract.
-- Generated contract types stay in XGRPC, the gateway's `GatewayHTTP` and the executable.
-- The gateway names no `XInternalService`.
-- Only the executable reads configuration.
-- Every Foundation import is the conditional one, in `Sources/` and `Tests/`.
-- There are no unstructured tasks.
-- Every use case protocol has typed throws.
-- No package defaults to the main actor.
-
-It also lists each use of unchecked concurrency for review, without failing: every one is in an adapter target with its reason on the line above, as [concurrency](style.md#concurrency) allows.
-
-`scripts/check_style.sh`, run from any package's root with no arguments, checks the style rules a script can see, and fails the same way:
-
-- No `try` or `await` inside a call's arguments, across wrapped lines ([build, then call](style.md#build-then-call)).
-- A use case's `logger.error` line reads `<Activity> failed: unknown error` ([logging](use-cases.md#logging)).
-- One top-level type per file ([files](conventions.md#files)).
-- No sentinel stands for absence: `?? ""`, `?? -1`, `.distantPast`, `.distantFuture` or a column's `DEFAULT ''` ([types and values](style.md#types-and-values)).
-- No policy reads a role from `current_setting` ([row-level security](persistence.md#row-level-security)).
-- Configuration is read in a reader, in `Configuration/` or a `Type+ConfigReader.swift`, except the keys a root reads itself: `logLevel`, `host`, `port`, `db`, the task queue, a topic's name (`topics.loanEvents`), and a role's `user` ([configuration](composition.md#configuration)).
-
-It also lists for review, without failing: each Core repository method with two parameters or more that isn't named for what it returns and takes no command or page size, since a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)); and each test file named for no type in `Sources/` ([test targets](testing.md#test-targets)).
+- `scripts/check_boundaries.sh <X> <Project>`, from a service's root (`check_boundaries.sh Loans Bookshelf`) or the gateway's (`check_boundaries.sh Gateway Bookshelf`): the hard rules in `SKILL.md`, Core's links, ports, repositories and use case protocols, the conditional Foundation import, unstructured tasks and the main actor. It also lists each use of unchecked concurrency for review, without failing: every one is in an adapter target with its reason on the line above, as [concurrency](style.md#concurrency) allows.
+- `scripts/check_style.sh`, from any package's root with no arguments: the style rules a script can see, from build, then call to sentinels, `try?`, force unwraps, a handler's `default`, the unknown-error log line and where configuration is read. It also lists for review, without failing: each Core repository method with two parameters or more that isn't named for what it returns and takes no command or page size, since a write that takes more than an id takes a command ([repositories](use-cases.md#repositories-and-commands)); and each test file named for no type in `Sources/` ([test targets](testing.md#test-targets)).

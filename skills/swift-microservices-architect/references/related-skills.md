@@ -10,7 +10,6 @@ Design and operations, whatever the stack:
 - A choice this skill leaves open, weighed as an architecture decision record: `architecture` ([source](https://github.com/anthropics/knowledge-work-plugins))
 - A review's security, performance and correctness pass: `code-review` ([source](https://github.com/anthropics/knowledge-work-plugins))
 - A release's checks and rollback triggers: `deploy-checklist` ([source](https://github.com/anthropics/knowledge-work-plugins))
-- A production incident's triage, status updates and postmortem: `incident-response` ([source](https://github.com/anthropics/knowledge-work-plugins))
 
 The code inside a shape:
 
@@ -26,7 +25,7 @@ The code inside a shape:
 A skill is installed when a checklist line that names it is reached. The skill list in the session is compared with its name; a skill a plugin ships is present under the plugin's prefix, such as `engineering:system-design` or `temporal:temporal-developer`, and counts as installed. When it's missing, the user is asked to install it with its source's command; if the user declines, the task proceeds without it, and the response names the skill whose pass was skipped:
 
 ```
-npx skills@1.9.0 add https://github.com/anthropics/knowledge-work-plugins --skill system-design architecture code-review deploy-checklist incident-response
+npx skills@1.9.0 add https://github.com/anthropics/knowledge-work-plugins --skill system-design architecture code-review deploy-checklist
 npx skills@1.9.0 add https://github.com/temporalio/skill-temporal-developer --skill temporal-developer
 npx skills@1.9.0 add https://github.com/supabase/agent-skills --skill supabase-postgres-best-practices
 npx skills@1.9.0 add https://github.com/valkey-io/valkey-skills --skill valkey

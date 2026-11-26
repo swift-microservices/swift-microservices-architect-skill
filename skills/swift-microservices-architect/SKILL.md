@@ -11,7 +11,7 @@ metadata:
 
 ## Purpose
 
-Decides how a Swift backend splits into services and modules, who owns what and the shapes that hold a service together. A backend built another way keeps its structure and conventions unless the user asks otherwise, and takes only the shapes it lacks.
+Decides how a Swift backend splits into services and modules, who owns what and the shapes that hold a service together. A backend built another way, such as a Vapor app or a monolith, keeps its framework, transports and module layout: it takes only Core's shapes and the code style, and gRPC, the gateway, Temporal or Kafka only when the user asks to adopt this architecture.
 
 ## Examples
 
@@ -50,12 +50,12 @@ Worker ── TLS ──► Kafka
 ```
 
 A service has only the targets it needs, each importing only what [its row](references/packages.md#the-targets-of-a-service) lists. Hard rules:
-- XCore imports no driver, transport, contract, configuration or lifecycle module ([Core's links](references/packages.md#what-core-may-link)).
-- XCore imports Temporal only in `Workflows/` and the use cases that reach a workflow, and never builds its client or worker.
-- Adapter targets never import each other or Temporal; the executable hands one to another through Core's protocols.
-- Generated contract types never leave XGRPC, XKafka, the gateway's HTTP target and executables.
-- Only an executable reads configuration, builds clients and runs the `ServiceGroup`.
-- No service reads another's database; data crosses services only through contracts.
+- XCore imports no driver, transport, contract, configuration or lifecycle module, so use cases test over mocks and a driver change touches one adapter ([Core's links](references/packages.md#what-core-may-link)).
+- XCore imports Temporal only in `Workflows/` and the use cases that reach a workflow, and never builds its client or worker, so the rest of Core stays free of it.
+- Adapter targets never import each other or Temporal, so each swaps or tests alone; the executable hands one to another through Core's protocols.
+- Generated contract types never leave XGRPC, XKafka, the gateway's HTTP target and executables, so a contract change touches only conversions.
+- Only an executable reads configuration, builds clients and runs the `ServiceGroup`, so wiring lives in one place and the code below it takes typed values.
+- No service reads another's database; data crosses services only through contracts, so each owner changes its schema alone.
 
 ## Who owns what
 
@@ -113,7 +113,7 @@ do {
 - A Swift toolchain at the package's `swift-tools-version`; for `XPostgresTests` and `XValkeyTests`, Postgres 18 and Valkey 9 or later, through `POSTGRES_*` and `VALKEY_*` ([tests](references/delivery.md#tests)).
 - swift-format, for the lint every change passes ([formatting](references/style.md#formatting)).
 - Network access for an XCore with workflows: its build fetches Temporal's sdk-core and its tests the test server ([Core's links](references/packages.md#what-core-may-link)).
-- The [related skills](#related-skills) `system-design`, `architecture`, `code-review`, `deploy-checklist`, `incident-response`, `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`.
+- The [related skills](#related-skills) `system-design`, `architecture`, `code-review`, `deploy-checklist`, `temporal-developer`, `supabase-postgres-best-practices`, `valkey`, `swift-testing-pro`, `swift-concurrency-pro` and `swift-api-design-guidelines-skill`.
 
 ## Available Scripts
 
@@ -161,7 +161,7 @@ Read a reference only when the task reaches its row or a checklist names it.
 
 ## Instructions
 
-Copy the task's checklist from [checklists.md](references/checklists.md) into the response, **Verify**'s lines replacing a `Verify` item, and tick items when done. A line naming a related skill invokes it with the Skill tool there ([installing them](references/related-skills.md#installing-them)). A new backend runs Plan a backend, then each Build order line's checklist ([the plan](references/system.md#the-plan)); with no task, propose the next unticked line.
+Copy the task's checklist from [checklists.md](references/checklists.md) into the response, with Verify's lines in place of its final `Verify` item, and tick each item as it's done. A line naming a related skill invokes it with the Skill tool there ([installing them](references/related-skills.md#installing-them)). A new backend runs Plan a backend, then each Build order line's checklist ([the plan](references/system.md#the-plan)); with no task, propose the next unticked line.
 
 | Checklist | When |
 |---|---|

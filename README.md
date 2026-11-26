@@ -96,13 +96,13 @@ On a backend that already runs, the agent follows the checklist for the task: ad
 
 It builds on [Hummingbird](https://github.com/hummingbird-project/hummingbird), [gRPC Swift 2](https://github.com/grpc/grpc-swift-2), the [Temporal Swift SDK](https://github.com/apple/swift-temporal-sdk), [PostgresNIO](https://github.com/vapor/postgres-nio), [valkey-swift](https://github.com/valkey-io/valkey-swift), [Swift Kafka Client](https://github.com/swift-server/swift-kafka-client), [Swift Configuration](https://github.com/apple/swift-configuration), [Swift Service Lifecycle](https://github.com/swift-server/swift-service-lifecycle) and the [swift-microservices](https://github.com/swift-microservices) libraries.
 
-Not covered: setting up the deployment platform and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, backups, client SDKs and frontends.
+Not covered: setting up the deployment platform and its servers, compose files, networks, the edge proxy, issuing certificates, observability backends, backups, object storage, client SDKs and frontends.
 
 ### Works well with
 
 The skill decides the architecture and the style; maintained skills cover the technique, from a feature's design to the code inside a shape. The agent invokes each where a checklist calls for it, such as Engineering's system design skill before a new feature, Temporal's skill before designing a workflow and the testing skill before writing tests, and asks you to install one that's missing when a step needs it, carrying on without it if you decline. Where one's advice differs, the skill's services, shapes, stack and style win.
 
-- [Engineering](https://github.com/anthropics/knowledge-work-plugins): a feature's requirements and trade-offs, architecture decision records, code review, release checklists and incident response
+- [Engineering](https://github.com/anthropics/knowledge-work-plugins): a feature's requirements and trade-offs, architecture decision records, code review and release checklists
 - [Swift Concurrency Pro](https://github.com/twostraws/Swift-Concurrency-Agent-Skill): actors, task groups, cancellation, `Sendable` and strict-concurrency diagnostics
 - [Swift Testing Pro](https://github.com/twostraws/Swift-Testing-Agent-Skill): tests of use cases, handlers and workflows
 - [Temporal Developer](https://github.com/temporalio/skill-temporal-developer): how a workflow is designed and behaves, from signals and updates to versioning
@@ -142,7 +142,7 @@ skills/swift-microservices-architect/
     ├── delivery-dokploy.md     deploying services to Dokploy
     ├── conventions.md          names, folders, files
     └── related-skills.md       which maintained skill each task invokes, and where this skill wins
-evals/                          behavioural test cases, one folder per case, in the layout `claude plugin eval` reads
+evals/                          behavioural test cases, one folder per case, in the layout `claude plugin eval` reads, and trigger-set.json, requests that should and shouldn't start the skill
 .github/                        validation, SkillSpector's reviewed exceptions, the Tier 2 runner, the semver label check, releases
 CLAUDE.md                       authoring rules for changing the skill
 ```

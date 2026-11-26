@@ -242,7 +242,7 @@ package struct LoanController: Sendable {
 - A read of a resource that people edit answers its `etag` as the `ETag` header too, and an update reads it from `If-Match` with `requireIfMatch()`, beside `requireIdempotencyKey()`, which answers `400` without it ([transactions](use-cases.md#transactions)).
 - A query value that is present and malformed answers `400`, like a malformed body; only an absent one takes the service's default.
 - The caller's own routes send no user id upstream: the forwarded token names the caller.
-- A route's path and method come from the feature's research ([reading like the requirement](style.md#reading-like-the-requirement)).
+- A route's path and method come from the feature's research ([reading like the requirement](style.md#building-the-established-way)).
 - Status codes follow the method: `201` with `EditedResponse` for a create, `202` for a route that only asks for work to happen later and has nothing yet to return, `204` (`HTTPResponse.Status.noContent`) for a change with nothing to return, a `DELETE` included, `200` otherwise.
 
 A provider's webhooks get a controller of their own (`ResendWebhookController`), in the no-caller tier, that collects the body up to a limit the provider's events fit and forwards each event unparsed:

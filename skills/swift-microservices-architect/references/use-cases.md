@@ -246,7 +246,6 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                 // One borrow per member at a time, so concurrent borrows count each other's loans.
                 try await scope.loanRepository.lockLoans(userID: subject.userID)
 
-                // A retry gets back the loan its first attempt created.
                 let borrowDate = Date.now
                 let dueDate = policy.dueDate(borrowedAt: borrowDate)
                 let command = CreateLoanCommand(
@@ -255,6 +254,7 @@ where DatabaseType: Database, DatabaseType.Scope: BorrowBookUseCaseScope {
                     dueDate: dueDate,
                     idempotencyKey: input.idempotencyKey
                 )
+                // A retry gets back the loan its first attempt created.
                 let borrowedLoan = try await scope.loanRepository.create(command)
 
                 // The limit counts the loan just made, so a retry's loan, within the limit when made, passes again.
@@ -339,7 +339,7 @@ package struct MarkLoanOverdueUseCaseInput: Sendable {
 }
 ```
 
-- A system use case takes no `subject`. Its input names what it acts on, and the user a step is recorded for, such as who confirmed, when the use case that reached the run authorized that user first ([reaching a run](workflows.md#reaching-a-run-from-a-use-case)).
+- A system use case takes no `subject`. Its input names what it acts on. When the step records a user, such as who confirmed, the input names that user, whom the use case that reached the run has already authorized ([reaching a run](workflows.md#reaching-a-run-from-a-use-case)).
 - Activities call system use cases only, never user-facing ones. A use case that checks the caller (`ReturnBook`) is never invoked from an activity with an invented identity.
 - When a person and the system both need the same effect, each audience has its own use case: `MarkLoanOverdueUseCase` for the worker, and `MarkLoanOverdueByAdministratorUseCase`, which takes `subject` and checks the role. They share the domain rule, on a model or a policy, and the repository's conditional write (`markOverdue(id:)`), and neither calls the other.
 - A system use case runs on the worker's database ([database roles](persistence.md#database-roles)).

@@ -235,7 +235,7 @@ package struct LoanActivities {
     /// Reads the member and the book on every attempt, so the workflow's history holds neither.
     @Activity
     package func sendOverdueNotice(input: SendOverdueNoticeInput) async throws {
-        let member = …  // from identityClient, on every attempt; none is non-retryable
+        let member = …  // from identityClient, on every attempt; a missing member is a non-retryable ApplicationError
         let book = …  // from catalogClient, the same way
 
         let idempotencyKey = "loans-overdue-notice-\(input.loanID.uuidString.lowercased())"
@@ -310,4 +310,4 @@ Work on a calendar is a workflow a Temporal Schedule starts: never a timer loop 
   | `temporal.worker.buildid` | The image's commit | The deployment |
   | `temporal.worker.client.identity` | The process's identity | The deployment |
 
-- A release of the SDK may require another key: read the two readers' source for the release the package resolves before wiring a root, and add what they require.
+- A release of the SDK may require another key, which reading its readers' source finds ([readers](composition.md#readers)).

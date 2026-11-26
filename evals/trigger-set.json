@@ -1,0 +1,82 @@
+[
+  {
+    "query": "we've got a Hummingbird gateway in front of three grpc-swift services (identity, catalog, loans). I need to add an endpoint so admins can list every member's loans, paginated. where does each piece go?",
+    "should_trigger": true
+  },
+  {
+    "query": "split my swift backend into services? right now it's one Hummingbird app with users, orders and payments all in one target and it's getting painful",
+    "should_trigger": true
+  },
+  {
+    "query": "I need a background job in our Swift server that marks invoices overdue 30 days after issue and emails the customer. Temporal or a cron container?",
+    "should_trigger": true
+  },
+  {
+    "query": "review the architecture of this server-side Swift package, especially which targets import what: Sources/OrdersCore imports PostgresNIO and I'm not sure that's ok",
+    "should_trigger": true
+  },
+  {
+    "query": "how should I lay out Package.swift for a new Swift service with Core, Postgres and gRPC targets plus an executable? swift 6.2, strict concurrency",
+    "should_trigger": true
+  },
+  {
+    "query": "our loans table has to be multi-tenant per branch with postgres row level security, and the Swift service binds the caller per transaction. how do I write the policy and the scope?",
+    "should_trigger": true
+  },
+  {
+    "query": "wire swift-configuration in my Swift server's composition root: env vars over in-memory defaults, plus Temporal's client config. what goes where?",
+    "should_trigger": true
+  },
+  {
+    "query": "set up mTLS between my Swift gRPC services with certificate reloading, and have each service verify the user's JWT again",
+    "should_trigger": true
+  },
+  {
+    "query": "publish an event from my Swift orders service to Kafka when an order ships so the analytics service can count it, without losing it if the process dies",
+    "should_trigger": true
+  },
+  {
+    "query": "plan the backend for a small clinic booking app in server-side Swift: patients, doctors, schedules, SMS reminders",
+    "should_trigger": true
+  },
+  {
+    "query": "add a POST /todos route with Fluent to my Vapor app and return 201",
+    "should_trigger": false
+  },
+  {
+    "query": "my SwiftUI app's networking layer uses URLSession with async/await; how should I structure the API client and its error handling?",
+    "should_trigger": false
+  },
+  {
+    "query": "tune autovacuum on a 400GB postgres table with heavy updates, the bloat keeps growing",
+    "should_trigger": false
+  },
+  {
+    "query": "design microservices in Go with gRPC and Kafka for an e-commerce site",
+    "should_trigger": false
+  },
+  {
+    "query": "why does my Swift actor deadlock when two tasks call each other's methods? here's the code",
+    "should_trigger": false
+  },
+  {
+    "query": "write a Temporal workflow in TypeScript that retries a payment three times then refunds",
+    "should_trigger": false
+  },
+  {
+    "query": "set up GitHub Actions to build and notarize my macOS Swift app",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the difference between gRPC and REST for a mobile app backend, in general terms?",
+    "should_trigger": false
+  },
+  {
+    "query": "convert this Python FastAPI endpoint to Node Express",
+    "should_trigger": false
+  },
+  {
+    "query": "help me write unit tests with Swift Testing for this pure Swift string-parsing function",
+    "should_trigger": false
+  }
+]

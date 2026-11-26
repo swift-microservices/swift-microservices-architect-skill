@@ -75,8 +75,6 @@ Message rules and the package layout: [contracts in the protos package](grpc.md#
 
 ## Data placement
 
-A service's data is its own: only the service reads and writes it, and every other process reaches it through the service's contract.
-
 - A service that stores data has its own Postgres instance, holding its database (`bookshelf_loans`). A service that stores nothing has none, and one whose state is all short-lived has Valkey alone.
 - A plan may instead put every service's database on one instance per environment, recorded under Decisions. Databases, roles and policies stay as they are, since each role's name carries its service's name ([naming](conventions.md#naming)); each database admits only its own roles ([Postgres](security.md#postgres)), and every service's pools together stay within that instance's connections.
 - Its processes connect as the owner for migrations, then a role per audience, `<x>_service`, `<x>_internal` and `<x>_worker`, each with its own policy and none with `BYPASSRLS` ([database roles](persistence.md#database-roles)). A service with no tenant table has one role; a plan that joins `<x>_internal` and `<x>_worker` records it under Decisions ([the plan](#the-plan)).
@@ -142,7 +140,7 @@ The plan stays current: each Build order line is ticked once its checklist is do
 |---|---|---|
 
 ## Decisions
-- Each boundary and why it holds; each departure from a default or exception to a rule, and each open choice's pick, with its reason and the sources the search found ([reading like the requirement](style.md#reading-like-the-requirement))
+- Each boundary and why it holds; each departure from a default or exception to a rule, and each open choice's pick, with its reason and the sources the search found ([reading like the requirement](style.md#building-the-established-way))
 
 ## Operations
 - The platform each environment deploys to, its servers' CPU architectures, the image registry and the CI host: the user's answers, with no default ([delivery](delivery.md))
@@ -167,4 +165,4 @@ Review the plan against the hard rules in `SKILL.md`, and put its questions to t
 
 ## Out of scope
 
-Decided separately, outside this skill: setting up the platform and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery of Postgres and Temporal's store, client SDKs and frontends. How each package is tested, released and deployed is [delivery](delivery.md). The architecture leaves room for each: an executable runs wherever its configuration points, and certificates and keys are files at configured paths.
+Decided separately, outside this skill: setting up the platform and its servers, compose files, networks and VPNs, the edge proxy, certificate issuance and renewal, observability backends, backups and point-in-time recovery of Postgres and Temporal's store, object storage for files a service keeps, client SDKs and frontends. How each package is tested, released and deployed is [delivery](delivery.md). The architecture leaves room for each: an executable runs wherever its configuration points, and certificates and keys are files at configured paths.

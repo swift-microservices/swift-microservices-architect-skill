@@ -1,6 +1,6 @@
 # Checklists
 
-Each task's checklist, which the agent copies into its response as [the instructions](../SKILL.md#instructions) give. Its `.md` files are references beside this one, and its scripts are in the skill's `scripts/`.
+Each task's checklist, which the agent copies into its response as [the instructions](../SKILL.md#instructions) give. The `.md` files a checklist names are references beside this one, and its scripts are in the skill's `scripts/`.
 
 ## Contents
 - Verify
@@ -28,7 +28,7 @@ Each task's checklist, which the agent copies into its response as [the instruct
 ## Plan a backend
 
 ```
-- [ ] Requirements, scale and trade-offs with system-design; each open choice searched online (style.md#reading-like-the-requirement), weighed with architecture
+- [ ] Requirements, scale and trade-offs with system-design; each open choice searched online (style.md#building-the-established-way), weighed with architecture
 - [ ] The capabilities and the data each owns; a service per capability (system.md#splitting-a-system-into-services)
 - [ ] Name each service, its target names clashing with no module in the graph
 - [ ] Per service: XService RPCs by audience, XInternalService RPCs and callers with no call cycle, tables (tenant or not), workflows, events, short-lived state
@@ -50,8 +50,8 @@ Each task's checklist, which the agent copies into its response as [the instruct
 ## Add a service
 
 ```
-- [ ] Search online (style.md#reading-like-the-requirement), then design with system-design and architecture
-- [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in
+- [ ] When the feature has a standard or an open choice, search online (style.md#building-the-established-way), then design with system-design and architecture
+- [ ] <project>-protos: XProtos with XService, and XInternalService if processes call in, released and tagged before the service depends on it
 - [ ] Package <project>-x from packages.md#packageswift-template, with only the targets the plan names
 - [ ] XCore: models, errors, repositories, ports, a use case per RPC (use-cases.md)
 - [ ] XPostgres: roles, tables, row-level security, statements, a scope per role (persistence.md), the SQL with supabase-postgres-best-practices
@@ -67,14 +67,15 @@ Each task's checklist, which the agent copies into its response as [the instruct
 ## Add an operation
 
 ```
-- [ ] Search online (style.md#reading-like-the-requirement), then design with system-design and architecture
+- [ ] When the feature has a standard or an open choice, search online (style.md#building-the-established-way), then design with system-design and architecture
 - [ ] Contract: the RPC under its audience in XService, or in XInternalService
+- [ ] <project>-protos released and tagged; the service and the gateway raise their requirement (packages.md#the-projects-core-package)
 - [ ] XCore: the use case's files; its scope lists only what it touches (use-cases.md); an event it records (events.md#the-outbox)
 - [ ] A workflow run it affects, reached from the use case (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XPostgres: the scopes of the roles it may run as adopt its scope protocol; new SQL with supabase-postgres-best-practices
 - [ ] XGRPC: the handler and the input's conversion, every error case mapped
 - [ ] Executable: the use case on its role's database, passed to the service
-- [ ] Gateway: the route in its tier, if public
+- [ ] Gateway, if public: openapi.yaml first, then the route in its tier; it deploys after the service (grpc.md#contracts-in-the-protos-package)
 - [ ] Tests: the use case's outcomes and the handler's statuses, over mocks, with swift-testing-pro
 - [ ] Verify
 ```
@@ -82,7 +83,7 @@ Each task's checklist, which the agent copies into its response as [the instruct
 ## Add a durable process
 
 ```
-- [ ] Search online (style.md#reading-like-the-requirement), then design with system-design and architecture
+- [ ] When the feature has a standard or an open choice, search online (style.md#building-the-established-way), then design with system-design and architecture
 - [ ] Design the workflow with temporal-developer: waiting, handlers, compensation, versioning (workflows.md#changing-a-workflow)
 - [ ] Each person's change: its use case writes it, then signals the run, or sends an update if only the run decides (workflows.md#reaching-a-run-from-a-use-case)
 - [ ] XCore: the system use cases its activities run, adopted by the worker scope (use-cases.md#system-use-cases)
@@ -143,7 +144,7 @@ Each task's checklist, which the agent copies into its response as [the instruct
 - [ ] Each root: configuration read only there, every component in the ServiceGroup in dependency order
 - [ ] Workflows checked with temporal-developer, tests with swift-testing-pro, and actors, Mutexes and unchecked concurrency with swift-concurrency-pro
 - [ ] Swift settings, each target listing every module it imports (packages.md#packageswift-template), package access, naming (conventions.md) and API design with swift-api-design-guidelines-skill
-- [ ] Security, performance and correctness with code-review (related-skills.md); hand-rolled schemes (style.md#reading-like-the-requirement)
+- [ ] Security, performance and correctness with code-review (related-skills.md); hand-rolled schemes (style.md#building-the-established-way)
 - [ ] Findings ranked blocking (tenant isolation, authorization, credentials, the build), major (shapes), minor (naming, layout, logging), each with a file and line or an empty grep, the rule and the fix; change code only when asked
 - [ ] scripts/swift_ci.sh build and test; report each result, or why it couldn't run
 ```

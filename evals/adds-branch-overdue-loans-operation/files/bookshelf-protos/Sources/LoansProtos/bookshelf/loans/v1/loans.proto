@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package bookshelf.loans.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message Loan {
+  string id = 1;
+  string user_id = 2;
+  string book_id = 3;
+  LoanStatus status = 4;
+  google.protobuf.Timestamp due_date = 5;
+  google.protobuf.Timestamp creation_date = 6;
+}
+
+enum LoanStatus {
+  LOAN_STATUS_UNSPECIFIED = 0;
+  LOAN_STATUS_ACTIVE = 1;
+  LOAN_STATUS_OVERDUE = 2;
+  LOAN_STATUS_RETURNED = 3;
+}
+
+message ListLoansRequest {
+  int32 page_size = 1;
+  int32 page = 2;
+}
+
+message ListLoansResponse {
+  repeated Loan loans = 1;
+  PageInfo page_info = 2;
+}
+
+message PageInfo {
+  int32 page = 1;
+  int32 page_size = 2;
+  int32 total_count = 3;
+  int32 total_pages = 4;
+}
+
+message ListAllLoansRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListAllLoansResponse {
+  repeated Loan loans = 1;
+  string next_page_token = 2;
+}
+
+// Loans for people, through the gateway.
+service LoanService {
+  // The caller's own: the token names the member, so no request names one.
+  rpc ListLoans(ListLoansRequest) returns (ListLoansResponse);
+
+  // Administrators: every member's loans.
+  rpc ListAllLoans(ListAllLoansRequest) returns (ListAllLoansResponse);
+}
